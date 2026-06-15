@@ -1,4 +1,4 @@
-# Fishing Weather — Phases 1–3
+# Fishing Weather — Phases 1–4
 
 - **Phase 1 (Weather):** WeatherKit + CoreLocation — current conditions, hourly,
   10-day, and active alerts, styled with Liquid Glass.
@@ -7,7 +7,11 @@
   times and moon phase. No AI; everything here is calculated.
 - **Phase 3 (Species):** a tap-to-pick species row at the top of the Fishing tab
   (All / Bass / Crappie / Catfish / Bluegill), persisted via `@AppStorage`, with a
-  static focus note per species. The selection is what Phase 4's AI will key off.
+  static focus note per species. The selection is what Phase 4's AI keys off.
+- **Phase 4 (AI bait engine):** Foundation Models with structured `@Generable`
+  output — a bait card (top bait, color, technique, depth, confidence, why),
+  a plain-language daily report, and an ask-anything box. Replicate generates lure
+  art for the card (optional; disabled without a token).
 
 Targets **iOS 27 / Xcode 27 / Swift 6.4** (strict concurrency).
 
@@ -51,6 +55,9 @@ Sources/
               MoonPhase+Display.swift      phase name / symbol / bite rating
               FishingConditions.swift      assembles the facts from WeatherKit
               Species.swift                species enum + tint + focus note
+              BaitRecommendation.swift     @Generable structured AI output
+  Services/   …                            (also) BaitEngine.swift, AppSecrets.swift,
+                                           ReplicateClient.swift
   Views/      RootView.swift               permission gating + load trigger
               MainTabView.swift            Weather / Fishing tabs
               SpeciesPicker.swift          tap-to-pick species row
@@ -59,11 +66,22 @@ Sources/
               HourlyForecastView.swift      next 24 hours
               DailyForecastView.swift       10-day
               WeatherAlertsView.swift       active alerts
-              FishingView.swift            pressure + bite windows + sun/moon
+              FishingView.swift            species + AI + pressure + windows + sun/moon
+              BaitEngineView.swift         AI bait card, report, ask-anything box
+              BaitArtView.swift            Replicate lure art (optional)
               LocationPromptView.swift      permission + denied states
               GlassCard.swift              reusable Liquid Glass card
   Support/    Info.plist, entitlements, Assets.xcassets
 ```
+
+## AI & image generation
+
+- **Foundation Models** runs on-device; no entitlement needed, but the user must
+  have Apple Intelligence enabled. When unavailable, the AI section explains why
+  and the deterministic facts (Phase 2/3) still work.
+- **Replicate** is optional. Copy `Secrets.xcconfig.example` to `Secrets.xcconfig`
+  (gitignored) and set `REPLICATE_API_TOKEN`, or export it as an env var. Without
+  a token, lure-art generation is silently skipped.
 
 ## Solunar approximation
 
@@ -74,5 +92,5 @@ easy to swap for a precise ephemeris later.
 
 ## Next
 
-Phase 4 adds the Foundation Models bait engine (structured output, conditions +
-species → bait card) with Replicate-generated art. See `../PLAN.md`.
+Phase 5 — polish: saved fishing spots and a bite-window notification. See
+`../PLAN.md`.

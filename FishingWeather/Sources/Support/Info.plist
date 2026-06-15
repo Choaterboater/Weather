@@ -12,6 +12,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Fishing Weather uses your location to show local conditions, forecasts, and fishing windows.</string>
+	<key>ReplicateAPIToken</key>
+	<string>$(REPLICATE_API_TOKEN)</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIApplicationSceneManifest</key>

@@ -4,6 +4,7 @@ import WeatherKit
 struct FishingView: View {
     @Environment(WeatherStore.self) private var weather
     @AppStorage("selectedSpecies") private var species: Species = .all
+    @State private var engine = BaitEngine()
 
     var body: some View {
         ScrollView {
@@ -13,6 +14,7 @@ struct FishingView: View {
                 SpeciesFocusCard(species: species)
 
                 if let conditions = makeConditions() {
+                    BaitEngineView(conditions: conditions, species: species, engine: engine)
                     BiteWindowsCard(conditions: conditions)
                     PressureCard(reading: conditions.pressure)
                     SolunarDetailsCard(conditions: conditions)
@@ -39,6 +41,7 @@ struct FishingView: View {
             )
             .ignoresSafeArea()
         )
+        .onChange(of: species) { engine.reset() }
     }
 
     private func makeConditions() -> FishingConditions? {

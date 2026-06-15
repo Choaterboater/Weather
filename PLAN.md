@@ -82,7 +82,7 @@ Deterministic math/facts layer — computed directly, no model.
 - Tap-to-pick row: Bass / Crappie / Catfish / Bluegill / All.
 - Persist the choice (`@AppStorage`); it scopes the Fishing screen and feeds Phase 4.
 
-### Phase 4 — AI bait engine
+### Phase 4 — AI bait engine  *(scaffolded in this repo)*
 
 Foundation Models with **structured output** so the model fills tidy fields:
 
