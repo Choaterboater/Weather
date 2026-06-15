@@ -24,6 +24,12 @@
 	<string>$(AMAZON_SECRET_KEY)</string>
 	<key>AmazonPartnerTag</key>
 	<string>$(AMAZON_PARTNER_TAG)</string>
+	<key>EbayClientID</key>
+	<string>$(EBAY_CLIENT_ID)</string>
+	<key>EbayClientSecret</key>
+	<string>$(EBAY_CLIENT_SECRET)</string>
+	<key>EbayCampaignID</key>
+	<string>$(EBAY_CAMPAIGN_ID)</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIApplicationSceneManifest</key>
