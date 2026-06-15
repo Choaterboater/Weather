@@ -31,6 +31,11 @@ enum Species: String, CaseIterable, Identifiable {
         }
     }
 
+    /// How to name the focus to the model.
+    var promptName: String {
+        self == .all ? "freshwater fish (no specific species)" : displayName.lowercased()
+    }
+
     /// A simple, static where-to-focus note. Deterministic guidance (not AI) —
     /// the Phase 4 bait engine produces the real, conditions-aware advice.
     var focusNote: String {
