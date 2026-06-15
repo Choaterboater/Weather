@@ -26,6 +26,13 @@ struct MainTabView: View {
                         .refreshable { location.refresh() }
                 }
             }
+            Tab("Scout", systemImage: "camera.viewfinder") {
+                NavigationStack {
+                    ScoutView()
+                        .navigationTitle("Scout the Water")
+                        .navigationBarTitleDisplayMode(.inline)
+                }
+            }
             Tab("Spots", systemImage: "mappin.and.ellipse") {
                 NavigationStack {
                     SpotsView()
