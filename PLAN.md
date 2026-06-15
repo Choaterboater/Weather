@@ -112,6 +112,17 @@ BaitRecommendation
 - Liquid Glass styling pass; saved fishing spots; bite-window notifications.
 - Replicate art polish (consistent style, caching, static-asset fallback).
 
+### Beyond the plan  *(scaffolded in this repo)*
+
+- **Real product photos.** Bait card pulls a real product photo + "Buy" link from
+  Amazon's Product Advertising API (`BaitImageProvider` chain), falling back to
+  Replicate art. Tackle retailers (Tackle Warehouse, Bass Pro, FishUSA) plug into
+  the same protocol.
+- **Scout the Water.** Take/pick a photo of the spot; Vision detects scene
+  features and Foundation Models turns them + conditions into structured "where to
+  cast" guidance. When the WWDC 2026 FM native image-input API is confirmed for
+  the shipped SDK, the Vision pre-pass can be swapped for direct image input.
+
 ---
 
 ## Things to know before starting

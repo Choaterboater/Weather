@@ -12,6 +12,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Fishing Weather uses your location to show local conditions, forecasts, and fishing windows.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Take a photo of the water so the AI can suggest where to cast.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choose a photo of the water so the AI can suggest where to cast.</string>
 	<key>ReplicateAPIToken</key>
 	<string>$(REPLICATE_API_TOKEN)</string>
 	<key>AmazonAccessKey</key>

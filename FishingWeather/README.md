@@ -15,6 +15,8 @@
 - **Phase 5 (Polish):** saved fishing spots (a Spots tab to save/switch between
   locations, persisted) and a local notification 30 minutes before the next bite
   window.
+- **Scout the Water:** a Scout tab — take or pick a photo and the on-device AI
+  reads the scene (Vision features + conditions) into "where to cast" guidance.
 
 Targets **iOS 27 / Xcode 27 / Swift 6.4** (strict concurrency).
 
@@ -60,9 +62,12 @@ Sources/
               Species.swift                species enum + tint + focus note
               BaitRecommendation.swift     @Generable structured AI output
               FishingSpot.swift            saved-spot value type
+              WaterScoutReport.swift       @Generable "where to cast" output
   Services/   …                            (also) BaitEngine.swift, AppSecrets.swift,
                                            ReplicateClient.swift, SpotStore.swift,
-                                           BiteWindowNotifier.swift
+                                           BiteWindowNotifier.swift,
+                                           AmazonProductClient.swift, BaitImageProvider.swift,
+                                           ImageSceneAnalyzer.swift, WaterScout.swift
   Views/      RootView.swift               permission gating + load trigger
               MainTabView.swift            Weather / Fishing tabs
               SpeciesPicker.swift          tap-to-pick species row
@@ -75,6 +80,8 @@ Sources/
               BaitEngineView.swift         AI bait card, report, ask-anything box
               BaitArtView.swift            Replicate lure art (optional)
               SpotsView.swift              save / switch saved fishing spots
+              ScoutView.swift              photo capture + AI "where to cast"
+              CameraPicker.swift           UIImagePickerController wrapper
               LocationPromptView.swift      permission + denied states
               GlassCard.swift              reusable Liquid Glass card
   Support/    Info.plist, entitlements, Assets.xcassets
