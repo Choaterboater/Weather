@@ -1,4 +1,4 @@
-# Fishing Weather — Phases 1–4
+# Fishing Weather — Phases 1–5
 
 - **Phase 1 (Weather):** WeatherKit + CoreLocation — current conditions, hourly,
   10-day, and active alerts, styled with Liquid Glass.
@@ -12,6 +12,9 @@
   output — a bait card (top bait, color, technique, depth, confidence, why),
   a plain-language daily report, and an ask-anything box. Replicate generates lure
   art for the card (optional; disabled without a token).
+- **Phase 5 (Polish):** saved fishing spots (a Spots tab to save/switch between
+  locations, persisted) and a local notification 30 minutes before the next bite
+  window.
 
 Targets **iOS 27 / Xcode 27 / Swift 6.4** (strict concurrency).
 
@@ -56,8 +59,10 @@ Sources/
               FishingConditions.swift      assembles the facts from WeatherKit
               Species.swift                species enum + tint + focus note
               BaitRecommendation.swift     @Generable structured AI output
+              FishingSpot.swift            saved-spot value type
   Services/   …                            (also) BaitEngine.swift, AppSecrets.swift,
-                                           ReplicateClient.swift
+                                           ReplicateClient.swift, SpotStore.swift,
+                                           BiteWindowNotifier.swift
   Views/      RootView.swift               permission gating + load trigger
               MainTabView.swift            Weather / Fishing tabs
               SpeciesPicker.swift          tap-to-pick species row
@@ -69,6 +74,7 @@ Sources/
               FishingView.swift            species + AI + pressure + windows + sun/moon
               BaitEngineView.swift         AI bait card, report, ask-anything box
               BaitArtView.swift            Replicate lure art (optional)
+              SpotsView.swift              save / switch saved fishing spots
               LocationPromptView.swift      permission + denied states
               GlassCard.swift              reusable Liquid Glass card
   Support/    Info.plist, entitlements, Assets.xcassets
@@ -90,7 +96,8 @@ the moon's transits (overhead/underfoot), approximated from the rise/set midpoin
 and a half-lunar-day (~12h25m) offset — accurate enough for trip planning, and
 easy to swap for a precise ephemeris later.
 
-## Next
+## Status
 
-Phase 5 — polish: saved fishing spots and a bite-window notification. See
-`../PLAN.md`.
+Phases 1–5 are scaffolded. Remaining work is a real build pass on a Mac with
+Xcode 27 (this repo was assembled on Linux and hasn't been compiled), signing,
+WeatherKit enablement, and an optional Replicate token. See `../PLAN.md`.

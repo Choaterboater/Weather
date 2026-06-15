@@ -107,7 +107,7 @@ BaitRecommendation
   recommended bait + color) or a conditions hero image. Cache by
   (species + bait + color) so we don't regenerate the same art.
 
-### Phase 5 — Polish
+### Phase 5 — Polish  *(scaffolded in this repo)*
 
 - Liquid Glass styling pass; saved fishing spots; bite-window notifications.
 - Replicate art polish (consistent style, caching, static-asset fallback).
