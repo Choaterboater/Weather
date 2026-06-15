@@ -1,0 +1,31 @@
+name: FishingWeather
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    iOS: "27.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.4"
+    SWIFT_STRICT_CONCURRENCY: complete
+    GENERATE_INFOPLIST_FILE: NO
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  FishingWeather:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.fishingweather
+        INFOPLIST_FILE: Sources/Support/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Sources/Support/FishingWeather.entitlements
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1"
+        # Set your own DEVELOPMENT_TEAM here (or in Xcode > Signing & Capabilities).
+        DEVELOPMENT_TEAM: ""
