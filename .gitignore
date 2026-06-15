@@ -1,0 +1,16 @@
+# Xcode / generated project
+*.xcodeproj
+*.xcworkspace
+!default.xcworkspace
+xcuserdata/
+DerivedData/
+build/
+.swiftpm/
+
+# macOS
+.DS_Store
+
+# Secrets (Replicate token, signing config, etc.)
+Secrets.xcconfig
+*.local.xcconfig
+.env
