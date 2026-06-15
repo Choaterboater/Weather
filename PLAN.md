@@ -77,7 +77,7 @@ Deterministic math/facts layer — computed directly, no model.
 - **Exit criteria:** pressure trend + today's bite windows, validated against a
   couple of public solunar calculators.
 
-### Phase 3 — Species picker
+### Phase 3 — Species picker  *(scaffolded in this repo)*
 
 - Tap-to-pick row: Bass / Crappie / Catfish / Bluegill / All.
 - Persist the choice (`@AppStorage`); it scopes the Fishing screen and feeds Phase 4.
