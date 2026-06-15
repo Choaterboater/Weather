@@ -81,6 +81,10 @@ private struct SpeciesFocusCard: View {
 private struct BiteWindowsCard: View {
     let conditions: FishingConditions
 
+    @State private var reminderState: ReminderState = .none
+
+    private enum ReminderState { case none, scheduled, tooLate }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: "Bite Windows", systemImage: "timer")
@@ -95,8 +99,36 @@ private struct BiteWindowsCard: View {
                         ForEach(conditions.windows) { window in
                             BiteWindowRow(window: window)
                         }
+                        reminderControl
                     }
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var reminderControl: some View {
+        if let next = conditions.nextWindow() {
+            switch reminderState {
+            case .none:
+                Button {
+                    Task {
+                        let ok = await BiteWindowNotifier.scheduleReminder(for: next)
+                        reminderState = ok ? .scheduled : .tooLate
+                    }
+                } label: {
+                    Label("Remind me 30 min before", systemImage: "bell")
+                        .font(.subheadline)
+                }
+                .buttonStyle(.bordered)
+            case .scheduled:
+                Label("Reminder set", systemImage: "bell.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.green)
+            case .tooLate:
+                Label("That window is too soon to remind", systemImage: "bell.slash")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }
