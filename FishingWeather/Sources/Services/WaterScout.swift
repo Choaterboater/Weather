@@ -32,7 +32,8 @@ final class WaterScout {
         status = .working
         report = nil
 
-        let labels = await ImageSceneAnalyzer.labels(for: image)
+        let imageData = image.pngData() ?? image.jpegData(compressionQuality: 0.8) ?? Data()
+        let labels = await ImageSceneAnalyzer.labels(forImageData: imageData)
         let prompt = Self.prompt(labels: labels, species: species, conditions: conditions)
 
         do {
