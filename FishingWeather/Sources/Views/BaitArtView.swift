@@ -1,32 +1,28 @@
 import SwiftUI
 
-/// Loads (and caches) Replicate-generated art for a bait recommendation.
+/// Loads (and caches) a bait image — a real product photo when available,
+/// otherwise AI-generated art.
 @MainActor
 @Observable
 final class BaitArtLoader {
     enum State {
-        case idle, loading, loaded(URL), hidden
+        case idle, loading, loaded(BaitImage), hidden
     }
 
     private(set) var state: State = .idle
-    private var cache: [String: URL] = [:]
+    private var cache: [String: BaitImage] = [:]
 
-    func load(prompt: String, key: String) async {
+    func load(recommendation: BaitRecommendation, species: Species, key: String) async {
         if let cached = cache[key] {
             state = .loaded(cached)
             return
         }
-        guard let client = ReplicateClient() else {
-            state = .hidden // no token — feature off
-            return
-        }
         state = .loading
-        do {
-            let url = try await client.image(prompt: prompt)
-            cache[key] = url
-            state = .loaded(url)
-        } catch {
-            state = .hidden // fail quietly; the text recommendation still stands
+        if let image = await BaitImageService.firstImage(for: recommendation, species: species) {
+            cache[key] = image
+            state = .loaded(image)
+        } else {
+            state = .hidden // no providers configured, or all failed
         }
     }
 }
@@ -41,14 +37,11 @@ struct BaitArtView: View {
         "\(species.rawValue)|\(recommendation.topBait)|\(recommendation.color)"
     }
 
-    private var prompt: String {
-        "Detailed product illustration of a \(recommendation.color) \(recommendation.topBait) "
-        + "fishing lure for \(species.promptName), studio lighting, clean neutral background"
-    }
-
     var body: some View {
         content
-            .task(id: cacheKey) { await loader.load(prompt: prompt, key: cacheKey) }
+            .task(id: cacheKey) {
+                await loader.load(recommendation: recommendation, species: species, key: cacheKey)
+            }
     }
 
     @ViewBuilder
@@ -56,24 +49,50 @@ struct BaitArtView: View {
         switch loader.state {
         case .idle, .loading:
             placeholder.overlay { ProgressView() }
-        case .loaded(let url):
-            AsyncImage(url: url) { image in
-                image.resizable().scaledToFill()
-            } placeholder: {
-                placeholder.overlay { ProgressView() }
+        case .loaded(let image):
+            VStack(alignment: .leading, spacing: 6) {
+                artImage(image)
+                if let caption = image.caption {
+                    if let buyURL = image.buyURL {
+                        Link(destination: buyURL) {
+                            Label(caption, systemImage: "bag")
+                                .font(.caption)
+                                .lineLimit(1)
+                        }
+                    } else {
+                        Text(caption)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
-            .frame(height: 160)
-            .frame(maxWidth: .infinity)
-            .clipShape(.rect(cornerRadius: 16))
         case .hidden:
             EmptyView()
         }
     }
 
+    private func artImage(_ image: BaitImage) -> some View {
+        AsyncImage(url: image.url) { phase in
+            switch phase {
+            case .success(let img):
+                img.resizable().scaledToFill()
+            case .failure:
+                placeholder.overlay {
+                    Image(systemName: "photo").foregroundStyle(.secondary)
+                }
+            default:
+                placeholder.overlay { ProgressView() }
+            }
+        }
+        .frame(height: 170)
+        .frame(maxWidth: .infinity)
+        .clipShape(.rect(cornerRadius: 16))
+    }
+
     private var placeholder: some View {
         RoundedRectangle(cornerRadius: 16)
             .fill(.quaternary)
-            .frame(height: 160)
+            .frame(height: 170)
             .frame(maxWidth: .infinity)
     }
 }

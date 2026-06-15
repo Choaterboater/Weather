@@ -14,6 +14,12 @@
 	<string>Fishing Weather uses your location to show local conditions, forecasts, and fishing windows.</string>
 	<key>ReplicateAPIToken</key>
 	<string>$(REPLICATE_API_TOKEN)</string>
+	<key>AmazonAccessKey</key>
+	<string>$(AMAZON_ACCESS_KEY)</string>
+	<key>AmazonSecretKey</key>
+	<string>$(AMAZON_SECRET_KEY)</string>
+	<key>AmazonPartnerTag</key>
+	<string>$(AMAZON_PARTNER_TAG)</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIApplicationSceneManifest</key>

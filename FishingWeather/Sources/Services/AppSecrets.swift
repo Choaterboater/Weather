@@ -1,17 +1,32 @@
 import Foundation
 
-/// Reads secrets without committing them. The Replicate token comes from the
-/// `ReplicateAPIToken` Info.plist key (populated from a gitignored xcconfig) or
-/// the `REPLICATE_API_TOKEN` environment variable for local runs. When unset,
-/// image generation is simply disabled.
+/// Reads secrets without committing them. Each value comes from an Info.plist key
+/// (populated from a gitignored xcconfig) or an environment variable for local
+/// runs. Anything unset returns nil, and the dependent feature disables cleanly.
 enum AppSecrets {
     static var replicateToken: String? {
-        if let fromPlist = Bundle.main.object(forInfoDictionaryKey: "ReplicateAPIToken") as? String,
+        value(plistKey: "ReplicateAPIToken", env: "REPLICATE_API_TOKEN")
+    }
+
+    static var amazonAccessKey: String? {
+        value(plistKey: "AmazonAccessKey", env: "AMAZON_ACCESS_KEY")
+    }
+
+    static var amazonSecretKey: String? {
+        value(plistKey: "AmazonSecretKey", env: "AMAZON_SECRET_KEY")
+    }
+
+    static var amazonPartnerTag: String? {
+        value(plistKey: "AmazonPartnerTag", env: "AMAZON_PARTNER_TAG")
+    }
+
+    private static func value(plistKey: String, env: String) -> String? {
+        if let fromPlist = Bundle.main.object(forInfoDictionaryKey: plistKey) as? String,
            !fromPlist.isEmpty, !fromPlist.hasPrefix("$(") {
             return fromPlist
         }
-        if let env = ProcessInfo.processInfo.environment["REPLICATE_API_TOKEN"], !env.isEmpty {
-            return env
+        if let fromEnv = ProcessInfo.processInfo.environment[env], !fromEnv.isEmpty {
+            return fromEnv
         }
         return nil
     }

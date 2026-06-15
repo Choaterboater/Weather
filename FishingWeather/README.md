@@ -85,9 +85,14 @@ Sources/
 - **Foundation Models** runs on-device; no entitlement needed, but the user must
   have Apple Intelligence enabled. When unavailable, the AI section explains why
   and the deterministic facts (Phase 2/3) still work.
-- **Replicate** is optional. Copy `Secrets.xcconfig.example` to `Secrets.xcconfig`
-  (gitignored) and set `REPLICATE_API_TOKEN`, or export it as an env var. Without
-  a token, lure-art generation is silently skipped.
+- **Bait images** come from a provider chain (`BaitImageProvider`): a real product
+  photo + "Buy" link from **Amazon's Product Advertising API** when a match is
+  found, falling back to **Replicate**-generated art. Tackle retailers (Tackle
+  Warehouse, Bass Pro, FishUSA) slot into the same protocol.
+- All credentials are optional. Copy `Secrets.xcconfig.example` to
+  `Secrets.xcconfig` (gitignored) and fill in what you have (`REPLICATE_API_TOKEN`,
+  `AMAZON_ACCESS_KEY` / `AMAZON_SECRET_KEY` / `AMAZON_PARTNER_TAG`), or export them
+  as env vars. Anything unset just disables that source.
 
 ## Solunar approximation
 
