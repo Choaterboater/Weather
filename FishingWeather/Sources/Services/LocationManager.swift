@@ -36,7 +36,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         Task { @MainActor in
             self.authorizationStatus = status
             if status == .authorizedWhenInUse || status == .authorizedAlways {
-                manager.requestLocation()
+                self.manager.requestLocation()
             }
         }
     }
@@ -57,9 +57,10 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         _ manager: CLLocationManager,
         didFailWithError error: Error
     ) {
+        let message = error.localizedDescription
         Task { @MainActor in
             // A failure here keeps the last known location; only surface the message.
-            self.lastError = error.localizedDescription
+            self.lastError = message
         }
     }
 
