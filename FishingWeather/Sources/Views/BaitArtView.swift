@@ -12,13 +12,13 @@ final class BaitArtLoader {
     private(set) var state: State = .idle
     private var cache: [String: BaitImage] = [:]
 
-    func load(recommendation: BaitRecommendation, species: Species, key: String) async {
+    func load(recommendation: BaitRecommendation, species: Species, preferred: Retailer, key: String) async {
         if let cached = cache[key] {
             state = .loaded(cached)
             return
         }
         state = .loading
-        if let image = await BaitImageService.firstImage(for: recommendation, species: species) {
+        if let image = await BaitImageService.firstImage(for: recommendation, species: species, preferred: preferred) {
             cache[key] = image
             state = .loaded(image)
         } else {
@@ -31,16 +31,25 @@ struct BaitArtView: View {
     let recommendation: BaitRecommendation
     let species: Species
 
+    @AppStorage("preferredRetailer") private var preferredRetailerRaw = Retailer.amazon.rawValue
     @State private var loader = BaitArtLoader()
 
+    private var preferred: Retailer { Retailer(rawValue: preferredRetailerRaw) ?? .amazon }
+
     private var cacheKey: String {
-        "\(species.rawValue)|\(recommendation.topBait)|\(recommendation.color)"
+        // Photo source order depends on the preferred photo retailer.
+        let photoPref = preferred.servesPhotos ? preferred.rawValue : "default"
+        return "\(photoPref)|\(species.rawValue)|\(recommendation.topBait)|\(recommendation.color)"
+    }
+
+    private var shopQuery: String {
+        "\(recommendation.color) \(recommendation.topBait) fishing lure"
     }
 
     var body: some View {
         content
             .task(id: cacheKey) {
-                await loader.load(recommendation: recommendation, species: species, key: cacheKey)
+                await loader.load(recommendation: recommendation, species: species, preferred: preferred, key: cacheKey)
             }
     }
 
@@ -50,24 +59,49 @@ struct BaitArtView: View {
         case .idle, .loading:
             placeholder.overlay { ProgressView() }
         case .loaded(let image):
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 artImage(image)
                 if let caption = image.caption {
-                    if let buyURL = image.buyURL {
-                        Link(destination: buyURL) {
-                            Label(caption, systemImage: "bag")
-                                .font(.caption)
-                                .lineLimit(1)
-                        }
-                    } else {
-                        Text(caption)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text(caption)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
+                shopRow(for: image)
             }
         case .hidden:
-            EmptyView()
+            // Even without a photo, still let the angler shop the bait.
+            shopRow(for: nil)
+        }
+    }
+
+    /// "Buy"/"Find" link for the preferred store, plus a menu to switch stores.
+    @ViewBuilder
+    private func shopRow(for image: BaitImage?) -> some View {
+        let exactMatch = image?.sourceRetailer == preferred ? image?.buyURL : nil
+        let destination = exactMatch ?? preferred.searchURL(for: shopQuery)
+
+        HStack {
+            if let destination {
+                Link(destination: destination) {
+                    Label(
+                        exactMatch != nil ? "Buy on \(preferred.displayName)" : "Find on \(preferred.displayName)",
+                        systemImage: "bag"
+                    )
+                    .font(.caption.weight(.medium))
+                }
+            }
+            Spacer()
+            Menu {
+                Picker("Store", selection: $preferredRetailerRaw) {
+                    ForEach(Retailer.allCases) { retailer in
+                        Text(retailer.displayName).tag(retailer.rawValue)
+                    }
+                }
+            } label: {
+                Label("Store", systemImage: "storefront")
+                    .font(.caption)
+            }
         }
     }
 

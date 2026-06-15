@@ -20,6 +20,18 @@ enum AppSecrets {
         value(plistKey: "AmazonPartnerTag", env: "AMAZON_PARTNER_TAG")
     }
 
+    static var ebayClientID: String? {
+        value(plistKey: "EbayClientID", env: "EBAY_CLIENT_ID")
+    }
+
+    static var ebayClientSecret: String? {
+        value(plistKey: "EbayClientSecret", env: "EBAY_CLIENT_SECRET")
+    }
+
+    static var ebayCampaignID: String? {
+        value(plistKey: "EbayCampaignID", env: "EBAY_CAMPAIGN_ID")
+    }
+
     private static func value(plistKey: String, env: String) -> String? {
         if let fromPlist = Bundle.main.object(forInfoDictionaryKey: plistKey) as? String,
            !fromPlist.isEmpty, !fromPlist.hasPrefix("$(") {

@@ -92,14 +92,17 @@ Sources/
 - **Foundation Models** runs on-device; no entitlement needed, but the user must
   have Apple Intelligence enabled. When unavailable, the AI section explains why
   and the deterministic facts (Phase 2/3) still work.
-- **Bait images** come from a provider chain (`BaitImageProvider`): a real product
-  photo + "Buy" link from **Amazon's Product Advertising API** when a match is
-  found, falling back to **Replicate**-generated art. Tackle retailers (Tackle
-  Warehouse, Bass Pro, FishUSA) slot into the same protocol.
+- **Bait images & shopping.** A `BaitImageProvider` chain fetches a real product
+  photo + buy link, preferring the angler's selected store: **Amazon**
+  (Product Advertising API) and **eBay** (Browse API) serve live photos; it falls
+  back to **Replicate**-generated art. A store picker on the bait card switches
+  between Amazon, eBay, Tackle Warehouse, Bass Pro, and FishUSA — the tackle shops
+  open as search links (no live API), so you can buy the bait anywhere.
 - All credentials are optional. Copy `Secrets.xcconfig.example` to
-  `Secrets.xcconfig` (gitignored) and fill in what you have (`REPLICATE_API_TOKEN`,
-  `AMAZON_ACCESS_KEY` / `AMAZON_SECRET_KEY` / `AMAZON_PARTNER_TAG`), or export them
-  as env vars. Anything unset just disables that source.
+  `Secrets.xcconfig` (gitignored) and fill in what you have — `REPLICATE_API_TOKEN`,
+  Amazon (`AMAZON_ACCESS_KEY`/`AMAZON_SECRET_KEY`/`AMAZON_PARTNER_TAG`), eBay
+  (`EBAY_CLIENT_ID`/`EBAY_CLIENT_SECRET`/`EBAY_CAMPAIGN_ID`) — or set env vars.
+  Anything unset just disables that source.
 
 ## Solunar approximation
 

@@ -1,18 +1,23 @@
 import Foundation
 
-/// An image to show on the bait card. Real products carry a `buyURL` and source
-/// retailer; AI-generated art does not.
+/// An image to show on the bait card. Real products carry a `buyURL` and the
+/// `sourceRetailer` they came from; AI-generated art does not.
 struct BaitImage {
     let url: URL
     let buyURL: URL?
     let caption: String?
+    let sourceRetailer: Retailer?
     let isGenerated: Bool
 }
 
-/// A source of bait imagery. New retailers (Tackle Warehouse, Bass Pro, FishUSA,
-/// etc.) can be added by conforming another type and dropping it into the chain.
+/// A source of bait imagery. New retailers slot in by conforming another type and
+/// adding it to the chain.
 protocol BaitImageProvider: Sendable {
     func image(for recommendation: BaitRecommendation, species: Species) async -> BaitImage?
+}
+
+private func keywords(for recommendation: BaitRecommendation) -> String {
+    "\(recommendation.color) \(recommendation.topBait) fishing lure"
 }
 
 /// Real product photo + buy link from Amazon's Product Advertising API.
@@ -25,12 +30,33 @@ struct AmazonBaitImageProvider: BaitImageProvider {
     }
 
     func image(for recommendation: BaitRecommendation, species: Species) async -> BaitImage? {
-        let keywords = "\(recommendation.color) \(recommendation.topBait) fishing lure"
-        guard let match = try? await client.searchFirst(keywords: keywords) else { return nil }
+        guard let match = try? await client.searchFirst(keywords: keywords(for: recommendation)) else { return nil }
         return BaitImage(
             url: match.imageURL,
             buyURL: match.buyURL,
             caption: "\(match.title) · \(match.retailer)",
+            sourceRetailer: .amazon,
+            isGenerated: false
+        )
+    }
+}
+
+/// Real product photo + buy link from the eBay Browse API.
+struct EbayBaitImageProvider: BaitImageProvider {
+    private let client: EbayProductClient
+
+    init?() {
+        guard let client = EbayProductClient() else { return nil }
+        self.client = client
+    }
+
+    func image(for recommendation: BaitRecommendation, species: Species) async -> BaitImage? {
+        guard let match = try? await client.searchFirst(keywords: keywords(for: recommendation)) else { return nil }
+        return BaitImage(
+            url: match.imageURL,
+            buyURL: match.buyURL,
+            caption: "\(match.title) · \(match.retailer)",
+            sourceRetailer: .ebay,
             isGenerated: false
         )
     }
@@ -50,23 +76,39 @@ struct ReplicateBaitImageProvider: BaitImageProvider {
             + "\(recommendation.topBait) fishing lure for \(species.promptName), "
             + "studio lighting, clean neutral background"
         guard let url = try? await client.image(prompt: prompt) else { return nil }
-        return BaitImage(url: url, buyURL: nil, caption: "AI-generated", isGenerated: true)
+        return BaitImage(url: url, buyURL: nil, caption: "AI-generated", sourceRetailer: nil, isGenerated: true)
     }
 }
 
-/// Tries each configured provider in order and returns the first image.
-/// Real products (Amazon, then any tackle retailers) win; generated art is last.
+/// Tries each configured provider in order and returns the first image. Photo
+/// retailers (Amazon, eBay) win; generated art is last. Photo source order
+/// follows the angler's preferred store when it serves photos.
 enum BaitImageService {
-    static func providers() -> [BaitImageProvider] {
+    static func providers(preferred: Retailer) -> [BaitImageProvider] {
         var providers: [BaitImageProvider] = []
-        if let amazon = AmazonBaitImageProvider() { providers.append(amazon) }
-        // Add tackle-retailer providers here as they come online.
+
+        let amazon = AmazonBaitImageProvider()
+        let ebay = EbayBaitImageProvider()
+
+        // Put the preferred photo retailer first.
+        if preferred == .ebay {
+            if let ebay { providers.append(ebay) }
+            if let amazon { providers.append(amazon) }
+        } else {
+            if let amazon { providers.append(amazon) }
+            if let ebay { providers.append(ebay) }
+        }
+
         if let replicate = ReplicateBaitImageProvider() { providers.append(replicate) }
         return providers
     }
 
-    static func firstImage(for recommendation: BaitRecommendation, species: Species) async -> BaitImage? {
-        for provider in providers() {
+    static func firstImage(
+        for recommendation: BaitRecommendation,
+        species: Species,
+        preferred: Retailer
+    ) async -> BaitImage? {
+        for provider in providers(preferred: preferred) {
             if let image = await provider.image(for: recommendation, species: species) {
                 return image
             }
