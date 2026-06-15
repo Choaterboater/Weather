@@ -1,7 +1,10 @@
-# Fishing Weather — Phase 1 (Weather app)
+# Fishing Weather — Phases 1–2
 
-The plain weather app foundation: WeatherKit + CoreLocation, current conditions,
-hourly, 10-day, and active alerts, styled with Liquid Glass.
+- **Phase 1 (Weather):** WeatherKit + CoreLocation — current conditions, hourly,
+  10-day, and active alerts, styled with Liquid Glass.
+- **Phase 2 (Fishing):** a second tab with the deterministic facts layer —
+  barometric pressure trend and solunar bite windows (major/minor), plus sun/moon
+  times and moon phase. No AI; everything here is calculated.
 
 Targets **iOS 27 / Xcode 27 / Swift 6.4** (strict concurrency).
 
@@ -39,18 +42,32 @@ Sources/
   App/        FishingWeatherApp.swift      app entry, injects observables
   Services/   LocationManager.swift        CoreLocation wrapper (@Observable)
               WeatherStore.swift           WeatherKit fetch + state
+  Models/     BiteWindow.swift             solunar window value type
+              PressureReading.swift        pressure + trend analysis
+              SolunarCalculator.swift      major/minor windows from moon rise/set
+              MoonPhase+Display.swift      phase name / symbol / bite rating
+              FishingConditions.swift      assembles the facts from WeatherKit
   Views/      RootView.swift               permission gating + load trigger
+              MainTabView.swift            Weather / Fishing tabs
               WeatherDashboardView.swift   scrolling composition of sections
               CurrentConditionsView.swift  temp / condition / wind / humidity / UV
               HourlyForecastView.swift      next 24 hours
               DailyForecastView.swift       10-day
               WeatherAlertsView.swift       active alerts
+              FishingView.swift            pressure + bite windows + sun/moon
               LocationPromptView.swift      permission + denied states
               GlassCard.swift              reusable Liquid Glass card
   Support/    Info.plist, entitlements, Assets.xcassets
 ```
 
+## Solunar approximation
+
+Minor windows are centered on moonrise and moonset. Major windows are centered on
+the moon's transits (overhead/underfoot), approximated from the rise/set midpoint
+and a half-lunar-day (~12h25m) offset — accurate enough for trip planning, and
+easy to swap for a precise ephemeris later.
+
 ## Next
 
-Phase 2 adds the fishing conditions layer (pressure trend + solunar bite
-windows). See `../PLAN.md`.
+Phase 3 adds the species picker; Phase 4 the Foundation Models bait engine. See
+`../PLAN.md`.

@@ -66,7 +66,7 @@ Get a working, genuinely usable weather app before any fishing logic exists.
 See `FishingWeather/` for the scaffold and `FishingWeather/README.md` for how to
 generate and run the project.
 
-### Phase 2 — Fishing conditions layer (no AI yet)
+### Phase 2 — Fishing conditions layer (no AI yet)  *(scaffolded in this repo)*
 
 Deterministic math/facts layer — computed directly, no model.
 

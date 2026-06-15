@@ -6,28 +6,27 @@ struct RootView: View {
     @Environment(WeatherStore.self) private var weather
 
     var body: some View {
-        NavigationStack {
-            content
-                .navigationTitle(location.placeName ?? "Fishing Weather")
-                .navigationBarTitleDisplayMode(.inline)
-        }
-        .task(id: location.location?.coordinate.latitude) {
-            if let coordinate = location.location {
-                await weather.load(for: coordinate)
+        content
+            .task(id: location.location?.coordinate.latitude) {
+                if let coordinate = location.location {
+                    await weather.load(for: coordinate)
+                }
             }
-        }
     }
 
     @ViewBuilder
     private var content: some View {
         switch location.authorizationStatus {
         case .notDetermined:
-            LocationPromptView { location.requestPermission() }
+            NavigationStack {
+                LocationPromptView { location.requestPermission() }
+            }
         case .denied, .restricted:
-            LocationDeniedView()
+            NavigationStack {
+                LocationDeniedView()
+            }
         default:
-            WeatherDashboardView()
-                .refreshable { location.refresh() }
+            MainTabView()
         }
     }
 }
