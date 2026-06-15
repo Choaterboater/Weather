@@ -1,10 +1,13 @@
-# Fishing Weather — Phases 1–2
+# Fishing Weather — Phases 1–3
 
 - **Phase 1 (Weather):** WeatherKit + CoreLocation — current conditions, hourly,
   10-day, and active alerts, styled with Liquid Glass.
 - **Phase 2 (Fishing):** a second tab with the deterministic facts layer —
   barometric pressure trend and solunar bite windows (major/minor), plus sun/moon
   times and moon phase. No AI; everything here is calculated.
+- **Phase 3 (Species):** a tap-to-pick species row at the top of the Fishing tab
+  (All / Bass / Crappie / Catfish / Bluegill), persisted via `@AppStorage`, with a
+  static focus note per species. The selection is what Phase 4's AI will key off.
 
 Targets **iOS 27 / Xcode 27 / Swift 6.4** (strict concurrency).
 
@@ -47,8 +50,10 @@ Sources/
               SolunarCalculator.swift      major/minor windows from moon rise/set
               MoonPhase+Display.swift      phase name / symbol / bite rating
               FishingConditions.swift      assembles the facts from WeatherKit
+              Species.swift                species enum + tint + focus note
   Views/      RootView.swift               permission gating + load trigger
               MainTabView.swift            Weather / Fishing tabs
+              SpeciesPicker.swift          tap-to-pick species row
               WeatherDashboardView.swift   scrolling composition of sections
               CurrentConditionsView.swift  temp / condition / wind / humidity / UV
               HourlyForecastView.swift      next 24 hours
@@ -69,5 +74,5 @@ easy to swap for a precise ephemeris later.
 
 ## Next
 
-Phase 3 adds the species picker; Phase 4 the Foundation Models bait engine. See
-`../PLAN.md`.
+Phase 4 adds the Foundation Models bait engine (structured output, conditions +
+species → bait card) with Replicate-generated art. See `../PLAN.md`.

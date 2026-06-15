@@ -3,10 +3,15 @@ import WeatherKit
 
 struct FishingView: View {
     @Environment(WeatherStore.self) private var weather
+    @AppStorage("selectedSpecies") private var species: Species = .all
 
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
+                SpeciesPicker(selection: $species)
+                    .padding(.top, 4)
+                SpeciesFocusCard(species: species)
+
                 if let conditions = makeConditions() {
                     BiteWindowsCard(conditions: conditions)
                     PressureCard(reading: conditions.pressure)
@@ -41,6 +46,30 @@ struct FishingView: View {
               let hourly = weather.hourly,
               let today = weather.daily?.forecast.first else { return nil }
         return FishingConditions.make(current: current, hourly: hourly, today: today)
+    }
+}
+
+// MARK: - Species focus
+
+private struct SpeciesFocusCard: View {
+    let species: Species
+
+    var body: some View {
+        GlassCard {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "fish.fill")
+                    .font(.title3)
+                    .foregroundStyle(species.tint)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(species == .all ? "All species" : species.displayName)
+                        .font(.headline)
+                    Text(species.focusNote)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+        }
     }
 }
 
