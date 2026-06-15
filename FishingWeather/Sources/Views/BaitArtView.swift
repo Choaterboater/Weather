@@ -79,7 +79,7 @@ struct BaitArtView: View {
     @ViewBuilder
     private func shopRow(for image: BaitImage?) -> some View {
         let exactMatch = image?.sourceRetailer == preferred ? image?.buyURL : nil
-        let destination = exactMatch ?? preferred.searchURL(for: shopQuery)
+        let destination = exactMatch ?? preferred.shopURL(for: shopQuery)
 
         HStack {
             if let destination {

@@ -96,8 +96,10 @@ Sources/
   photo + buy link, preferring the angler's selected store: **Amazon**
   (Product Advertising API) and **eBay** (Browse API) serve live photos; it falls
   back to **Replicate**-generated art. A store picker on the bait card switches
-  between Amazon, eBay, Tackle Warehouse, Bass Pro, and FishUSA — the tackle shops
-  open as search links (no live API), so you can buy the bait anywhere.
+  between Amazon, eBay, Tackle Warehouse, Bass Pro, and FishUSA. The tackle shops
+  open as search links (no live API) and get wrapped in your affiliate-network
+  deep link (AvantLink/Impact/CJ) when you set a `{url}` template in Info.plist,
+  so those clicks earn commission too.
 - All credentials are optional. Copy `Secrets.xcconfig.example` to
   `Secrets.xcconfig` (gitignored) and fill in what you have — `REPLICATE_API_TOKEN`,
   Amazon (`AMAZON_ACCESS_KEY`/`AMAZON_SECRET_KEY`/`AMAZON_PARTNER_TAG`), eBay

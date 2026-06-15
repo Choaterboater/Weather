@@ -27,9 +27,20 @@ enum Retailer: String, CaseIterable, Identifiable {
         self == .amazon || self == .ebay
     }
 
-    /// A search URL on the retailer for the query, with an affiliate tag appended
-    /// where we model one. URLs for the tackle shops are best-effort and easy to
-    /// adjust if a site changes its search path.
+    /// The link to open when shopping a bait: the store search, wrapped in an
+    /// affiliate-network deep link when one is configured for this retailer.
+    func shopURL(for query: String) -> URL? {
+        guard let raw = searchURL(for: query) else { return nil }
+        if let template = AppSecrets.affiliateTemplate(for: self),
+           let wrapped = AffiliateLinkBuilder.wrap(raw, template: template) {
+            return wrapped
+        }
+        return raw
+    }
+
+    /// The raw store search URL for the query, with an affiliate tag appended
+    /// where we model one inline (Amazon, eBay). URLs for the tackle shops are
+    /// best-effort and easy to adjust if a site changes its search path.
     func searchURL(for query: String) -> URL? {
         let q = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
         switch self {

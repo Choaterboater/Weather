@@ -30,6 +30,12 @@
 	<string>$(EBAY_CLIENT_SECRET)</string>
 	<key>EbayCampaignID</key>
 	<string>$(EBAY_CAMPAIGN_ID)</string>
+	<key>TackleWarehouseAffiliateTemplate</key>
+	<string>$(TACKLEWAREHOUSE_AFFILIATE_TEMPLATE)</string>
+	<key>BassProAffiliateTemplate</key>
+	<string>$(BASSPRO_AFFILIATE_TEMPLATE)</string>
+	<key>FishUSAAffiliateTemplate</key>
+	<string>$(FISHUSA_AFFILIATE_TEMPLATE)</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIApplicationSceneManifest</key>
