@@ -32,6 +32,22 @@ enum AppSecrets {
         value(plistKey: "EbayCampaignID", env: "EBAY_CAMPAIGN_ID")
     }
 
+    /// Affiliate-network deep-link template (with a `{url}` placeholder) for the
+    /// tackle shops that have no live product API. Amazon/eBay carry affiliate
+    /// info in their own product links, so they return nil here.
+    static func affiliateTemplate(for retailer: Retailer) -> String? {
+        switch retailer {
+        case .tackleWarehouse:
+            value(plistKey: "TackleWarehouseAffiliateTemplate", env: "TACKLEWAREHOUSE_AFFILIATE_TEMPLATE")
+        case .bassPro:
+            value(plistKey: "BassProAffiliateTemplate", env: "BASSPRO_AFFILIATE_TEMPLATE")
+        case .fishUSA:
+            value(plistKey: "FishUSAAffiliateTemplate", env: "FISHUSA_AFFILIATE_TEMPLATE")
+        case .amazon, .ebay:
+            nil
+        }
+    }
+
     private static func value(plistKey: String, env: String) -> String? {
         if let fromPlist = Bundle.main.object(forInfoDictionaryKey: plistKey) as? String,
            !fromPlist.isEmpty, !fromPlist.hasPrefix("$(") {
