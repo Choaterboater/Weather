@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The species the angler is focusing on. `all` means no specific focus.
 /// Persisted via `@AppStorage`, so the raw values are a stable storage contract.
-enum Species: String, CaseIterable, Identifiable {
+enum Species: String, CaseIterable, Identifiable, Codable {
     case all
     case bass
     case crappie

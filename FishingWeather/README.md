@@ -17,6 +17,9 @@
   window.
 - **Scout the Water:** a Scout tab — take or pick a photo and the on-device AI
   reads the scene (Vision features + conditions) into "where to cast" guidance.
+- **Catch Log:** a Log tab to record catches (species, bait, size, photo) with an
+  automatic conditions snapshot (pressure trend, moon, air temp, spot), persisted
+  to disk, plus quick stats (top species, top bait).
 
 Targets **iOS 27 / Xcode 27 / Swift 6.4** (strict concurrency).
 
