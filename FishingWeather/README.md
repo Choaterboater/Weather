@@ -20,6 +20,9 @@
 - **Catch Log:** a Log tab to record catches (species, bait, size, photo) with an
   automatic conditions snapshot (pressure trend, moon, air temp, spot), persisted
   to disk, plus quick stats (top species, top bait).
+- **Fish recognition:** in the catch form, "Identify species" from the photo.
+  Prefers an on-device Core ML model (`FishClassifier.mlmodelc`, free/offline) and
+  falls back to a Replicate vision model; the result auto-sets the species picker.
 
 Targets **iOS 27 / Xcode 27 / Swift 6.4** (strict concurrency).
 
@@ -89,6 +92,20 @@ Sources/
               GlassCard.swift              reusable Liquid Glass card
   Support/    Info.plist, entitlements, Assets.xcassets
 ```
+
+## Fish recognition
+
+Tap "Identify species" on a catch photo. Order of preference:
+1. **On-device Core ML** — drop a species classifier compiled as
+   `FishClassifier.mlmodelc` into the bundle (e.g. Create ML on a freshwater
+   dataset). Free, offline, private — no Replicate.
+2. **Replicate vision model** — used only if no Core ML model is bundled and a
+   token is set.
+
+Why not Apple's built-in AI: the on-device Vision classifier recognizes "fish"
+but isn't species-grained, and Foundation Models' image input isn't a
+general-purpose public vision API yet (as of early 2026), so neither can reliably
+tell bass from crappie without a fish-specific model.
 
 ## AI & image generation
 
