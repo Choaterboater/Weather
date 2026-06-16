@@ -122,6 +122,9 @@ BaitRecommendation
   features and Foundation Models turns them + conditions into structured "where to
   cast" guidance. When the WWDC 2026 FM native image-input API is confirmed for
   the shipped SDK, the Vision pre-pass can be swapped for direct image input.
+- **Catch Log.** Record catches (species, bait, size, photo) with an automatic
+  conditions snapshot (pressure trend, moon phase, air temp, spot), persisted to
+  disk as JSON + photo files, with quick stats (top species / top bait).
 
 ---
 

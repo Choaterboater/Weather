@@ -39,6 +39,12 @@ struct MainTabView: View {
                         .navigationTitle("Spots")
                 }
             }
+            Tab("Log", systemImage: "book.closed.fill") {
+                NavigationStack {
+                    CatchLogView()
+                        .navigationTitle("Catch Log")
+                }
+            }
         }
     }
 }

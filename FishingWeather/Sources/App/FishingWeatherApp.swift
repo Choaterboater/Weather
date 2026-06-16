@@ -5,6 +5,7 @@ struct FishingWeatherApp: App {
     @State private var locationManager = LocationManager()
     @State private var weatherStore = WeatherStore()
     @State private var spotStore = SpotStore()
+    @State private var catchLog = CatchLog()
 
     var body: some Scene {
         WindowGroup {
@@ -12,6 +13,7 @@ struct FishingWeatherApp: App {
                 .environment(locationManager)
                 .environment(weatherStore)
                 .environment(spotStore)
+                .environment(catchLog)
         }
     }
 }
