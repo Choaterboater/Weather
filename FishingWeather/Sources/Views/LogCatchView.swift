@@ -19,6 +19,7 @@ struct LogCatchView: View {
     @State private var notes = ""
     @State private var pickerItem: PhotosPickerItem?
     @State private var photo: UIImage?
+    @State private var recognizer = FishRecognizer()
 
     var body: some View {
         NavigationStack {
@@ -47,6 +48,9 @@ struct LogCatchView: View {
                     }
                     PhotosPicker(selection: $pickerItem, matching: .images) {
                         Label(photo == nil ? "Add Photo" : "Change Photo", systemImage: "photo")
+                    }
+                    if photo != nil {
+                        identifyControl
                     }
                 }
 
@@ -83,8 +87,62 @@ struct LogCatchView: View {
                     if let data = try? await newItem.loadTransferable(type: Data.self),
                        let image = UIImage(data: data) {
                         photo = image
+                        recognizer.reset()
                     }
                 }
+            }
+        }
+    }
+
+    // MARK: - Fish recognition
+
+    @ViewBuilder
+    private var identifyControl: some View {
+        switch recognizer.status {
+        case .idle, .ready, .failed:
+            Button {
+                identify()
+            } label: {
+                Label("Identify species", systemImage: "sparkle.magnifyingglass")
+            }
+            if case .ready = recognizer.status, let result = recognizer.result {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Looks like \(result.commonName)")
+                        .font(.subheadline.weight(.medium))
+                    if result.matchedSpecies != nil {
+                        Text("Set species to \(result.matchedSpecies!.displayName).")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if !result.note.isEmpty {
+                        Text(result.note)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            if case .failed(let message) = recognizer.status {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        case .working:
+            HStack(spacing: 8) {
+                ProgressView()
+                Text("Identifying…").foregroundStyle(.secondary)
+            }
+        case .unavailable(let message):
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func identify() {
+        guard let photo else { return }
+        Task {
+            await recognizer.identify(image: photo)
+            if let matched = recognizer.result?.matchedSpecies {
+                species = matched
             }
         }
     }

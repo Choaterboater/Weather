@@ -125,6 +125,10 @@ BaitRecommendation
 - **Catch Log.** Record catches (species, bait, size, photo) with an automatic
   conditions snapshot (pressure trend, moon phase, air temp, spot), persisted to
   disk as JSON + photo files, with quick stats (top species / top bait).
+- **Fish recognition.** Identify the species from a catch photo: on-device Core ML
+  model (`FishClassifier.mlmodelc`) preferred, Replicate vision fallback. Result
+  auto-sets the species picker. (Apple's built-in Vision/Foundation Models can't
+  do species-level ID without a fish-specific model as of early 2026.)
 
 ---
 
