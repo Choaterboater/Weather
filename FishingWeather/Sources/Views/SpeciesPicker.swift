@@ -43,6 +43,10 @@ private struct SpeciesChip: View {
             }
         }
         .buttonStyle(.plain)
+        .scaleEffect(isSelected ? 1.0 : 0.96)
+        .animation(.snappy(duration: 0.25, extraBounce: 0.1), value: isSelected)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(species.displayName)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

@@ -11,6 +11,21 @@ struct BaitEngineView: View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: "AI Bait Engine", systemImage: "sparkles")
 
+            content
+        }
+        .animation(.smooth(duration: 0.35), value: engine.status)
+        .sensoryFeedback(trigger: engine.status) { _, newValue in
+            switch newValue {
+            case .ready: .success
+            case .failed: .error
+            default: nil
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        Group {
             switch engine.status {
             case .idle:
                 GlassCard {
@@ -87,6 +102,7 @@ struct BaitEngineView: View {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.title2)
                     }
+                    .accessibilityLabel("Send question")
                     .disabled(question.trimmingCharacters(in: .whitespaces).isEmpty || engine.isAnswering)
                 }
                 if engine.isAnswering {
@@ -133,6 +149,9 @@ private struct BaitCard: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Bait recommendation")
+        .accessibilityValue("\(recommendation.topBait), \(recommendation.color). \(recommendation.confidence) percent confidence. Technique: \(recommendation.technique). Depth: \(recommendation.depth). \(recommendation.whyReason)")
     }
 }
 
@@ -152,6 +171,7 @@ private struct ConfidenceBadge: View {
             Text("\(value)%")
                 .font(.headline)
                 .foregroundStyle(tint)
+                .contentTransition(.numericText())
             Text("confidence")
                 .font(.caption2)
                 .foregroundStyle(.secondary)

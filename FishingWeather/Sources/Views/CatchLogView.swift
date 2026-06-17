@@ -40,6 +40,7 @@ struct CatchLogView: View {
         .sheet(isPresented: $showingForm) {
             LogCatchView()
         }
+        .sensoryFeedback(.success, trigger: log.entries.count)
     }
 }
 
@@ -111,6 +112,7 @@ private struct CatchRow: View {
             Spacer()
         }
         .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder

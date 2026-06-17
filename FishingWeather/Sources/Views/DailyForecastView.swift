@@ -29,6 +29,10 @@ private struct DayRow: View {
     let day: DayWeather
     let isFirst: Bool
 
+    @ScaledMetric private var dayColumnWidth: CGFloat = 56
+    @ScaledMetric private var iconColumnWidth: CGFloat = 32
+    @ScaledMetric private var precipColumnWidth: CGFloat = 40
+
     private var weekday: String {
         isFirst ? "Today" : day.date.formatted(.dateTime.weekday(.abbreviated))
     }
@@ -37,19 +41,20 @@ private struct DayRow: View {
         HStack {
             Text(weekday)
                 .font(.body.weight(.medium))
-                .frame(width: 56, alignment: .leading)
+                .lineLimit(1)
+                .frame(width: dayColumnWidth, alignment: .leading)
 
             Image(systemName: day.symbolName)
                 .symbolRenderingMode(.multicolor)
-                .frame(width: 32)
+                .frame(width: iconColumnWidth)
 
             if day.precipitationChance > 0 {
                 Text(day.precipitationChance.formatted(.percent.precision(.fractionLength(0))))
                     .font(.caption)
                     .foregroundStyle(.cyan)
-                    .frame(width: 40, alignment: .leading)
+                    .frame(width: precipColumnWidth, alignment: .leading)
             } else {
-                Spacer().frame(width: 40)
+                Color.clear.frame(width: precipColumnWidth)
             }
 
             Spacer()

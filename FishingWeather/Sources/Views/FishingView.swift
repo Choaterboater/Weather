@@ -16,7 +16,7 @@ struct FishingView: View {
                 if let conditions = makeConditions() {
                     BaitEngineView(conditions: conditions, species: species, engine: engine)
                     BiteWindowsCard(conditions: conditions)
-                    PressureCard(reading: conditions.pressure)
+                    PressureCard(reading: conditions.pressure, samples: hourlySamples)
                     SolunarDetailsCard(conditions: conditions)
                 } else if weather.isLoading {
                     ProgressView("Reading conditions…")
@@ -42,6 +42,11 @@ struct FishingView: View {
             .ignoresSafeArea()
         )
         .onChange(of: species) { engine.reset() }
+        .sensoryFeedback(.selection, trigger: species)
+    }
+
+    private var hourlySamples: [HourSample] {
+        weather.hourly?.samples() ?? []
     }
 
     private func makeConditions() -> FishingConditions? {
@@ -96,6 +101,7 @@ private struct BiteWindowsCard: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     } else {
+                        BiteWindowsTimeline(windows: conditions.windows, now: .now)
                         ForEach(conditions.windows) { window in
                             BiteWindowRow(window: window)
                         }
@@ -109,26 +115,38 @@ private struct BiteWindowsCard: View {
     @ViewBuilder
     private var reminderControl: some View {
         if let next = conditions.nextWindow() {
-            switch reminderState {
-            case .none:
-                Button {
-                    Task {
-                        let ok = await BiteWindowNotifier.scheduleReminder(for: next)
-                        reminderState = ok ? .scheduled : .tooLate
+            Group {
+                switch reminderState {
+                case .none:
+                    Button {
+                        Task {
+                            let ok = await BiteWindowNotifier.scheduleReminder(for: next)
+                            reminderState = ok ? .scheduled : .tooLate
+                        }
+                    } label: {
+                        Label("Remind me 30 min before", systemImage: "bell")
+                            .font(.subheadline)
                     }
-                } label: {
-                    Label("Remind me 30 min before", systemImage: "bell")
+                    .buttonStyle(.bordered)
+                case .scheduled:
+                    Label("Reminder set", systemImage: "bell.fill")
                         .font(.subheadline)
+                        .foregroundStyle(.green)
+                        .symbolEffect(.bounce, value: reminderState == .scheduled)
+                        .transition(.scale.combined(with: .opacity))
+                case .tooLate:
+                    Label("That window is too soon to remind", systemImage: "bell.slash")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.bordered)
-            case .scheduled:
-                Label("Reminder set", systemImage: "bell.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(.green)
-            case .tooLate:
-                Label("That window is too soon to remind", systemImage: "bell.slash")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            }
+            .animation(.snappy, value: reminderState)
+            .sensoryFeedback(trigger: reminderState) { _, newValue in
+                switch newValue {
+                case .scheduled: .success
+                case .tooLate: .warning
+                case .none: nil
+                }
             }
         }
     }
@@ -142,6 +160,7 @@ private struct BiteWindowsCard: View {
             } icon: {
                 Image(systemName: "dot.radiowaves.left.and.right")
                     .foregroundStyle(.green)
+                    .symbolEffect(.variableColor.iterative, options: .repeating)
             }
         } else if let next = conditions.nextWindow() {
             Label {
@@ -201,6 +220,7 @@ private struct BiteWindowRow: View {
 
 private struct PressureCard: View {
     let reading: PressureReading
+    var samples: [HourSample] = []
 
     private var pressureText: String {
         reading.pressure.formatted(.measurement(width: .abbreviated, usage: .barometric))
@@ -219,6 +239,7 @@ private struct PressureCard: View {
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text(pressureText)
                             .font(.title.weight(.semibold))
+                            .contentTransition(.numericText())
                         Label(reading.tendency.label, systemImage: reading.tendency.symbolName)
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(reading.tendency == .falling ? .green : .secondary)
@@ -231,6 +252,10 @@ private struct PressureCard: View {
                     Text(reading.tendency.fishingNote)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                    if samples.count > 1 {
+                        PressureTrendChart(samples: samples, now: .now)
+                            .padding(.top, 4)
+                    }
                 }
             }
         }
@@ -248,9 +273,7 @@ private struct SolunarDetailsCard: View {
             GlassCard {
                 VStack(spacing: 14) {
                     HStack(spacing: 12) {
-                        Image(systemName: conditions.moonPhase.symbolName)
-                            .font(.title)
-                            .symbolRenderingMode(.hierarchical)
+                        MoonArc(phase: conditions.moonPhase)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(conditions.moonPhase.displayName)
                                 .font(.headline)
@@ -260,6 +283,7 @@ private struct SolunarDetailsCard: View {
                         }
                         Spacer()
                     }
+                    .accessibilityElement(children: .combine)
 
                     Divider()
 

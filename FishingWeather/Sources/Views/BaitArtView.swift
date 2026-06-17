@@ -104,6 +104,7 @@ struct BaitArtView: View {
                     .accessibilityHint("Change preferred store")
             }
         }
+        .sensoryFeedback(.selection, trigger: preferredRetailerRaw)
     }
 
     private func artImage(_ image: BaitImage) -> some View {

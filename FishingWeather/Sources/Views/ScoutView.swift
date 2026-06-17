@@ -22,11 +22,20 @@ struct ScoutView: View {
             .padding(.horizontal)
             .padding(.bottom, 24)
         }
-        .background(
+        .background {
+            Color(.systemBackground)
             LinearGradient(colors: [.blue.opacity(0.3), .teal.opacity(0.12)],
                            startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
-        )
+        }
+        .animation(.smooth(duration: 0.35), value: scout.status)
+        .sensoryFeedback(trigger: scout.status) { _, newValue in
+            switch newValue {
+            case .ready: .success
+            case .failed: .error
+            default: nil
+            }
+        }
         .sheet(isPresented: $showCamera) {
             CameraPicker { captured in
                 image = captured
@@ -151,6 +160,7 @@ private struct ScoutReportCard: View {
                     Spacer()
                     Text("\(report.rating)/100")
                         .font(.headline)
+                        .contentTransition(.numericText())
                         .foregroundStyle(report.rating >= 60 ? .green : (report.rating >= 35 ? .orange : .red))
                 }
                 Text(report.bestSpot)
