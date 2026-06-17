@@ -1,5 +1,6 @@
 import Charts
 import SwiftUI
+import WeatherKit
 
 /// Barometric pressure over the next hours, with a "now" marker. Pressure trend
 /// matters more to the bite than the absolute value, so the shape is the point.
@@ -155,7 +156,7 @@ struct MoonArc: View {
                 .contentTransition(.numericText())
         }
         .gaugeStyle(.accessoryCircular)
-        .tint(.linearGradient(colors: [.indigo, .yellow], startPoint: .bottom, endPoint: .top))
+        .tint(LinearGradient(colors: [.indigo, .yellow], startPoint: .bottom, endPoint: .top))
         .accessibilityLabel("Moon illumination \(Int(phase.illuminationFraction * 100)) percent")
     }
 }
