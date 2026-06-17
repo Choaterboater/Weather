@@ -17,10 +17,13 @@ struct HourlyForecastView: View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: "Hourly", systemImage: "clock")
             GlassCard {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 20) {
-                        ForEach(upcoming, id: \.date) { hour in
-                            HourCell(hour: hour)
+                VStack(spacing: 14) {
+                    TemperatureChart(samples: hourly.samples())
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 20) {
+                            ForEach(upcoming, id: \.date) { hour in
+                                HourCell(hour: hour)
+                            }
                         }
                     }
                 }

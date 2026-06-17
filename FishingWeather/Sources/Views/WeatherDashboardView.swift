@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct WeatherDashboardView: View {
     @Environment(WeatherStore.self) private var weather
@@ -30,14 +31,15 @@ struct WeatherDashboardView: View {
             .padding(.horizontal)
             .padding(.bottom, 24)
         }
-        .background(
+        .background {
+            Color(.systemBackground)
             LinearGradient(
-                colors: [.blue.opacity(0.35), .cyan.opacity(0.15)],
+                colors: WeatherTheme.gradient(for: weather.current?.condition),
                 startPoint: .top,
                 endPoint: .bottom
             )
             .ignoresSafeArea()
-        )
+        }
     }
 }
 

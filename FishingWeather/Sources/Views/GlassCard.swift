@@ -10,6 +10,11 @@ struct GlassCard<Content: View>: View {
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .glassEffect(.regular, in: .rect(cornerRadius: 24))
+            .scrollTransition { view, phase in
+                view
+                    .opacity(phase.isIdentity ? 1 : 0.5)
+                    .scaleEffect(phase.isIdentity ? 1 : 0.96)
+            }
     }
 }
 

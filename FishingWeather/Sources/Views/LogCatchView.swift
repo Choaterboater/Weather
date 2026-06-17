@@ -69,6 +69,13 @@ struct LogCatchView: View {
             }
             .navigationTitle("Log Catch")
             .navigationBarTitleDisplayMode(.inline)
+            .animation(.smooth, value: recognizer.status)
+            .sensoryFeedback(trigger: recognizer.status) { _, newValue in
+                if case .ready = newValue { return .success }
+                if case .failed = newValue { return .error }
+                return nil
+            }
+            .sensoryFeedback(.selection, trigger: species)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -104,6 +111,7 @@ struct LogCatchView: View {
                 identify()
             } label: {
                 Label("Identify species", systemImage: "sparkles")
+                    .symbolEffect(.bounce, value: recognizer.status == .ready)
             }
             if case .ready = recognizer.status, let result = recognizer.result {
                 VStack(alignment: .leading, spacing: 2) {

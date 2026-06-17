@@ -22,11 +22,18 @@ struct CurrentConditionsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(temperature)
-                        .font(.system(size: 64, weight: .thin, design: .rounded))
+                        .font(.system(.largeTitle, design: .rounded).weight(.thin))
+                        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+                        .minimumScaleFactor(0.7)
+                        .lineLimit(1)
+                        .contentTransition(.numericText())
                     Spacer()
                     Image(systemName: current.symbolName)
-                        .font(.system(size: 44))
+                        .font(.largeTitle)
+                        .imageScale(.large)
                         .symbolRenderingMode(.multicolor)
+                        .symbolEffect(.bounce, options: .nonRepeating)
+                        .accessibilityHidden(true)
                 }
 
                 Text(current.condition.description)
@@ -38,7 +45,7 @@ struct CurrentConditionsView: View {
 
                 Divider()
 
-                HStack(spacing: 24) {
+                HStack(spacing: 16) {
                     Metric(label: "Wind", value: wind, systemImage: "wind")
                     Metric(label: "Humidity",
                            value: current.humidity.formatted(.percent.precision(.fractionLength(0))),
@@ -47,6 +54,9 @@ struct CurrentConditionsView: View {
                 }
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Current conditions")
+        .accessibilityValue("\(temperature), \(current.condition.description). Feels like \(feelsLike). Wind \(wind). Humidity \(current.humidity.formatted(.percent.precision(.fractionLength(0)))). UV index \(current.uvIndex.value).")
     }
 }
 
@@ -61,9 +71,13 @@ private struct Metric: View {
                 .foregroundStyle(.secondary)
             Text(value)
                 .font(.headline)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             Text(label)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity)
     }
