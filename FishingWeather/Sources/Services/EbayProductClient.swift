@@ -57,7 +57,10 @@ struct EbayProductClient {
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = Data("grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope".utf8)
 
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw URLError(.userAuthenticationRequired)
+        }
         return try JSONDecoder().decode(TokenResponse.self, from: data).accessToken
     }
 

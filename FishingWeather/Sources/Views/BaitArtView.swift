@@ -99,8 +99,9 @@ struct BaitArtView: View {
                     }
                 }
             } label: {
-                Label("Store", systemImage: "storefront")
+                Label("Store", systemImage: "cart")
                     .font(.caption)
+                    .accessibilityHint("Change preferred store")
             }
         }
     }

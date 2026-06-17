@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct LocationPromptView: View {
     let onRequest: () -> Void

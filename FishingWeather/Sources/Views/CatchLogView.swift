@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct CatchLogView: View {
     @Environment(CatchLog.self) private var log

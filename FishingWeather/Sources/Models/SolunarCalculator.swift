@@ -39,10 +39,12 @@ enum SolunarCalculator {
     private static func upperTransit(moonrise: Date?, moonset: Date?) -> Date? {
         switch (moonrise, moonset) {
         case let (rise?, set?):
-            // If set precedes rise, the moon set from the previous rise — push it
-            // forward a full up-period so the midpoint lands sensibly.
-            let end = set > rise ? set : set.addingTimeInterval(2 * halfLunarDay)
-            return rise.addingTimeInterval(end.timeIntervalSince(rise) / 2)
+            // If set precedes rise on the clock, that set belongs to the next
+            // up-period; estimate overhead from rise alone rather than overshoot.
+            guard set > rise else {
+                return rise.addingTimeInterval(halfLunarDay / 2)
+            }
+            return rise.addingTimeInterval(set.timeIntervalSince(rise) / 2)
         case let (rise?, nil):
             return rise.addingTimeInterval(halfLunarDay / 2)
         case let (nil, set?):
