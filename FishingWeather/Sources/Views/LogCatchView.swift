@@ -103,7 +103,7 @@ struct LogCatchView: View {
             Button {
                 identify()
             } label: {
-                Label("Identify species", systemImage: "sparkle.magnifyingglass")
+                Label("Identify species", systemImage: "sparkles")
             }
             if case .ready = recognizer.status, let result = recognizer.result {
                 VStack(alignment: .leading, spacing: 2) {

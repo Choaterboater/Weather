@@ -16,7 +16,8 @@ struct RootView: View {
     private var loadKey: String {
         let selection = spots.selectedSpotID?.uuidString ?? "gps"
         let lat = location.location?.coordinate.latitude ?? 0
-        return "\(selection)-\(lat)"
+        let lon = location.location?.coordinate.longitude ?? 0
+        return "\(selection)-\(lat),\(lon)"
     }
 
     var body: some View {

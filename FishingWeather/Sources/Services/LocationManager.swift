@@ -46,10 +46,13 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         didUpdateLocations locations: [CLLocation]
     ) {
         guard let latest = locations.last else { return }
+        // Extract Sendable scalars; CLLocation itself must not cross the hop.
+        let coordinate = latest.coordinate
         Task { @MainActor in
-            self.location = latest
+            let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+            self.location = location
             self.lastError = nil
-            await self.reverseGeocode(latest)
+            await self.reverseGeocode(location)
         }
     }
 
