@@ -24,9 +24,14 @@ struct FishingView: View {
             VStack(spacing: 20) {
                 SpeciesPicker(selection: $species)
                     .padding(.top, 4)
-                SpeciesFocusCard(species: species)
 
                 if let conditions = makeConditions() {
+                    FishingScoreCard(score: FishingScorer.score(
+                        conditions: conditions,
+                        species: species,
+                        tideEvents: showsTides ? tides.events : []
+                    ))
+                    SpeciesFocusCard(species: species)
                     BaitEngineView(conditions: conditions, species: species, engine: engine)
                     BiteWindowsCard(conditions: conditions)
                     if showsTides {
@@ -44,12 +49,13 @@ struct FishingView: View {
                     ProgressView("Reading conditions…")
                         .padding(.top, 80)
                 } else {
+                    SpeciesFocusCard(species: species)
                     ContentUnavailableView(
                         "No conditions yet",
                         systemImage: "fish",
                         description: Text("Weather data is needed to compute fishing windows.")
                     )
-                    .padding(.top, 80)
+                    .padding(.top, 40)
                 }
             }
             .padding(.horizontal)
