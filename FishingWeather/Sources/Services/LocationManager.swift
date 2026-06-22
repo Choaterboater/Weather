@@ -1,4 +1,5 @@
 import CoreLocation
+import MapKit
 import Observation
 
 /// Wraps `CLLocationManager` and exposes the current location and authorization
@@ -68,9 +69,11 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     }
 
     private func reverseGeocode(_ location: CLLocation) async {
-        let placemarks = try? await CLGeocoder().reverseGeocodeLocation(location)
-        if let placemark = placemarks?.first {
-            placeName = placemark.locality ?? placemark.name
-        }
+        guard let request = MKReverseGeocodingRequest(location: location) else { return }
+        let items = try? await request.mapItems
+        guard let item = items?.first else { return }
+        // Prefer the locality (e.g. "Santa Rosa Beach"); fall back to the
+        // map item's display name.
+        placeName = item.addressRepresentations?.cityName ?? item.name
     }
 }
