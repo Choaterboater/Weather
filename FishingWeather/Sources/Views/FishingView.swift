@@ -1,10 +1,23 @@
+import CoreLocation
 import SwiftUI
 import WeatherKit
 
 struct FishingView: View {
     @Environment(WeatherStore.self) private var weather
+    @Environment(SpotStore.self) private var spots
+    @Environment(LocationManager.self) private var location
+    @Environment(TideService.self) private var tides
     @AppStorage("selectedSpecies") private var species: Species = .all
     @State private var engine = BaitEngine()
+
+    /// True when the active spot is saltwater, or unknown and tide data came back.
+    private var showsTides: Bool {
+        if let waterType = spots.selectedSpot?.waterType {
+            return waterType != .freshwater
+        }
+        // Unknown water type: trust whether NOAA found a nearby station.
+        return tides.station != nil
+    }
 
     var body: some View {
         ScrollView {
@@ -16,6 +29,15 @@ struct FishingView: View {
                 if let conditions = makeConditions() {
                     BaitEngineView(conditions: conditions, species: species, engine: engine)
                     BiteWindowsCard(conditions: conditions)
+                    if showsTides {
+                        TideCard(
+                            events: tides.events,
+                            samples: tides.samples,
+                            stationName: tides.station?.name,
+                            distanceMiles: tides.distanceMiles,
+                            isLoading: tides.isLoading
+                        )
+                    }
                     PressureCard(reading: conditions.pressure, samples: hourlySamples)
                     SolunarDetailsCard(conditions: conditions)
                 } else if weather.isLoading {
@@ -41,8 +63,23 @@ struct FishingView: View {
             )
             .ignoresSafeArea()
         )
+        .task(id: activeLocationKey) {
+            if let coordinate = activeLocation {
+                await tides.load(near: coordinate)
+            }
+        }
         .onChange(of: species) { engine.reset() }
         .sensoryFeedback(.selection, trigger: species)
+    }
+
+    private var activeLocation: CLLocation? {
+        spots.selectedSpot?.location ?? location.location
+    }
+
+    /// Re-keys the tide task whenever the active spot or GPS coordinate changes.
+    private var activeLocationKey: String {
+        guard let coord = activeLocation?.coordinate else { return "none" }
+        return "\(coord.latitude.rounded(toPlaces: 2)),\(coord.longitude.rounded(toPlaces: 2))"
     }
 
     private var hourlySamples: [HourSample] {
@@ -54,6 +91,13 @@ struct FishingView: View {
               let hourly = weather.hourly,
               let today = weather.daily?.forecast.first else { return nil }
         return FishingConditions.make(current: current, hourly: hourly, today: today)
+    }
+}
+
+private extension Double {
+    func rounded(toPlaces places: Int) -> Double {
+        let multiplier = pow(10.0, Double(places))
+        return (self * multiplier).rounded() / multiplier
     }
 }
 
