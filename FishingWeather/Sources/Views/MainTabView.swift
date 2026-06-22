@@ -33,6 +33,13 @@ struct MainTabView: View {
                         .navigationBarTitleDisplayMode(.inline)
                 }
             }
+            Tab("Guide", systemImage: "book.pages.fill") {
+                NavigationStack {
+                    SpeciesGuideView()
+                        .navigationTitle("Species Guide")
+                        .navigationBarTitleDisplayMode(.inline)
+                }
+            }
             Tab("Spots", systemImage: "mappin.and.ellipse") {
                 NavigationStack {
                     SpotsView()
