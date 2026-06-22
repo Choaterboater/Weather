@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct FishingWeatherApp: App {
+struct BiteCastApp: App {
     @State private var locationManager = LocationManager()
     @State private var weatherStore = WeatherStore()
     @State private var spotStore = SpotStore()
