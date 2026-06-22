@@ -1,0 +1,90 @@
+{
+  "stateCode": "TX",
+  "stateName": "Texas",
+  "sourceURL": "https://tpwd.texas.gov/regulations/outdoor-annual/fishing",
+  "lastVerifiedDate": "2026-06-22",
+  "regulations": [
+    {
+      "speciesId": "redfish",
+      "waterType": "saltwater",
+      "minSizeInches": 20,
+      "maxSizeInches": 28,
+      "slotDescription": "20–28\" total length",
+      "dailyBagLimit": 3,
+      "seasonClosures": [],
+      "notes": "One fish over 28\" allowed per year with tag."
+    },
+    {
+      "speciesId": "speckledTrout",
+      "waterType": "saltwater",
+      "minSizeInches": 15,
+      "maxSizeInches": 20,
+      "slotDescription": "15–20\" total length",
+      "dailyBagLimit": 3,
+      "seasonClosures": [],
+      "notes": "One fish over 30\" allowed per day."
+    },
+    {
+      "speciesId": "flounder",
+      "waterType": "saltwater",
+      "minSizeInches": 15,
+      "maxSizeInches": null,
+      "slotDescription": "15\" minimum total length",
+      "dailyBagLimit": 5,
+      "seasonClosures": [
+        { "start": "11-01", "end": "12-14", "label": "Closed Nov 1 – Dec 14" }
+      ],
+      "notes": null
+    },
+    {
+      "speciesId": "sheepshead",
+      "waterType": "saltwater",
+      "minSizeInches": 15,
+      "maxSizeInches": null,
+      "slotDescription": "15\" minimum total length",
+      "dailyBagLimit": 5,
+      "seasonClosures": [],
+      "notes": null
+    },
+    {
+      "speciesId": "bass",
+      "waterType": "freshwater",
+      "minSizeInches": 14,
+      "maxSizeInches": null,
+      "slotDescription": "14\" minimum statewide (varies by waterbody)",
+      "dailyBagLimit": 5,
+      "seasonClosures": [],
+      "notes": "Several lakes have slot rules — check waterbody-specific regs."
+    },
+    {
+      "speciesId": "crappie",
+      "waterType": "freshwater",
+      "minSizeInches": 10,
+      "maxSizeInches": null,
+      "slotDescription": "10\" minimum",
+      "dailyBagLimit": 25,
+      "seasonClosures": [],
+      "notes": null
+    },
+    {
+      "speciesId": "catfish",
+      "waterType": "freshwater",
+      "minSizeInches": 12,
+      "maxSizeInches": null,
+      "slotDescription": "12\" minimum on channel/blue (varies)",
+      "dailyBagLimit": 25,
+      "seasonClosures": [],
+      "notes": "25 in any combination of channel + blue catfish; flathead is 18\" / 5 fish."
+    },
+    {
+      "speciesId": "bluegill",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide size limit",
+      "dailyBagLimit": null,
+      "seasonClosures": [],
+      "notes": null
+    }
+  ]
+}

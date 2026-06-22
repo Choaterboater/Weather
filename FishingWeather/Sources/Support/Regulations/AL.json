@@ -1,0 +1,100 @@
+{
+  "stateCode": "AL",
+  "stateName": "Alabama",
+  "sourceURL": "https://www.outdooralabama.com/fishing",
+  "lastVerifiedDate": "2026-06-22",
+  "regulations": [
+    {
+      "speciesId": "redfish",
+      "waterType": "saltwater",
+      "minSizeInches": 16,
+      "maxSizeInches": 26,
+      "slotDescription": "16–26\" total length",
+      "dailyBagLimit": 3,
+      "seasonClosures": [],
+      "notes": "One fish over 26\" may be kept per day."
+    },
+    {
+      "speciesId": "speckledTrout",
+      "waterType": "saltwater",
+      "minSizeInches": 15,
+      "maxSizeInches": null,
+      "slotDescription": "15\" minimum total length",
+      "dailyBagLimit": 6,
+      "seasonClosures": [],
+      "notes": null
+    },
+    {
+      "speciesId": "flounder",
+      "waterType": "saltwater",
+      "minSizeInches": 14,
+      "maxSizeInches": null,
+      "slotDescription": "14\" minimum total length",
+      "dailyBagLimit": 5,
+      "seasonClosures": [
+        { "start": "10-15", "end": "11-30", "label": "Closed Oct 15 – Nov 30" }
+      ],
+      "notes": null
+    },
+    {
+      "speciesId": "sheepshead",
+      "waterType": "saltwater",
+      "minSizeInches": 12,
+      "maxSizeInches": null,
+      "slotDescription": "12\" minimum total length",
+      "dailyBagLimit": 10,
+      "seasonClosures": [],
+      "notes": null
+    },
+    {
+      "speciesId": "pompano",
+      "waterType": "saltwater",
+      "minSizeInches": 12,
+      "maxSizeInches": null,
+      "slotDescription": "12\" minimum fork length",
+      "dailyBagLimit": 3,
+      "seasonClosures": [],
+      "notes": null
+    },
+    {
+      "speciesId": "bass",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "12\" minimum on most waters (varies)",
+      "dailyBagLimit": 10,
+      "seasonClosures": [],
+      "notes": "Some lakes have slot rules — check waterbody-specific regs."
+    },
+    {
+      "speciesId": "crappie",
+      "waterType": "freshwater",
+      "minSizeInches": 9,
+      "maxSizeInches": null,
+      "slotDescription": "9\" minimum on most waters",
+      "dailyBagLimit": 30,
+      "seasonClosures": [],
+      "notes": null
+    },
+    {
+      "speciesId": "catfish",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide minimum",
+      "dailyBagLimit": null,
+      "seasonClosures": [],
+      "notes": null
+    },
+    {
+      "speciesId": "bluegill",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide size limit",
+      "dailyBagLimit": null,
+      "seasonClosures": [],
+      "notes": null
+    }
+  ]
+}

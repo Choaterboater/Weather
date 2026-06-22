@@ -1,0 +1,48 @@
+{
+  "stateCode": "TN",
+  "stateName": "Tennessee",
+  "sourceURL": "https://www.tn.gov/twra/fishing.html",
+  "lastVerifiedDate": "2026-06-22",
+  "regulations": [
+    {
+      "speciesId": "bass",
+      "waterType": "freshwater",
+      "minSizeInches": 15,
+      "maxSizeInches": null,
+      "slotDescription": "15\" minimum on most reservoirs (varies)",
+      "dailyBagLimit": 5,
+      "seasonClosures": [],
+      "notes": "Tellico, Chickamauga, and several TVA reservoirs have slot or trophy rules — check waterbody-specific regs."
+    },
+    {
+      "speciesId": "crappie",
+      "waterType": "freshwater",
+      "minSizeInches": 10,
+      "maxSizeInches": null,
+      "slotDescription": "10\" minimum on most waters",
+      "dailyBagLimit": 15,
+      "seasonClosures": [],
+      "notes": "Reelfoot Lake and other waters have a 30-fish creel and different size rules."
+    },
+    {
+      "speciesId": "catfish",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide minimum; trophy size limits on some species",
+      "dailyBagLimit": null,
+      "seasonClosures": [],
+      "notes": "Blue catfish ≥ 34\" limited to 1 per day. Flathead ≥ 34\" limited to 1 per day on most waters."
+    },
+    {
+      "speciesId": "bluegill",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide size limit",
+      "dailyBagLimit": null,
+      "seasonClosures": [],
+      "notes": "Statewide creel is generous — most waters open."
+    }
+  ]
+}

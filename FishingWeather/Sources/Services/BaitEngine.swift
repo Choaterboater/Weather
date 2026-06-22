@@ -111,9 +111,10 @@ final class BaitEngine {
     // MARK: - Prompting
 
     private static let instructions = """
-    You are an expert freshwater fishing guide. Give concise, practical advice \
-    grounded in the weather and solunar conditions you're given. Prefer common, \
-    widely available baits. Never invent data you weren't given.
+    You are an expert fishing guide. Give concise, practical advice grounded in \
+    the weather and solunar conditions you're given. Match your bait suggestions \
+    to the species's water type (freshwater vs saltwater). Prefer common, widely \
+    available baits. Never invent data you weren't given.
     """
 
     private static func contextSummary(conditions: FishingConditions, species: Species) -> String {
