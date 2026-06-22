@@ -38,6 +38,7 @@ struct LogCatchView: View {
                 }
 
                 Section("Photo") {
+                    let hasPhoto = photo != nil
                     if let photo {
                         Image(uiImage: photo)
                             .resizable()
@@ -47,9 +48,9 @@ struct LogCatchView: View {
                             .clipShape(.rect(cornerRadius: 12))
                     }
                     PhotosPicker(selection: $pickerItem, matching: .images) {
-                        Label(photo == nil ? "Add Photo" : "Change Photo", systemImage: "photo")
+                        Label(hasPhoto ? "Change Photo" : "Add Photo", systemImage: "photo")
                     }
-                    if photo != nil {
+                    if hasPhoto {
                         identifyControl
                     }
                 }
