@@ -1,0 +1,125 @@
+{
+  "stateCode": "FL",
+  "stateName": "Florida",
+  "sourceURL": "https://myfwc.com/fishing/",
+  "lastVerifiedDate": "2026-06-22",
+  "regulations": [
+    {
+      "speciesId": "redfish",
+      "waterType": "saltwater",
+      "minSizeInches": 18,
+      "maxSizeInches": 27,
+      "slotDescription": "18–27\" total length",
+      "dailyBagLimit": 1,
+      "seasonClosures": [],
+      "notes": "Slot limit. 1 per harvester per day. Verify region — Big Bend and West Central have additional closures."
+    },
+    {
+      "speciesId": "speckledTrout",
+      "waterType": "saltwater",
+      "minSizeInches": 15,
+      "maxSizeInches": 19,
+      "slotDescription": "15–19\" total length",
+      "dailyBagLimit": 3,
+      "seasonClosures": [
+        { "start": "02-01", "end": "02-28", "label": "Closed in February (most of state)" }
+      ],
+      "notes": "One fish over 19\" may be kept. Closures vary by region."
+    },
+    {
+      "speciesId": "pompano",
+      "waterType": "saltwater",
+      "minSizeInches": 11,
+      "maxSizeInches": null,
+      "slotDescription": "11\" minimum fork length",
+      "dailyBagLimit": 6,
+      "seasonClosures": [],
+      "notes": null
+    },
+    {
+      "speciesId": "flounder",
+      "waterType": "saltwater",
+      "minSizeInches": 14,
+      "maxSizeInches": null,
+      "slotDescription": "14\" minimum total length",
+      "dailyBagLimit": 5,
+      "seasonClosures": [
+        { "start": "10-15", "end": "11-30", "label": "Closed Oct 15 – Nov 30" }
+      ],
+      "notes": null
+    },
+    {
+      "speciesId": "sheepshead",
+      "waterType": "saltwater",
+      "minSizeInches": 12,
+      "maxSizeInches": null,
+      "slotDescription": "12\" minimum total length",
+      "dailyBagLimit": 8,
+      "seasonClosures": [],
+      "notes": null
+    },
+    {
+      "speciesId": "snook",
+      "waterType": "saltwater",
+      "minSizeInches": 28,
+      "maxSizeInches": 33,
+      "slotDescription": "28–33\" total length (Atlantic) / 28–32\" (Gulf)",
+      "dailyBagLimit": 1,
+      "seasonClosures": [
+        { "start": "12-15", "end": "01-31", "label": "Closed Dec 15 – Jan 31" },
+        { "start": "06-01", "end": "08-31", "label": "Closed June 1 – Aug 31 (Gulf)" }
+      ],
+      "notes": "Snook permit required. Regional differences — verify before harvest."
+    },
+    {
+      "speciesId": "mangroveSnapper",
+      "waterType": "saltwater",
+      "minSizeInches": 10,
+      "maxSizeInches": null,
+      "slotDescription": "10\" minimum total length",
+      "dailyBagLimit": 5,
+      "seasonClosures": [],
+      "notes": "Part of 10-fish aggregate snapper bag."
+    },
+    {
+      "speciesId": "bass",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No minimum statewide; only one bass ≥ 16\" may be kept",
+      "dailyBagLimit": 5,
+      "seasonClosures": [],
+      "notes": "Some lakes have stricter local rules — check waterbody-specific regs."
+    },
+    {
+      "speciesId": "crappie",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide size limit",
+      "dailyBagLimit": 25,
+      "seasonClosures": [],
+      "notes": null
+    },
+    {
+      "speciesId": "catfish",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide size limit on most species",
+      "dailyBagLimit": null,
+      "seasonClosures": [],
+      "notes": "Channel/blue/flathead: see waterbody-specific rules."
+    },
+    {
+      "speciesId": "bluegill",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide size limit",
+      "dailyBagLimit": 50,
+      "seasonClosures": [],
+      "notes": "50 fish aggregate panfish bag."
+    }
+  ]
+}

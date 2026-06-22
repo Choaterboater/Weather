@@ -1,0 +1,88 @@
+{
+  "stateCode": "LA",
+  "stateName": "Louisiana",
+  "sourceURL": "https://www.wlf.louisiana.gov/page/fishing-regulations",
+  "lastVerifiedDate": "2026-06-22",
+  "regulations": [
+    {
+      "speciesId": "redfish",
+      "waterType": "saltwater",
+      "minSizeInches": 16,
+      "maxSizeInches": 27,
+      "slotDescription": "16–27\" total length",
+      "dailyBagLimit": 5,
+      "seasonClosures": [],
+      "notes": "One fish over 27\" may be kept per day."
+    },
+    {
+      "speciesId": "speckledTrout",
+      "waterType": "saltwater",
+      "minSizeInches": 13,
+      "maxSizeInches": null,
+      "slotDescription": "13\" minimum total length",
+      "dailyBagLimit": 15,
+      "seasonClosures": [],
+      "notes": "Bag may be reduced to 15 in some southeastern parishes — verify current rule."
+    },
+    {
+      "speciesId": "flounder",
+      "waterType": "saltwater",
+      "minSizeInches": 12,
+      "maxSizeInches": null,
+      "slotDescription": "12\" minimum total length",
+      "dailyBagLimit": 10,
+      "seasonClosures": [],
+      "notes": null
+    },
+    {
+      "speciesId": "sheepshead",
+      "waterType": "saltwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No minimum size",
+      "dailyBagLimit": 15,
+      "seasonClosures": [],
+      "notes": null
+    },
+    {
+      "speciesId": "bass",
+      "waterType": "freshwater",
+      "minSizeInches": 14,
+      "maxSizeInches": null,
+      "slotDescription": "14\" minimum on most waters",
+      "dailyBagLimit": 10,
+      "seasonClosures": [],
+      "notes": "Several lakes have slot rules — check waterbody-specific regs."
+    },
+    {
+      "speciesId": "crappie",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide size limit",
+      "dailyBagLimit": 50,
+      "seasonClosures": [],
+      "notes": null
+    },
+    {
+      "speciesId": "catfish",
+      "waterType": "freshwater",
+      "minSizeInches": 11,
+      "maxSizeInches": null,
+      "slotDescription": "11\" minimum on channel/blue (varies)",
+      "dailyBagLimit": 100,
+      "seasonClosures": [],
+      "notes": "Aggregate channel + blue. Flathead has separate rules."
+    },
+    {
+      "speciesId": "bluegill",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide size limit",
+      "dailyBagLimit": null,
+      "seasonClosures": [],
+      "notes": null
+    }
+  ]
+}

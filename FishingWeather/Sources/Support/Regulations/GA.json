@@ -1,0 +1,88 @@
+{
+  "stateCode": "GA",
+  "stateName": "Georgia",
+  "sourceURL": "https://georgiawildlife.com/fishing",
+  "lastVerifiedDate": "2026-06-22",
+  "regulations": [
+    {
+      "speciesId": "redfish",
+      "waterType": "saltwater",
+      "minSizeInches": 14,
+      "maxSizeInches": 23,
+      "slotDescription": "14–23\" total length",
+      "dailyBagLimit": 5,
+      "seasonClosures": [],
+      "notes": "5 per harvester per day."
+    },
+    {
+      "speciesId": "speckledTrout",
+      "waterType": "saltwater",
+      "minSizeInches": 14,
+      "maxSizeInches": null,
+      "slotDescription": "14\" minimum total length",
+      "dailyBagLimit": 15,
+      "seasonClosures": [],
+      "notes": null
+    },
+    {
+      "speciesId": "flounder",
+      "waterType": "saltwater",
+      "minSizeInches": 12,
+      "maxSizeInches": null,
+      "slotDescription": "12\" minimum total length",
+      "dailyBagLimit": 15,
+      "seasonClosures": [],
+      "notes": null
+    },
+    {
+      "speciesId": "sheepshead",
+      "waterType": "saltwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide minimum",
+      "dailyBagLimit": 8,
+      "seasonClosures": [],
+      "notes": null
+    },
+    {
+      "speciesId": "bass",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide minimum (varies by waterbody)",
+      "dailyBagLimit": 10,
+      "seasonClosures": [],
+      "notes": "Many lakes have 14\" minimums or slot rules — check before keeping."
+    },
+    {
+      "speciesId": "crappie",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide size limit",
+      "dailyBagLimit": 30,
+      "seasonClosures": [],
+      "notes": null
+    },
+    {
+      "speciesId": "catfish",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide minimum",
+      "dailyBagLimit": null,
+      "seasonClosures": [],
+      "notes": "Trophy regs on some Coosa basin waters."
+    },
+    {
+      "speciesId": "bluegill",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide size limit",
+      "dailyBagLimit": 50,
+      "seasonClosures": [],
+      "notes": null
+    }
+  ]
+}

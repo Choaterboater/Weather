@@ -6,6 +6,7 @@ struct BiteCastApp: App {
     @State private var weatherStore = WeatherStore()
     @State private var spotStore = SpotStore()
     @State private var catchLog = CatchLog()
+    @State private var regulationStore = RegulationStore()
 
     var body: some Scene {
         WindowGroup {
@@ -14,6 +15,7 @@ struct BiteCastApp: App {
                 .environment(weatherStore)
                 .environment(spotStore)
                 .environment(catchLog)
+                .environment(regulationStore)
         }
     }
 }
