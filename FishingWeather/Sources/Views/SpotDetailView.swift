@@ -209,8 +209,7 @@ struct SpotDetailView: View {
     }
 
     private func openInMaps() {
-        let placemark = MKPlacemark(coordinate: spot.location.coordinate)
-        let item = MKMapItem(placemark: placemark)
+        let item = MKMapItem(location: spot.location, address: nil)
         item.name = spot.name
         item.openInMaps(launchOptions: [
             MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving

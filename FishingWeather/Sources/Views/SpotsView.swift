@@ -261,10 +261,7 @@ private struct RampRow: View {
     }
 
     private func openInMaps() {
-        let placemark = MKPlacemark(coordinate: CLLocationCoordinate2D(
-            latitude: pin.latitude, longitude: pin.longitude
-        ))
-        let item = MKMapItem(placemark: placemark)
+        let item = MKMapItem(location: pin.location, address: nil)
         item.name = pin.name ?? pin.kind.displayName
         item.openInMaps(launchOptions: [
             MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
