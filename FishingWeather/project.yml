@@ -1,31 +1,30 @@
-name: FishingWeather
+name: BiteCast
 options:
-  bundleIdPrefix: com.example
+  bundleIdPrefix: app.choatelabs
   deploymentTarget:
-    iOS: "27.0"
+    iOS: "26.5"
   developmentLanguage: en
   createIntermediateGroups: true
 
 settings:
   base:
-    SWIFT_VERSION: "6.4"
+    SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
     GENERATE_INFOPLIST_FILE: NO
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
 
 targets:
-  FishingWeather:
+  BiteCast:
     type: application
     platform: iOS
     sources:
       - path: Sources
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.fishingweather
+        PRODUCT_BUNDLE_IDENTIFIER: app.choatelabs.bitecast
         INFOPLIST_FILE: Sources/Support/Info.plist
-        CODE_SIGN_ENTITLEMENTS: Sources/Support/FishingWeather.entitlements
+        CODE_SIGN_ENTITLEMENTS: Sources/Support/BiteCast.entitlements
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1"
-        # Set your own DEVELOPMENT_TEAM here (or in Xcode > Signing & Capabilities).
-        DEVELOPMENT_TEAM: ""
+        DEVELOPMENT_TEAM: RAYW3WPJ98
