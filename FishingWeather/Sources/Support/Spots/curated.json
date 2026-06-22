@@ -1,0 +1,124 @@
+{
+  "spots": [
+    {
+      "name": "Grayton Beach Surf",
+      "latitude": 30.328,
+      "longitude": -86.157,
+      "waterType": "saltwater",
+      "kind": "surf",
+      "stateCode": "FL",
+      "targetSpecies": ["pompano", "redfish", "flounder"],
+      "notes": "Walk-in surf access. Best on a rising tide with light onshore wind. Sand fleas and pompano jigs work the troughs."
+    },
+    {
+      "name": "Western Lake (30A)",
+      "latitude": 30.302,
+      "longitude": -86.157,
+      "waterType": "brackish",
+      "kind": "lake",
+      "stateCode": "FL",
+      "targetSpecies": ["bass", "redfish", "speckledTrout"],
+      "notes": "Coastal dune lake; brackish when the outflow opens. Mix of largemouth and inshore species — switch tackle based on the outflow state."
+    },
+    {
+      "name": "Eastern Lake",
+      "latitude": 30.321,
+      "longitude": -86.069,
+      "waterType": "brackish",
+      "kind": "lake",
+      "stateCode": "FL",
+      "targetSpecies": ["bass", "speckledTrout"],
+      "notes": "Quieter dune lake. Topwater at first light along cypress edges."
+    },
+    {
+      "name": "Phillips Inlet",
+      "latitude": 30.274,
+      "longitude": -85.987,
+      "waterType": "saltwater",
+      "kind": "bay",
+      "stateCode": "FL",
+      "targetSpecies": ["redfish", "speckledTrout", "flounder"],
+      "notes": "Outflow zone — fish moving water on the bigger tide swings."
+    },
+    {
+      "name": "Topsail Hill Preserve Beach",
+      "latitude": 30.362,
+      "longitude": -86.273,
+      "waterType": "saltwater",
+      "kind": "surf",
+      "stateCode": "FL",
+      "targetSpecies": ["pompano", "redfish"],
+      "notes": "Longer walk to less-pressured surf. Park at the day-use entrance."
+    },
+    {
+      "name": "Choctawhatchee Bay (North Shore)",
+      "latitude": 30.392,
+      "longitude": -86.198,
+      "waterType": "saltwater",
+      "kind": "bay",
+      "stateCode": "FL",
+      "targetSpecies": ["speckledTrout", "redfish", "flounder"],
+      "notes": "Grass flats. Popping cork + soft plastic at dawn; switch to topwater when fish are crashing bait."
+    },
+    {
+      "name": "Destin East Pass",
+      "latitude": 30.385,
+      "longitude": -86.512,
+      "waterType": "saltwater",
+      "kind": "jetty",
+      "stateCode": "FL",
+      "targetSpecies": ["redfish", "sheepshead", "mangroveSnapper"],
+      "notes": "Jetty rocks hold sheepshead year-round; live shrimp on a tight line."
+    },
+    {
+      "name": "Fairhope Municipal Pier",
+      "latitude": 30.521,
+      "longitude": -87.904,
+      "waterType": "saltwater",
+      "kind": "pier",
+      "stateCode": "AL",
+      "targetSpecies": ["speckledTrout", "redfish", "flounder", "sheepshead"],
+      "notes": "Free public access on Mobile Bay. Best around tide change and the jubilee months."
+    },
+    {
+      "name": "Dauphin Island (Pelican Point)",
+      "latitude": 30.249,
+      "longitude": -88.075,
+      "waterType": "saltwater",
+      "kind": "surf",
+      "stateCode": "AL",
+      "targetSpecies": ["redfish", "speckledTrout", "pompano"],
+      "notes": "Sandy point. Pompano in spring; trout and reds the rest of the year."
+    },
+    {
+      "name": "Reelfoot Lake",
+      "latitude": 36.404,
+      "longitude": -89.413,
+      "waterType": "freshwater",
+      "kind": "lake",
+      "stateCode": "TN",
+      "targetSpecies": ["crappie", "bass", "bluegill"],
+      "notes": "Legendary West TN crappie water. Cypress stumps and stake beds — go slow with light line."
+    },
+    {
+      "name": "Norris Lake (Big Ridge)",
+      "latitude": 36.244,
+      "longitude": -83.910,
+      "waterType": "freshwater",
+      "kind": "lake",
+      "stateCode": "TN",
+      "targetSpecies": ["bass", "crappie"],
+      "notes": "Deep, clear reservoir. Fish points and bluffs in summer; spinnerbaits in the creeks in spring."
+    },
+    {
+      "name": "Vidalia Bay (St. Joseph Bay)",
+      "latitude": 29.770,
+      "longitude": -85.388,
+      "waterType": "saltwater",
+      "kind": "flat",
+      "stateCode": "FL",
+      "targetSpecies": ["speckledTrout", "redfish"],
+      "notes": "Seagrass flats — wade or pole; sight-fish reds on the tail in 1–2 ft."
+    }
+  ]
+}
