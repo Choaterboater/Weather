@@ -28,3 +28,30 @@ targets:
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1"
         DEVELOPMENT_TEAM: RAYW3WPJ98
+
+  BiteCastTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: BiteCast
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.choatelabs.bitecast.tests
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  BiteCast:
+    build:
+      targets:
+        BiteCast: all
+        BiteCastTests: [test]
+    test:
+      targets:
+        - BiteCastTests
+      gatherCoverageData: true
+    run:
+      config: Debug
+    archive:
+      config: Release
