@@ -10,6 +10,7 @@ struct BiteCastApp: App {
     @State private var tideService = TideService()
     @State private var spotCatalog = CuratedSpotCatalog()
     @State private var osmClient = OpenStreetMapClient()
+    @State private var inaturalist = INaturalistClient()
 
     var body: some Scene {
         WindowGroup {
@@ -22,6 +23,7 @@ struct BiteCastApp: App {
                 .environment(tideService)
                 .environment(spotCatalog)
                 .environment(osmClient)
+                .environment(inaturalist)
         }
     }
 }
