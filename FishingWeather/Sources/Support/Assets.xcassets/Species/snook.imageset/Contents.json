@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "snook.jpg",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

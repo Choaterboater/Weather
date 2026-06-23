@@ -45,6 +45,13 @@ struct SpeciesDetailView: View {
         ScrollView {
             VStack(spacing: 18) {
                 hero
+                if let credit = species.photoCredit {
+                    Text(credit)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.top, -10)
+                }
                 inSeasonCard
                 regulationsCard
                 sightingsCard
@@ -81,35 +88,37 @@ struct SpeciesDetailView: View {
     // MARK: - Sections
 
     private var hero: some View {
-        GlassCard {
-            HStack(alignment: .center, spacing: 16) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [species.tint.opacity(0.4), species.tint.opacity(0.1)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 72, height: 72)
-                    Image(systemName: "fish.fill")
-                        .font(.system(size: 38))
-                        .foregroundStyle(species.tint)
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(species.displayName).font(.title2.weight(.semibold))
-                    if let scientific = species.scientificName {
-                        Text(scientific).italic().font(.subheadline).foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            SpeciesPhotoView(species: species, size: .hero)
+                .frame(height: 220)
+                .frame(maxWidth: .infinity)
+                .clipShape(.rect(cornerRadius: 20))
+                .overlay(alignment: .bottomLeading) {
+                    LinearGradient(
+                        colors: [.black.opacity(0.0), .black.opacity(0.55)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .clipShape(.rect(cornerRadius: 20))
+                    .allowsHitTesting(false)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(species.displayName)
+                            .font(.title2.weight(.semibold))
+                            .foregroundStyle(.white)
+                        if let scientific = species.scientificName {
+                            Text(scientific)
+                                .italic()
+                                .font(.subheadline)
+                                .foregroundStyle(.white.opacity(0.85))
+                        }
+                        if let waterType = species.waterType {
+                            Label(waterType.displayName, systemImage: waterType.symbolName)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.white.opacity(0.9))
+                        }
                     }
-                    if let waterType = species.waterType {
-                        Label(waterType.displayName, systemImage: waterType.symbolName)
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
-                    }
+                    .padding(16)
                 }
-                Spacer()
-            }
         }
     }
 
