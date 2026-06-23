@@ -26,11 +26,10 @@ struct MainTabView: View {
                         .refreshable { location.refresh() }
                 }
             }
-            Tab("Scout", systemImage: "camera.viewfinder") {
+            Tab("Spots", systemImage: "mappin.and.ellipse") {
                 NavigationStack {
-                    ScoutView()
-                        .navigationTitle("Scout the Water")
-                        .navigationBarTitleDisplayMode(.inline)
+                    SpotsView()
+                        .navigationTitle("Spots")
                 }
             }
             Tab("Guide", systemImage: "book.pages.fill") {
@@ -40,16 +39,17 @@ struct MainTabView: View {
                         .navigationBarTitleDisplayMode(.inline)
                 }
             }
-            Tab("Spots", systemImage: "mappin.and.ellipse") {
-                NavigationStack {
-                    SpotsView()
-                        .navigationTitle("Spots")
-                }
-            }
             Tab("Log", systemImage: "book.closed.fill") {
                 NavigationStack {
                     CatchLogView()
                         .navigationTitle("Catch Log")
+                }
+            }
+            Tab("Scout", systemImage: "camera.viewfinder") {
+                NavigationStack {
+                    ScoutView()
+                        .navigationTitle("Scout the Water")
+                        .navigationBarTitleDisplayMode(.inline)
                 }
             }
         }
