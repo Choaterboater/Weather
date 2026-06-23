@@ -1,4 +1,5 @@
 import Foundation
+import WeatherKit
 
 /// Pure scorer: given today's conditions, the focus species, and (optionally)
 /// today's tide events, returns a 0–100 fishing score plus per-factor breakdown.
@@ -10,6 +11,33 @@ enum FishingScorer {
 
     static func score(
         conditions: FishingConditions,
+        species: Species,
+        tideEvents: [TideEvent] = [],
+        now: Date = .now
+    ) -> FishingScore {
+        score(
+            moonPhase: conditions.moonPhase,
+            activeWindow: conditions.activeWindow(at: now),
+            nextWindow: conditions.nextWindow(after: now),
+            pressureTendency: conditions.pressure.tendency,
+            pressureChangePerHour: conditions.pressure.changePerHour,
+            windMph: conditions.wind.speed.converted(to: .milesPerHour).value,
+            species: species,
+            tideEvents: tideEvents,
+            now: now
+        )
+    }
+
+    /// Primitives-based variant used internally by the conditions-taking
+    /// overload above, and directly by unit tests (avoids needing to
+    /// construct WeatherKit `Wind`/`UVIndex` structs).
+    static func score(
+        moonPhase: MoonPhase,
+        activeWindow: BiteWindow?,
+        nextWindow: BiteWindow?,
+        pressureTendency: PressureTendency,
+        pressureChangePerHour: Double?,
+        windMph: Double,
         species: Species,
         tideEvents: [TideEvent] = [],
         now: Date = .now
@@ -34,9 +62,9 @@ enum FishingScorer {
             w_tide = 0
         }
 
-        let solunar = scoreSolunar(conditions: conditions, now: now)
-        let pressure = scorePressure(conditions: conditions)
-        let wind = scoreWind(conditions: conditions)
+        let solunar = scoreSolunar(moonPhase: moonPhase, activeWindow: activeWindow, nextWindow: nextWindow, now: now)
+        let pressure = scorePressure(tendency: pressureTendency, changePerHour: pressureChangePerHour)
+        let wind = scoreWind(mph: windMph)
         let season = scoreSeason(species: species, now: now)
 
         var factors: [ScoreFactor] = [
@@ -59,9 +87,9 @@ enum FishingScorer {
 
     // MARK: - Per-factor scoring
 
-    private static func scoreSolunar(conditions: FishingConditions, now: Date) -> Subscore {
+    private static func scoreSolunar(moonPhase: MoonPhase, activeWindow: BiteWindow?, nextWindow: BiteWindow?, now: Date) -> Subscore {
         let phaseScore: Double
-        switch conditions.moonPhase {
+        switch moonPhase {
         case .new, .full: phaseScore = 1.0
         case .waxingGibbous, .waningGibbous, .waxingCrescent, .waningCrescent: phaseScore = 0.7
         case .firstQuarter, .lastQuarter: phaseScore = 0.5
@@ -70,7 +98,7 @@ enum FishingScorer {
 
         let windowScore: Double
         let windowDetail: String
-        if let active = conditions.activeWindow(at: now) {
+        if let active = activeWindow {
             if active.period == .major {
                 windowScore = 1.0
                 windowDetail = "Major bite window active until \(active.end.formatted(date: .omitted, time: .shortened))"
@@ -78,7 +106,7 @@ enum FishingScorer {
                 windowScore = 0.8
                 windowDetail = "Minor bite window active until \(active.end.formatted(date: .omitted, time: .shortened))"
             }
-        } else if let next = conditions.nextWindow(after: now) {
+        } else if let next = nextWindow {
             let minutes = next.peak.timeIntervalSince(now) / 60
             if minutes < 60 {
                 windowScore = 0.7
@@ -96,12 +124,11 @@ enum FishingScorer {
         }
 
         let raw = 0.4 * phaseScore + 0.6 * windowScore
-        let detail = "\(conditions.moonPhase.displayName) — \(windowDetail)"
+        let detail = "\(moonPhase.displayName) — \(windowDetail)"
         return Subscore(raw: raw, detail: detail)
     }
 
-    private static func scorePressure(conditions: FishingConditions) -> Subscore {
-        let tendency = conditions.pressure.tendency
+    private static func scorePressure(tendency: PressureTendency, changePerHour: Double?) -> Subscore {
         let base: Double
         switch tendency {
         case .falling: base = 1.0
@@ -110,14 +137,13 @@ enum FishingScorer {
         }
         // Magnitude boosts confidence — a fast-falling barometer ahead of a
         // front is the textbook trigger.
-        let magnitude = abs(conditions.pressure.changePerHour ?? 0)
+        let magnitude = abs(changePerHour ?? 0)
         let boost = min(0.2, magnitude / 5)
         let raw = tendency == .falling ? min(1.0, base + boost) : base
         return Subscore(raw: raw, detail: "\(tendency.label) — \(tendency.fishingNote)")
     }
 
-    private static func scoreWind(conditions: FishingConditions) -> Subscore {
-        let mph = conditions.wind.speed.converted(to: .milesPerHour).value
+    private static func scoreWind(mph: Double) -> Subscore {
         let raw: Double
         let note: String
         switch mph {
