@@ -105,21 +105,9 @@ private struct SpeciesCard: View {
     var body: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 8) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(
-                            LinearGradient(
-                                colors: [species.tint.opacity(0.35), species.tint.opacity(0.08)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                    Image(systemName: "fish.fill")
-                        .font(.system(size: 44))
-                        .foregroundStyle(species.tint)
-                        .symbolEffect(.bounce, options: .nonRepeating)
-                }
-                .frame(height: 90)
+                SpeciesPhotoView(species: species, size: .card)
+                    .frame(height: 110)
+                    .clipShape(.rect(cornerRadius: 16))
 
                 Text(species.displayName)
                     .font(.headline)
