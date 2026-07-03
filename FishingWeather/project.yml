@@ -20,6 +20,12 @@ targets:
     platform: iOS
     sources:
       - path: Sources
+    # Injects the gitignored API keys (via AppConfig's optional include) into
+    # every build; without this wiring, regenerating the project silently
+    # dropped all secrets.
+    configFiles:
+      Debug: AppConfig.xcconfig
+      Release: AppConfig.xcconfig
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.choatelabs.bitecast

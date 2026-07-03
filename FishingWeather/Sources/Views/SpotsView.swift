@@ -156,6 +156,20 @@ struct SpotsView: View {
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                } else if osm.ramps.isEmpty, osm.lastError != nil {
+                    // A failed request is not "no ramps here" — don't present
+                    // a network error as an authoritative empty area.
+                    HStack {
+                        Label("Couldn't load nearby ramps", systemImage: "wifi.slash")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Retry") {
+                            guard let here else { return }
+                            Task { await osm.loadRamps(near: here) }
+                        }
+                        .font(.subheadline.weight(.medium))
+                    }
                 } else if osm.ramps.isEmpty {
                     Text("No public ramps or fishing sites tagged within 25 mi.")
                         .font(.subheadline)
@@ -199,11 +213,13 @@ struct SpotsView: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    .swipeActions {
+                    // .swipeActions only works inside a List; in this ScrollView
+                    // it silently did nothing, leaving no way to delete a spot.
+                    .contextMenu {
                         Button(role: .destructive) {
                             spots.remove(spot)
                         } label: {
-                            Label("Delete", systemImage: "trash")
+                            Label("Delete Spot", systemImage: "trash")
                         }
                     }
                 }

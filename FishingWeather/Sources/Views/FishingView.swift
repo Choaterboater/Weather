@@ -25,11 +25,13 @@ struct FishingView: View {
                 SpeciesPicker(selection: $species)
                     .padding(.top, 4)
 
-                if let conditions = makeConditions() {
+                if let conditions = weather.conditions {
                     FishingScoreCard(score: FishingScorer.score(
                         conditions: conditions,
                         species: species,
-                        tideEvents: showsTides ? tides.events : []
+                        // allEvents spans yesterday–tomorrow so late-evening
+                        // scoring sees the next event after midnight.
+                        tideEvents: showsTides ? tides.allEvents : []
                     ))
                     SpeciesFocusCard(species: species)
                     BaitEngineView(conditions: conditions, species: species, engine: engine)
@@ -48,6 +50,23 @@ struct FishingView: View {
                 } else if weather.isLoading {
                     ProgressView("Reading conditions…")
                         .padding(.top, 80)
+                } else if let message = weather.errorMessage {
+                    SpeciesFocusCard(species: species)
+                    ContentUnavailableView {
+                        Label("Couldn't load conditions", systemImage: "wifi.slash")
+                    } description: {
+                        Text(message)
+                    } actions: {
+                        Button("Retry") {
+                            Task {
+                                if let activeLocation {
+                                    await weather.load(for: activeLocation, force: true)
+                                }
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding(.top, 40)
                 } else {
                     SpeciesFocusCard(species: species)
                     ContentUnavailableView(
@@ -90,13 +109,6 @@ struct FishingView: View {
 
     private var hourlySamples: [HourSample] {
         weather.hourly?.samples() ?? []
-    }
-
-    private func makeConditions() -> FishingConditions? {
-        guard let current = weather.current,
-              let hourly = weather.hourly,
-              let today = weather.daily?.forecast.first else { return nil }
-        return FishingConditions.make(current: current, hourly: hourly, today: today)
     }
 }
 
@@ -160,6 +172,9 @@ private struct BiteWindowsCard: View {
                 }
             }
         }
+        // The card outlives its windows (weather refresh, spot switch): a
+        // "Reminder set" badge must not survive for a window it never covered.
+        .onChange(of: conditions.nextWindow()?.start) { reminderState = .none }
     }
 
     @ViewBuilder
