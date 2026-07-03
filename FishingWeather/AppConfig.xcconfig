@@ -1,0 +1,4 @@
+// Committed base configuration wired in by project.yml. Pulls in the
+// gitignored Secrets.xcconfig when present; the optional #include? is skipped
+// silently when it isn't, so fresh clones build with all API features disabled.
+#include? "Secrets.xcconfig"

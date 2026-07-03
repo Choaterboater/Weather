@@ -21,7 +21,7 @@ struct CatchLogView: View {
                     StatsSection(log: log)
                     Section("Catches") {
                         ForEach(log.entries) { entry in
-                            CatchRow(entry: entry, image: log.photo(for: entry))
+                            CatchRow(entry: entry)
                         }
                         .onDelete { offsets in
                             offsets.map { log.entries[$0] }.forEach(log.remove)
@@ -84,8 +84,12 @@ private struct Stat: View {
 }
 
 private struct CatchRow: View {
+    @Environment(CatchLog.self) private var log
     let entry: CatchEntry
-    let image: UIImage?
+
+    /// Loaded asynchronously so a row never does file I/O or a full-resolution
+    /// decode on the main actor while the list scrolls.
+    @State private var image: UIImage?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -113,6 +117,9 @@ private struct CatchRow: View {
         }
         .padding(.vertical, 2)
         .accessibilityElement(children: .combine)
+        .task(id: entry.photoFilename) {
+            image = await log.thumbnail(for: entry)
+        }
     }
 
     @ViewBuilder

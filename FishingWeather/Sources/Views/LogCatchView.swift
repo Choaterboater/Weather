@@ -159,10 +159,7 @@ struct LogCatchView: View {
     // MARK: - Conditions snapshot
 
     private var conditions: FishingConditions? {
-        guard let current = weather.current,
-              let hourly = weather.hourly,
-              let today = weather.daily?.forecast.first else { return nil }
-        return FishingConditions.make(current: current, hourly: hourly, today: today)
+        weather.conditions
     }
 
     private var activeLocation: (latitude: Double, longitude: Double)? {
@@ -193,12 +190,21 @@ struct LogCatchView: View {
         return items
     }
 
+    /// `Double.init(String)` is locale-independent: it returns nil for "3,5",
+    /// which is the only thing a decimal pad produces in comma-decimal locales —
+    /// silently dropping the angler's measurements.
+    private func parseMeasurement(_ text: String) -> Double? {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        return Double(trimmed) ?? Double(trimmed.replacingOccurrences(of: ",", with: "."))
+    }
+
     private func save() {
         let entry = CatchEntry(
             species: species,
             bait: bait.trimmingCharacters(in: .whitespacesAndNewlines),
-            lengthInches: Double(length),
-            weightPounds: Double(weight),
+            lengthInches: parseMeasurement(length),
+            weightPounds: parseMeasurement(weight),
             notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
             latitude: activeLocation?.latitude,
             longitude: activeLocation?.longitude,

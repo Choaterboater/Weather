@@ -18,7 +18,12 @@ final class BaitArtLoader {
             return
         }
         state = .loading
-        if let image = await BaitImageService.firstImage(for: recommendation, species: species, preferred: preferred) {
+        let image = await BaitImageService.firstImage(for: recommendation, species: species, preferred: preferred)
+        // `.task(id:)` cancelled us for a newer key; the providers swallow
+        // cancellation as nil, and writing .hidden/.loaded here would clobber
+        // the load that replaced this one.
+        guard !Task.isCancelled else { return }
+        if let image {
             cache[key] = image
             state = .loaded(image)
         } else {

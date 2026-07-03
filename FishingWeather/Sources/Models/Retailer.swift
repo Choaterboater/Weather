@@ -39,23 +39,39 @@ enum Retailer: String, CaseIterable, Identifiable {
     }
 
     /// The raw store search URL for the query, with an affiliate tag appended
-    /// where we model one inline (Amazon, eBay). URLs for the tackle shops are
-    /// best-effort and easy to adjust if a site changes its search path.
+    /// where we model one inline (Amazon, eBay). Built via `URLComponents` —
+    /// AI-generated bait names contain "&" ("Salt & Pepper grub"), which
+    /// `.urlQueryAllowed` leaves unescaped, corrupting the query. URLs for the
+    /// tackle shops are best-effort and easy to adjust if a site changes its
+    /// search path.
     func searchURL(for query: String) -> URL? {
-        let q = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+        var components: URLComponents?
+        var items: [URLQueryItem] = []
         switch self {
         case .amazon:
-            let tag = AppSecrets.amazonPartnerTag.map { "&tag=\($0)" } ?? ""
-            return URL(string: "https://www.amazon.com/s?k=\(q)\(tag)")
+            components = URLComponents(string: "https://www.amazon.com/s")
+            items = [URLQueryItem(name: "k", value: query)]
+            if let tag = AppSecrets.amazonPartnerTag {
+                items.append(URLQueryItem(name: "tag", value: tag))
+            }
         case .ebay:
-            let campaign = AppSecrets.ebayCampaignID.map { "&mkcid=1&campid=\($0)" } ?? ""
-            return URL(string: "https://www.ebay.com/sch/i.html?_nkw=\(q)\(campaign)")
+            components = URLComponents(string: "https://www.ebay.com/sch/i.html")
+            items = [URLQueryItem(name: "_nkw", value: query)]
+            if let campaign = AppSecrets.ebayCampaignID {
+                items.append(URLQueryItem(name: "mkcid", value: "1"))
+                items.append(URLQueryItem(name: "campid", value: campaign))
+            }
         case .tackleWarehouse:
-            return URL(string: "https://www.tacklewarehouse.com/search.html?keyword=\(q)")
+            components = URLComponents(string: "https://www.tacklewarehouse.com/search.html")
+            items = [URLQueryItem(name: "keyword", value: query)]
         case .bassPro:
-            return URL(string: "https://www.basspro.com/shop/SearchDisplay?searchTerm=\(q)")
+            components = URLComponents(string: "https://www.basspro.com/shop/SearchDisplay")
+            items = [URLQueryItem(name: "searchTerm", value: query)]
         case .fishUSA:
-            return URL(string: "https://www.fishusa.com/search?q=\(q)")
+            components = URLComponents(string: "https://www.fishusa.com/search")
+            items = [URLQueryItem(name: "q", value: query)]
         }
+        components?.queryItems = items
+        return components?.url
     }
 }
