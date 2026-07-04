@@ -24,6 +24,22 @@ enum WeatherTheme {
             [.blue.opacity(0.35), .cyan.opacity(0.15)]
         }
     }
+
+    /// A dark instrument backdrop for the Weather tab that still shifts with the
+    /// sky: the abyss ground with the condition's hue glowing at the top, fading
+    /// out toward the bottom.
+    @MainActor
+    static func skyBackdrop(for condition: WeatherCondition?) -> some View {
+        ZStack {
+            Ink.abyss
+            LinearGradient(
+                colors: [(gradient(for: condition).first ?? Ink.hull).opacity(0.5), .clear],
+                startPoint: .top,
+                endPoint: .center
+            )
+        }
+        .ignoresSafeArea()
+    }
 }
 
 /// A plottable sample of one hour, decoupled from WeatherKit's `Forecast`.
