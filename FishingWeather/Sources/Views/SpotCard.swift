@@ -88,13 +88,3 @@ struct SpotCard: View {
         .background(species.tint.opacity(0.12), in: .capsule)
     }
 }
-
-private extension WaterType {
-    var tint: Color {
-        switch self {
-        case .freshwater: .green
-        case .saltwater: .cyan
-        case .brackish: .teal
-        }
-    }
-}

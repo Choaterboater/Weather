@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 
 /// Whether a fishing spot, species, or rule applies to fresh, salt, or brackish water.
 /// Used to filter species pickers and to decide which conditions (e.g. tides) are
@@ -23,6 +23,15 @@ enum WaterType: String, CaseIterable, Codable, Identifiable {
         case .freshwater: "drop.fill"
         case .saltwater: "water.waves"
         case .brackish: "drop.halffull"
+        }
+    }
+
+    /// Map-pin / accent color for the water type.
+    var tint: Color {
+        switch self {
+        case .freshwater: .green
+        case .saltwater: .cyan
+        case .brackish: .teal
         }
     }
 }
