@@ -214,7 +214,8 @@ struct LogCatchView: View {
             spotName: spots.selectedSpot?.name ?? location.placeName,
             pressureTendency: conditions?.pressure.tendency.label,
             moonPhase: conditions?.moonPhase.displayName,
-            airTempF: airTempF
+            airTempF: airTempF,
+            windMph: conditions.map { $0.wind.speed.converted(to: .milesPerHour).value }
         )
         log.add(entry, photo: photo)
         dismiss()

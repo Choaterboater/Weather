@@ -49,6 +49,7 @@ enum PersonalScoreModel {
         if let a = mean(sample.map(pressureAffinity)) { affinity[.pressure] = a }
         if let a = mean(sample.map(moonAffinity)) { affinity[.solunar] = a }
         if let a = mean(sample.map { seasonAffinity($0, species: species) }) { affinity[.season] = a }
+        if let a = mean(sample.map(windAffinity)) { affinity[.wind] = a }
 
         guard !affinity.isEmpty else { return base }
         let reference = affinity.values.reduce(0, +) / Double(affinity.count)
@@ -91,6 +92,20 @@ enum PersonalScoreModel {
         if m.contains("gibbous") || m.contains("crescent") { return 0.7 }
         if m.contains("quarter") { return 0.5 }
         return nil
+    }
+
+    /// Wind favorability, mirroring the scorer's piecewise wind curve. Only set
+    /// on catches logged with live weather (older catches have no wind).
+    static func windAffinity(_ entry: CatchEntry) -> Double? {
+        guard let mph = entry.windMph else { return nil }
+        switch mph {
+        case ..<2: return 0.55
+        case 2..<6: return 0.85
+        case 6..<13: return 1.0
+        case 13..<19: return 0.65
+        case 19..<25: return 0.4
+        default: return 0.2
+        }
     }
 
     static func seasonAffinity(_ entry: CatchEntry, species: Species) -> Double? {
