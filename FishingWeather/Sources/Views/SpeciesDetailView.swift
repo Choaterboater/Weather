@@ -235,6 +235,20 @@ struct SpeciesDetailView: View {
                                 .foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
+                    } else if let error = inaturalist.lastError, sightings.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label(error, systemImage: "exclamationmark.triangle")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Button {
+                                Task {
+                                    if let here { await inaturalist.loadSightings(for: species, near: here) }
+                                }
+                            } label: {
+                                Label("Try Again", systemImage: "arrow.clockwise")
+                            }
+                            .buttonStyle(.bordered)
+                        }
                     } else if sightings.isEmpty {
                         Text("No verified observations within 50 mi in the last year.")
                             .font(.subheadline)

@@ -5,6 +5,8 @@ import UIKit
 @MainActor
 @Observable
 final class FishRecognizer {
+    private var task: Task<Void, Never>?
+
     enum Status: Equatable {
         case idle
         case unavailable(String)
@@ -17,36 +19,52 @@ final class FishRecognizer {
     var result: FishIdentification?
 
     func identify(image: UIImage) async {
+        task?.cancel()
         status = .working
         result = nil
 
-        let scaled = Self.downscaled(image)
-        let data = scaled.jpegData(compressionQuality: 0.8) ?? Data()
+        let prompt = Self.prompt
+        let currentSelf = self
+        task = Task.detached(priority: .userInitiated) {
+            let scaled = Self.downscaled(image)
+            let data = scaled.jpegData(compressionQuality: 0.8) ?? Data()
 
-        // 1) On-device Core ML model, if one is bundled — free, offline, private.
-        if let classifier = CoreMLFishClassifier(),
-           let hit = await classifier.classify(imageData: data) {
-            result = Self.make(label: hit.label, confidence: hit.confidence)
-            status = .ready
-            return
-        }
+            // 1) On-device Core ML model
+            if let classifier = CoreMLFishClassifier(),
+               let hit = await classifier.classify(imageData: data) {
+                let made = Self.make(label: hit.label, confidence: hit.confidence)
+                await MainActor.run {
+                    currentSelf.result = made
+                    currentSelf.status = .ready
+                }
+                return
+            }
 
-        // 2) Cloud vision model via Replicate, if a token is set.
-        guard let client = ReplicateVisionClient() else {
-            status = .unavailable("For fish ID, bundle a Core ML model (FishClassifier) for on-device use, or add a Replicate API token.")
-            return
-        }
+            // 2) Cloud vision model via Replicate, if a token is set
+            guard let client = ReplicateVisionClient() else {
+                await MainActor.run {
+                    currentSelf.status = .unavailable("For fish ID, bundle a Core ML model (FishClassifier) for on-device use, or add a Replicate API token.")
+                }
+                return
+            }
 
-        do {
-            let text = try await client.identify(imageData: data, prompt: Self.prompt)
-            result = Self.parse(text)
-            status = .ready
-        } catch {
-            status = .failed(error.localizedDescription)
+            do {
+                let text = try await client.identify(imageData: data, prompt: prompt)
+                let parsed = Self.parse(text)
+                await MainActor.run {
+                    currentSelf.result = parsed
+                    currentSelf.status = .ready
+                }
+            } catch {
+                await MainActor.run {
+                    currentSelf.status = .failed(error.localizedDescription)
+                }
+            }
         }
     }
 
     func reset() {
+        task?.cancel()
         status = .idle
         result = nil
     }
@@ -58,7 +76,7 @@ final class FishRecognizer {
     """
 
     /// Builds a result from a Core ML classification label + confidence.
-    static func make(label: String, confidence: Float) -> FishIdentification {
+    nonisolated static func make(label: String, confidence: Float) -> FishIdentification {
         let lower = label.lowercased()
         let matched = Species.allCases.first { $0 != .all && lower.contains($0.rawValue) }
         let percent = Int((confidence * 100).rounded())
@@ -69,7 +87,7 @@ final class FishRecognizer {
         )
     }
 
-    static func parse(_ text: String) -> FishIdentification {
+    nonisolated static func parse(_ text: String) -> FishIdentification {
         let name = text
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "\n", with: " ")
@@ -82,7 +100,7 @@ final class FishRecognizer {
         )
     }
 
-    private static func downscaled(_ image: UIImage, maxDimension: CGFloat = 768) -> UIImage {
+    private nonisolated static func downscaled(_ image: UIImage, maxDimension: CGFloat = 768) -> UIImage {
         let size = image.size
         let scale = min(1, maxDimension / max(size.width, size.height))
         guard scale < 1 else { return image }

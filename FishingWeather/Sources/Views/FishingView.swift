@@ -1,3 +1,4 @@
+import Foundation
 import CoreLocation
 import SwiftUI
 import WeatherKit
@@ -48,6 +49,38 @@ struct FishingView: View {
                 } else if weather.isLoading {
                     ProgressView("Reading conditions…")
                         .padding(.top, 80)
+                } else if let loc = activeLocation, let cachedPressure = WeatherSnapshots.cachedPressure(for: loc) {
+                    SpeciesFocusCard(species: species)
+                    GlassCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                Text(cachedPressure.pressure.formatted(.measurement(width: .abbreviated, usage: .barometric)))
+                                    .font(.title.weight(.semibold))
+                                    .contentTransition(.numericText())
+                                Label(cachedPressure.tendency.label, systemImage: cachedPressure.tendency.symbolName)
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundStyle(cachedPressure.tendency == .falling ? .green : .secondary)
+                                if let perHour = cachedPressure.changePerHour, abs(perHour) >= 0.1 {
+                                    Text(String(format: "%+.1f hPa/hr", perHour))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            Text(cachedPressure.tendency.fishingNote)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            if !hourlySamples.isEmpty {
+                                PressureTrendChart(samples: hourlySamples, now: .now)
+                                    .padding(.top, 4)
+                            }
+                        }
+                    }
+                    ContentUnavailableView(
+                        "Live weather unavailable",
+                        systemImage: "cloud.slash",
+                        description: Text("Showing cached conditions from your last session.")
+                    )
+                    .padding(.top, 8)
                 } else {
                     SpeciesFocusCard(species: species)
                     ContentUnavailableView(
@@ -89,7 +122,13 @@ struct FishingView: View {
     }
 
     private var hourlySamples: [HourSample] {
-        weather.hourly?.samples() ?? []
+        if let live = weather.hourly?.samples(), !live.isEmpty {
+            return live
+        }
+        if let loc = activeLocation {
+            return WeatherSnapshots.cachedSamples(for: loc)
+        }
+        return []
     }
 
     private func makeConditions() -> FishingConditions? {
