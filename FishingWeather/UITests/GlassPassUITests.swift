@@ -21,6 +21,17 @@ final class GlassPassUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 3)
         snap(name: "2-fishing")
 
+        // Open the Weekly Trip Planner and capture whatever state it reaches
+        // (loading/outlook on device; error on the simulator where WeatherKit
+        // is unavailable). Confirms the link and navigation are wired.
+        let planLink = app.buttons["Plan the Week"]
+        if planLink.waitForExistence(timeout: 3) {
+            planLink.tap()
+            Thread.sleep(forTimeInterval: 4)
+            snap(name: "2b-planner")
+            backOut(app)
+        }
+
         openTab(app, "Spots")
         // The overview map is gated on the device location resolving; wait for
         // it rather than a fixed sleep, then let tiles paint.
