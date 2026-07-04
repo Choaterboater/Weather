@@ -50,14 +50,7 @@ struct SpeciesGuideView: View {
             .padding(.horizontal)
             .padding(.bottom, 24)
         }
-        .background(
-            LinearGradient(
-                colors: [Color.indigo.opacity(0.18), .cyan.opacity(0.08)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-        )
+        .background(Ink.backdrop)
         .onAppear(perform: applyDefaultFilter)
         .onChange(of: spots.selectedSpotID) {
             guard !userPickedFilter else { return }
@@ -113,11 +106,11 @@ struct SpeciesGuideView: View {
             .padding(.vertical, 7)
             .background(
                 isSelected
-                    ? AnyShapeStyle(Color.accentColor)
+                    ? AnyShapeStyle(Ink.brass)
                     : AnyShapeStyle(.thinMaterial),
                 in: .capsule
             )
-            .foregroundStyle(isSelected ? Color.white : Color.primary)
+            .foregroundStyle(isSelected ? Ink.abyss : Color.primary)
         }
         .sensoryFeedback(.selection, trigger: isSelected)
     }

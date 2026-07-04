@@ -6,7 +6,10 @@ import SwiftUI
 /// Gated behind `-uiPreview <name>`. Remove before committing.
 struct DebugPreviewHost: View {
     var body: some View {
-        if CommandLine.arguments.contains("scorecard") {
+        if CommandLine.arguments.contains("guide") {
+            NavigationStack { SpeciesGuideView() }
+                .environment(SpotStore())
+        } else if CommandLine.arguments.contains("scorecard") {
             DebugScoreCard()
         } else {
             Text("Unknown -uiPreview target")
