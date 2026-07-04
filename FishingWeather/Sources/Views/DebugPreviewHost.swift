@@ -27,9 +27,34 @@ struct DebugPreviewHost: View {
             DebugPatterns()
         } else if CommandLine.arguments.contains("settings") {
             DebugSettings()
+        } else if CommandLine.arguments.contains("widget") {
+            DebugWidget()
         } else {
             Text("Unknown -uiPreview target")
         }
+    }
+}
+
+private struct DebugWidget: View {
+    private let high = WidgetSnapshot(
+        score: 88, summary: "Excellent", locationName: "Fort De Soto",
+        speciesName: "Redfish", nextWindowLabel: "Major window 6:10 AM",
+        updatedAt: Date(timeIntervalSince1970: 1_700_000_000))
+
+    var body: some View {
+        VStack(spacing: 28) {
+            widget(.placeholder)
+            widget(high)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Ink.backdrop)
+    }
+
+    private func widget(_ snapshot: WidgetSnapshot) -> some View {
+        BiteWidgetView(snapshot: snapshot)
+            .frame(width: 158, height: 158)
+            .clipShape(RoundedRectangle(cornerRadius: 24))
+            .shadow(radius: 8, y: 4)
     }
 }
 
