@@ -31,6 +31,7 @@ enum FishingScorer {
         conditions: FishingConditions,
         species: Species,
         tideEvents: [TideEvent] = [],
+        weights: FactorWeights = .standard,
         now: Date = .now
     ) -> FishingScore {
         score(
@@ -42,6 +43,7 @@ enum FishingScorer {
             windMph: conditions.wind.speed.converted(to: .milesPerHour).value,
             species: species,
             tideEvents: tideEvents,
+            weights: weights,
             now: now
         )
     }
@@ -58,6 +60,7 @@ enum FishingScorer {
         windMph: Double,
         species: Species,
         tideEvents: [TideEvent] = [],
+        weights: FactorWeights = .standard,
         now: Date = .now
     ) -> FishingScore {
         // `.all` has no water type — include tide whenever events were supplied
@@ -65,12 +68,12 @@ enum FishingScorer {
         // freshwater species drops the tide factor.
         let includesTide = !tideEvents.isEmpty && species.waterType != .freshwater
 
-        // Base weights (must sum to 1.0).
-        var w_solunar = 0.25
-        var w_pressure = 0.20
-        var w_wind = 0.15
-        var w_tide = 0.25
-        var w_season = 0.15
+        // Factor weights (must sum to 1.0) — standard, or personalized.
+        var w_solunar = weights.solunar
+        var w_pressure = weights.pressure
+        var w_wind = weights.wind
+        var w_tide = weights.tide
+        var w_season = weights.season
 
         if !includesTide {
             // Redistribute the tide share across the remaining factors.
