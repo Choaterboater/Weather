@@ -7,6 +7,8 @@ struct FishingScoreCard: View {
     let score: FishingScore
     /// Catches that personalized this score; 0 shows the standard, untuned score.
     var tunedCount: Int = 0
+    /// Tapped when the "Tuned" badge is pressed — opens the Your Patterns sheet.
+    var onTapTuned: (() -> Void)? = nil
     @State private var isExpanded = false
 
     var body: some View {
@@ -17,14 +19,23 @@ struct FishingScoreCard: View {
                         .instrumentLabel(Ink.brass)
                     Spacer()
                     if tunedCount > 0 {
-                        HStack(spacing: 4) {
-                            Image(systemName: "sparkles")
-                            Text("Tuned · \(tunedCount)")
+                        Button {
+                            onTapTuned?()
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "sparkles")
+                                Text("Tuned · \(tunedCount)")
+                                if onTapTuned != nil {
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 8, weight: .bold))
+                                }
+                            }
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(Ink.brass)
                         }
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Ink.brass)
-                        .accessibilityElement()
-                        .accessibilityLabel("Personalized from your \(tunedCount) catches")
+                        .buttonStyle(.plain)
+                        .disabled(onTapTuned == nil)
+                        .accessibilityLabel("Personalized from your \(tunedCount) catches. Opens Your Patterns.")
                     }
                 }
 

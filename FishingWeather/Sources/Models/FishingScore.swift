@@ -59,7 +59,19 @@ struct FactorWeights: Equatable {
 }
 
 struct ScoreFactor: Identifiable, Equatable {
-    enum Kind: String { case solunar, pressure, wind, tide, season }
+    enum Kind: String {
+        case solunar, pressure, wind, tide, season
+
+        var symbolName: String {
+            switch self {
+            case .solunar: "moon.stars"
+            case .pressure: "barometer"
+            case .wind: "wind"
+            case .tide: "water.waves"
+            case .season: "calendar"
+            }
+        }
+    }
     /// Stable across recomputes so charts/ForEach don't thrash every frame.
     var id: String { kind.rawValue }
     let kind: Kind
@@ -76,14 +88,6 @@ struct ScoreFactor: Identifiable, Equatable {
         Int((weight * raw * 100).rounded())
     }
 
-    var symbolName: String {
-        switch kind {
-        case .solunar: "moon.stars"
-        case .pressure: "barometer"
-        case .wind: "wind"
-        case .tide: "water.waves"
-        case .season: "calendar"
-        }
-    }
+    var symbolName: String { kind.symbolName }
 }
 
