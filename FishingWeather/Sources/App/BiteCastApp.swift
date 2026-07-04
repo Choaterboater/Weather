@@ -11,6 +11,7 @@ struct BiteCastApp: App {
     @State private var spotCatalog = CuratedSpotCatalog()
     @State private var osmClient = OpenStreetMapClient()
     @State private var inaturalist = INaturalistClient()
+    @State private var alertSettings = AlertSettings()
 
     var body: some Scene {
         WindowGroup {
@@ -47,5 +48,6 @@ struct BiteCastApp: App {
             .environment(spotCatalog)
             .environment(osmClient)
             .environment(inaturalist)
+            .environment(alertSettings)
     }
 }

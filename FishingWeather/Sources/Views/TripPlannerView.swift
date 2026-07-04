@@ -10,6 +10,7 @@ struct TripPlannerScreen: View {
     let locationName: String
 
     @Environment(TideService.self) private var tides
+    @Environment(AlertSettings.self) private var alertSettings
     @State private var loader = TripForecastLoader()
 
     var body: some View {
@@ -28,6 +29,13 @@ struct TripPlannerScreen: View {
             tides: { await tides.weekTidesByDay(near: $0) },
             force: force
         )
+        // Refresh scheduled bite alerts from the freshly loaded outlook. The
+        // scheduler returns nothing when alerts are off, so this also clears.
+        if let outlook = loader.outlook {
+            let alerts = BiteAlertScheduler.plan(from: outlook,
+                                                 preferences: alertSettings.preferences)
+            await BiteAlertNotifier.reschedule(alerts)
+        }
     }
 
     private var taskKey: String {

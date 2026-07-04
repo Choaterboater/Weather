@@ -7,6 +7,7 @@ struct MainTabView: View {
     @Environment(WeatherStore.self) private var weather
     @Environment(TideService.self) private var tides
     @AppStorage("selectedTab") private var selectedTab: String = "weather"
+    @State private var showSettings = false
 
     private var locationTitle: String {
         spots.selectedSpot?.name ?? location.placeName ?? "Weather"
@@ -37,6 +38,15 @@ struct MainTabView: View {
                         .navigationTitle("Fishing")
                         .navigationBarTitleDisplayMode(.inline)
                         .refreshable { await refresh() }
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button { showSettings = true } label: {
+                                    Image(systemName: "gearshape")
+                                }
+                                .accessibilityLabel("Settings")
+                            }
+                        }
+                        .sheet(isPresented: $showSettings) { SettingsView() }
                 }
             }
             Tab("Spots", systemImage: "mappin.and.ellipse", value: "spots") {
