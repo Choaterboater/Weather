@@ -41,7 +41,7 @@ struct SpotDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 18) {
+            GlassCardStack(spacing: 18) {
                 map
                 header
                 if let targets = spot.targetSpecies, !targets.isEmpty {
@@ -193,7 +193,7 @@ struct SpotDetailView: View {
                 )
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.glassProminent)
             .controlSize(.large)
             .tint(isActive ? .secondary : .teal)
 
@@ -203,7 +203,7 @@ struct SpotDetailView: View {
                 Label("Get directions", systemImage: "car")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.glass)
             .controlSize(.large)
         }
     }

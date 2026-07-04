@@ -13,7 +13,7 @@ struct ScoutView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            GlassCardStack(spacing: 20) {
                 introCard
                 imageArea
                 actions
@@ -93,13 +93,13 @@ struct ScoutView: View {
                     Label("Take Photo", systemImage: "camera")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.glassProminent)
             }
             PhotosPicker(selection: $pickerItem, matching: .images) {
                 Label("Choose Photo", systemImage: "photo.on.rectangle")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.glass)
         }
     }
 

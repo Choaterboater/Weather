@@ -22,7 +22,7 @@ struct FishingView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            GlassCardStack(spacing: 20) {
                 SpeciesPicker(selection: $species)
                     .padding(.top, 4)
 
@@ -68,7 +68,7 @@ struct FishingView: View {
                                 }
                             }
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.glassProminent)
                     }
                     .padding(.top, 8)
                 } else if let loc = activeLocation, let cachedPressure = WeatherSnapshots.cachedPressure(for: loc) {

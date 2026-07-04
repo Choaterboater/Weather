@@ -43,7 +43,7 @@ struct SpeciesDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 18) {
+            GlassCardStack(spacing: 18) {
                 hero
                 if let credit = species.photoCredit {
                     Text(credit)
@@ -338,7 +338,7 @@ struct SpeciesDetailView: View {
             )
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.glassProminent)
         .controlSize(.large)
         .tint(selectedSpecies == species ? .secondary : species.tint)
         .disabled(selectedSpecies == species)

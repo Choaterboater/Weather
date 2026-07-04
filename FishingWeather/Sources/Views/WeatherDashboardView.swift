@@ -6,7 +6,7 @@ struct WeatherDashboardView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            GlassCardStack(spacing: 20) {
                 if weather.isLoading && weather.current == nil {
                     ProgressView("Loading weather…")
                         .padding(.top, 80)

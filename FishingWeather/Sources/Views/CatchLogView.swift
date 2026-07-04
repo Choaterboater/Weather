@@ -14,7 +14,7 @@ struct CatchLogView: View {
                     Text("Log a catch to start tracking what's working.")
                 } actions: {
                     Button("Log a Catch") { showingForm = true }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.glassProminent)
                 }
             } else {
                 List {
