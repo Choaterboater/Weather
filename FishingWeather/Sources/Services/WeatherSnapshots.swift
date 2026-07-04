@@ -14,6 +14,9 @@ enum WeatherSnapshots {
         let temperature: Double
         let pressureHPa: Double
         let precipChance: Double
+        // Optional so snapshots written before wind existed still decode.
+        let windSpeedMph: Double?
+        let windGustMph: Double?
     }
 
     private struct Pressure: Codable {
@@ -44,7 +47,8 @@ enum WeatherSnapshots {
             timestamp: timestamp,
             samples: samples.map {
                 Hour(date: $0.date, temperature: $0.temperature,
-                     pressureHPa: $0.pressureHPa, precipChance: $0.precipChance)
+                     pressureHPa: $0.pressureHPa, precipChance: $0.precipChance,
+                     windSpeedMph: $0.windSpeedMph, windGustMph: $0.windGustMph)
             },
             pressure: Pressure(
                 pressureHPa: pressure.pressure.converted(to: .hectopascals).value,
@@ -71,7 +75,8 @@ enum WeatherSnapshots {
         guard let entry = loadEntry(for: location) else { return [] }
         return entry.samples.map {
             HourSample(date: $0.date, temperature: $0.temperature,
-                       pressureHPa: $0.pressureHPa, precipChance: $0.precipChance)
+                       pressureHPa: $0.pressureHPa, precipChance: $0.precipChance,
+                       windSpeedMph: $0.windSpeedMph ?? 0, windGustMph: $0.windGustMph)
         }
     }
 

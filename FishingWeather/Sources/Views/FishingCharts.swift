@@ -96,6 +96,82 @@ struct TemperatureChart: View {
     }
 }
 
+/// Wind speed over the next 24 hours as a shaded area, with a dashed gust line
+/// and a "now" marker — the shape (building vs. laying down) is what an angler
+/// plans around.
+struct WindForecastChart: View {
+    let samples: [HourSample]
+    let now: Date
+
+    private var domainMax: Double {
+        let peak = samples.map { max($0.windSpeedMph, $0.windGustMph ?? 0) }.max() ?? 10
+        // Floor the ceiling so a calm day doesn't blow the y-axis up to a
+        // dramatic-looking 3 mph, and add headroom above the peak gust.
+        return max(peak * 1.15, 12)
+    }
+
+    private var hasGusts: Bool { samples.contains { $0.windGustMph != nil } }
+
+    var body: some View {
+        Chart {
+            ForEach(samples) { sample in
+                AreaMark(
+                    x: .value("Time", sample.date),
+                    y: .value("Wind", sample.windSpeedMph)
+                )
+                .interpolationMethod(.catmullRom)
+                .foregroundStyle(.linearGradient(
+                    colors: [.teal.opacity(0.5), .teal.opacity(0.03)],
+                    startPoint: .top, endPoint: .bottom
+                ))
+
+                LineMark(
+                    x: .value("Time", sample.date),
+                    y: .value("Wind", sample.windSpeedMph),
+                    series: .value("Series", "Sustained")
+                )
+                .interpolationMethod(.catmullRom)
+                .lineStyle(.init(lineWidth: 2.5))
+                .foregroundStyle(.teal)
+            }
+
+            ForEach(samples) { sample in
+                if let gust = sample.windGustMph {
+                    LineMark(
+                        x: .value("Time", sample.date),
+                        y: .value("Gust", gust),
+                        series: .value("Series", "Gust")
+                    )
+                    .interpolationMethod(.catmullRom)
+                    .lineStyle(.init(lineWidth: 1.5, dash: [3, 3]))
+                    .foregroundStyle(.orange.opacity(0.75))
+                }
+            }
+
+            RuleMark(x: .value("Now", now))
+                .lineStyle(.init(lineWidth: 1, dash: [4, 4]))
+                .foregroundStyle(.secondary.opacity(0.5))
+        }
+        .chartYScale(domain: 0...domainMax)
+        .chartYAxis {
+            AxisMarks(position: .leading) { value in
+                AxisGridLine().foregroundStyle(.secondary.opacity(0.15))
+                AxisValueLabel {
+                    if let v = value.as(Double.self) { Text("\(Int(v))").font(.caption2) }
+                }
+            }
+        }
+        .chartXAxis {
+            AxisMarks(values: .stride(by: .hour, count: 6)) { _ in
+                AxisGridLine().foregroundStyle(.secondary.opacity(0.12))
+                AxisValueLabel(format: .dateTime.hour())
+            }
+        }
+        .frame(height: 130)
+        .accessibilityLabel("Wind speed forecast for the next 24 hours\(hasGusts ? ", with gusts" : "")")
+    }
+}
+
 /// Today's solunar bite windows as bands across the day, with a "now" marker.
 struct BiteWindowsTimeline: View {
     let windows: [BiteWindow]
