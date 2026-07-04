@@ -1,0 +1,90 @@
+{
+  "stateCode": "NC",
+  "stateName": "North Carolina",
+  "sourceURL": "https://www.deq.nc.gov/about/divisions/marine-fisheries/rules-proclamations-and-size-and-bag-limits/recreational-size-and-bag-limits",
+  "lastVerifiedDate": "2026-07-03",
+  "regulations": [
+    {
+      "speciesId": "redfish",
+      "waterType": "saltwater",
+      "minSizeInches": 18,
+      "maxSizeInches": 27,
+      "slotDescription": "18–27\" total length slot",
+      "dailyBagLimit": 1,
+      "seasonClosures": [],
+      "notes": "Red drum (puppy drum). 1 per person/day. Any harvested red drum must be reported at deq.nc.gov/report-my-fish."
+    },
+    {
+      "speciesId": "speckledTrout",
+      "waterType": "saltwater",
+      "minSizeInches": 14,
+      "maxSizeInches": 20,
+      "slotDescription": "14–20\" total length, plus one over 26\" allowed",
+      "dailyBagLimit": 3,
+      "seasonClosures": [],
+      "notes": "Spotted seatrout. 3 per person/day. NCDMF may close the season by proclamation after a major cold-stun — check for active proclamations."
+    },
+    {
+      "speciesId": "flounder",
+      "waterType": "saltwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "Recreational harvest closed statewide",
+      "dailyBagLimit": 0,
+      "seasonClosures": [
+        { "start": "01-01", "end": "12-31", "label": "Recreational harvest closed statewide (a short season may open by NCDMF proclamation)" }
+      ],
+      "notes": "Southern flounder recreational harvest is closed under the standing rules. In recent years NCDMF opened only a brief season (about two weeks in September) by proclamation. Verify the current flounder proclamation before keeping any."
+    },
+    {
+      "speciesId": "sheepshead",
+      "waterType": "saltwater",
+      "minSizeInches": 14,
+      "maxSizeInches": null,
+      "slotDescription": "14\" minimum total length",
+      "dailyBagLimit": 5,
+      "seasonClosures": [],
+      "notes": "5 per person/day."
+    },
+    {
+      "speciesId": "bass",
+      "waterType": "freshwater",
+      "minSizeInches": 14,
+      "maxSizeInches": null,
+      "slotDescription": "14\" minimum (2 of 5 may be under 14\")",
+      "dailyBagLimit": 5,
+      "seasonClosures": [],
+      "notes": "Largemouth (black) bass statewide default. Many specific reservoirs and rivers set larger limits — check the waterbody."
+    },
+    {
+      "speciesId": "crappie",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide limit",
+      "dailyBagLimit": null,
+      "seasonClosures": [],
+      "notes": "No statewide size or creel limit. Specific waters set their own (e.g. Shearon Harris: 8\" minimum, 20/day). Check the waterbody."
+    },
+    {
+      "speciesId": "catfish",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide limit",
+      "dailyBagLimit": null,
+      "seasonClosures": [],
+      "notes": "Blue, channel, and flathead catfish have no statewide size or creel limit on most waters. Some listed waters (certain ponds, reservoirs) restrict take — check the waterbody."
+    },
+    {
+      "speciesId": "bluegill",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide limit",
+      "dailyBagLimit": null,
+      "seasonClosures": [],
+      "notes": "Bream/sunfish have no statewide size or creel limit. Some waters east of I-95 cap 30/day (no more than 12 redbreast)."
+    }
+  ]
+}

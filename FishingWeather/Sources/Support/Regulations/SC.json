@@ -1,0 +1,88 @@
+{
+  "stateCode": "SC",
+  "stateName": "South Carolina",
+  "sourceURL": "https://www.eregulations.com/southcarolina/fishing",
+  "lastVerifiedDate": "2026-07-03",
+  "regulations": [
+    {
+      "speciesId": "redfish",
+      "waterType": "saltwater",
+      "minSizeInches": 18,
+      "maxSizeInches": 25,
+      "slotDescription": "18–25\" total length slot",
+      "dailyBagLimit": 1,
+      "seasonClosures": [],
+      "notes": "Red drum (spottail bass). 1 per person/day, max 2 per boat. Gigging is closed Dec 1–Feb 28, but rod-and-reel harvest stays open year-round. Reflects the rule effective July 1, 2026."
+    },
+    {
+      "speciesId": "speckledTrout",
+      "waterType": "saltwater",
+      "minSizeInches": 14,
+      "maxSizeInches": null,
+      "slotDescription": "14\" minimum total length",
+      "dailyBagLimit": 10,
+      "seasonClosures": [],
+      "notes": "Spotted seatrout. 10 per person/day. Gigging is closed Dec 1–Feb 28; other legal gear stays open."
+    },
+    {
+      "speciesId": "flounder",
+      "waterType": "saltwater",
+      "minSizeInches": 16,
+      "maxSizeInches": null,
+      "slotDescription": "16\" minimum total length",
+      "dailyBagLimit": 5,
+      "seasonClosures": [],
+      "notes": "Southern, summer & gulf flounder share one rule: 5 per person/day, max 10 per boat."
+    },
+    {
+      "speciesId": "sheepshead",
+      "waterType": "saltwater",
+      "minSizeInches": 14,
+      "maxSizeInches": null,
+      "slotDescription": "14\" minimum total length",
+      "dailyBagLimit": 10,
+      "seasonClosures": [],
+      "notes": "10 per person/day, max 30 per boat. No closed season."
+    },
+    {
+      "speciesId": "bass",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide length limit",
+      "dailyBagLimit": 5,
+      "seasonClosures": [],
+      "notes": "5 per day combined across black bass. Many SCDNR-managed lakes set their own 12–16\" minimums — check the waterbody. Overall cap of 40 game fish per day."
+    },
+    {
+      "speciesId": "crappie",
+      "waterType": "freshwater",
+      "minSizeInches": 8,
+      "maxSizeInches": null,
+      "slotDescription": "8\" minimum length",
+      "dailyBagLimit": 20,
+      "seasonClosures": [],
+      "notes": "20 per person/day statewide. Some managed lakes carry different crappie rules."
+    },
+    {
+      "speciesId": "catfish",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide limit (channel/flathead)",
+      "dailyBagLimit": null,
+      "seasonClosures": [],
+      "notes": "Channel and flathead catfish have no statewide size or daily limit. Blue catfish: 25 per day, of which only 2 may exceed 32\". Check waterbody-specific rules."
+    },
+    {
+      "speciesId": "bluegill",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide size limit",
+      "dailyBagLimit": 30,
+      "seasonClosures": [],
+      "notes": "Bream category (bluegill, shellcracker, warmouth, etc.): 30 per person/day. Some managed lakes are lower."
+    }
+  ]
+}
