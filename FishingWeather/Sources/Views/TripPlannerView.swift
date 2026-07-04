@@ -1,4 +1,35 @@
+import CoreLocation
 import SwiftUI
+
+/// Owns the forecast loader and drives `TripPlannerView`. This is what the
+/// Fishing tab pushes; it fetches on appear and re-fetches when the spot or
+/// species changes.
+struct TripPlannerScreen: View {
+    let location: CLLocation
+    let species: Species
+    let locationName: String
+
+    @State private var loader = TripForecastLoader()
+
+    var body: some View {
+        TripPlannerView(
+            outlook: loader.outlook,
+            isLoading: loader.isLoading,
+            errorMessage: loader.errorMessage,
+            onRetry: { Task { await load(force: true) } }
+        )
+        .task(id: taskKey) { await load() }
+    }
+
+    private func load(force: Bool = false) async {
+        await loader.load(for: location, species: species,
+                          locationName: locationName, force: force)
+    }
+
+    private var taskKey: String {
+        "\(species.rawValue)-\(location.coordinate.latitude),\(location.coordinate.longitude)"
+    }
+}
 
 /// The Weekly Trip Planner screen: a ranked list of the coming week's best
 /// fishing windows for the active spot, reached from the Fishing tab. Purely

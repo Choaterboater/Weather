@@ -26,6 +26,10 @@ struct FishingView: View {
                 SpeciesPicker(selection: $species, waterType: spots.selectedSpot?.waterType)
                     .padding(.top, 4)
 
+                if let loc = activeLocation {
+                    planTheWeekLink(location: loc)
+                }
+
                 if let conditions = liveConditions {
                     // Re-evaluate score / active windows as the clock moves.
                     TimelineView(.periodic(from: .now, by: 60)) { context in
@@ -116,6 +120,38 @@ struct FishingView: View {
 
     private var activeLocation: CLLocation? {
         spots.selectedSpot?.location ?? location.location
+    }
+
+    private var planLocationName: String {
+        spots.selectedSpot?.name ?? location.placeName ?? "Current spot"
+    }
+
+    /// Entry point to the Weekly Trip Planner.
+    private func planTheWeekLink(location loc: CLLocation) -> some View {
+        NavigationLink {
+            TripPlannerScreen(location: loc, species: species, locationName: planLocationName)
+        } label: {
+            GlassCard {
+                HStack(spacing: 14) {
+                    Image(systemName: "calendar.badge.clock")
+                        .font(.title2)
+                        .foregroundStyle(Ink.brass)
+                        .frame(width: 32)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Plan the Week")
+                            .font(.headline)
+                        Text("Best days & times to fish")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     /// Only present weather that belongs to the active location.
