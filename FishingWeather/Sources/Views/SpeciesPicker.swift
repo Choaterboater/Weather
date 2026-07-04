@@ -50,8 +50,11 @@ private struct SpeciesChip: View {
         // Glass must wrap the label directly: a glassEffect on a .background
         // shape gets hoisted into the enclosing GlassEffectContainer's layer
         // and composites OVER the text, leaving it illegible.
+        // Selection uses the app's brass accent (not the per-species tint) so
+        // the picker matches every other selected control; species color-coding
+        // still lives in the dots/icons in lists and detail views.
         .glassEffect(
-            isSelected ? .regular.tint(species.tint).interactive() : .regular.interactive(),
+            isSelected ? .regular.tint(Ink.brass).interactive() : .regular.interactive(),
             in: .capsule
         )
         .buttonStyle(.plain)
