@@ -28,17 +28,21 @@ enum TripPlanner {
             let tides = tidesByDay[dayKey] ?? []
 
             for window in windows where window.end >= now {
-                let hourlyCond = conditions(at: window.peak, hourly: hourly)
+                // Score at the window's peak, but never in the past: a window
+                // that's active right now (peak already passed) should use the
+                // live conditions available at `now`, not fall back to daily.
+                let scoreTime = max(window.peak, now)
+                let hourlyCond = conditions(at: scoreTime, hourly: hourly)
                 let score = FishingScorer.score(
                     moonPhase: day.moonPhase,
-                    activeWindow: window,               // score the window at its peak
+                    activeWindow: window,
                     nextWindow: nil,
                     pressureTendency: hourlyCond?.tendency ?? .steady,
                     pressureChangePerHour: hourlyCond?.changePerHour,
                     windMph: hourlyCond?.windMph ?? day.dailyWindMph,
                     species: species,
                     tideEvents: tides,
-                    now: window.peak
+                    now: scoreTime
                 )
                 scored.append(ScoredWindow(
                     date: dayKey,
