@@ -578,7 +578,6 @@ struct FishingScorerTests {
     @Test
     func solunarIsNonIncreasingAsYouMoveAwayFromPeak() {
         let now = Date()
-        let window = BiteWindow(period: .major, peak: now, cause: "Moon overhead")
         let offsets: [TimeInterval] = [0, 30 * 60, 60 * 60, 90 * 60, 120 * 60, 180 * 60, 240 * 60, 300 * 60]
         var values: [Double] = []
         for dt in offsets {

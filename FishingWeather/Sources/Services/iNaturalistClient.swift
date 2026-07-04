@@ -42,6 +42,7 @@ final class INaturalistClient {
         }
         isLoading.insert(species)
         defer { isLoading.remove(species) }
+        lastError = nil
         do {
             let fetched = try await fetch(taxonName: taxonName, near: location, radiusMiles: radiusMiles)
             cache[key] = CacheEntry(timestamp: .now, sightings: fetched)
@@ -62,8 +63,10 @@ final class INaturalistClient {
 
         components.queryItems = [
             URLQueryItem(name: "taxon_name", value: taxonName),
-            URLQueryItem(name: "lat", value: String(location.coordinate.latitude)),
-            URLQueryItem(name: "lng", value: String(location.coordinate.longitude)),
+            // 2 decimals ≈ 1.1 km — plenty for a 50 mi radius, and it keeps
+            // precise user coordinates out of a third party's request logs.
+            URLQueryItem(name: "lat", value: String(format: "%.2f", location.coordinate.latitude)),
+            URLQueryItem(name: "lng", value: String(format: "%.2f", location.coordinate.longitude)),
             URLQueryItem(name: "radius", value: String(radiusKm)),
             URLQueryItem(name: "order_by", value: "observed_on"),
             URLQueryItem(name: "order", value: "desc"),
@@ -74,7 +77,9 @@ final class INaturalistClient {
         ]
         var request = URLRequest(url: components.url!)
         request.setValue("BiteCast/0.1", forHTTPHeaderField: "User-Agent")
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, urlResponse) = try await URLSession.shared.data(for: request)
+        // iNat throttles at ~60 req/min; surface a 429 as "busy", not a decode error.
+        try HTTPStatusError.validate(urlResponse)
         let response = try JSONDecoder().decode(Response.self, from: data)
         let dateFmt = DateFormatter()
         dateFmt.dateFormat = "yyyy-MM-dd"

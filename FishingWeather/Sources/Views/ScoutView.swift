@@ -137,14 +137,7 @@ struct ScoutView: View {
     }
 
     private func analyze(_ image: UIImage) {
-        Task { await scout.analyze(image: image, species: species, conditions: makeConditions()) }
-    }
-
-    private func makeConditions() -> FishingConditions? {
-        guard let current = weather.current,
-              let hourly = weather.hourly,
-              let today = weather.daily?.forecast.first else { return nil }
-        return FishingConditions.make(current: current, hourly: hourly, today: today)
+        Task { await scout.analyze(image: image, species: species, conditions: weather.conditions) }
     }
 }
 

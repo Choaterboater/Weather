@@ -1,12 +1,24 @@
+import CoreLocation
 import SwiftUI
 
 struct MainTabView: View {
     @Environment(LocationManager.self) private var location
     @Environment(SpotStore.self) private var spots
+    @Environment(WeatherStore.self) private var weather
+    @Environment(TideService.self) private var tides
     @AppStorage("selectedTab") private var selectedTab: String = "weather"
 
     private var locationTitle: String {
         spots.selectedSpot?.name ?? location.placeName ?? "Weather"
+    }
+
+    /// Pull-to-refresh must bypass the stores' caches — a location nudge alone
+    /// no longer re-keys the load tasks.
+    private func refresh() async {
+        location.refresh()
+        guard let active = spots.selectedSpot?.location ?? location.location else { return }
+        await weather.load(for: active, force: true)
+        await tides.load(near: active, force: true)
     }
 
     var body: some View {
@@ -16,7 +28,7 @@ struct MainTabView: View {
                     WeatherDashboardView()
                         .navigationTitle(locationTitle)
                         .navigationBarTitleDisplayMode(.inline)
-                        .refreshable { location.refresh() }
+                        .refreshable { await refresh() }
                 }
             }
             Tab("Fishing", systemImage: "fish.fill", value: "fishing") {
@@ -24,7 +36,7 @@ struct MainTabView: View {
                     FishingView()
                         .navigationTitle("Fishing")
                         .navigationBarTitleDisplayMode(.inline)
-                        .refreshable { location.refresh() }
+                        .refreshable { await refresh() }
                 }
             }
             Tab("Spots", systemImage: "mappin.and.ellipse", value: "spots") {

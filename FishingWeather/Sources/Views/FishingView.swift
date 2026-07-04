@@ -26,11 +26,13 @@ struct FishingView: View {
                 SpeciesPicker(selection: $species)
                     .padding(.top, 4)
 
-                if let conditions = makeConditions() {
+                if let conditions = weather.conditions {
                     FishingScoreCard(score: FishingScorer.score(
                         conditions: conditions,
                         species: species,
-                        tideEvents: showsTides ? tides.events : []
+                        // allEvents spans yesterday–tomorrow so late-evening
+                        // scoring sees the next event after midnight.
+                        tideEvents: showsTides ? tides.allEvents : []
                     ))
                     SpeciesFocusCard(species: species)
                     BaitEngineView(conditions: conditions, species: species, engine: engine)
@@ -49,32 +51,29 @@ struct FishingView: View {
                 } else if weather.isLoading {
                     ProgressView("Reading conditions…")
                         .padding(.top, 80)
-                } else if let loc = activeLocation, let cachedPressure = WeatherSnapshots.cachedPressure(for: loc) {
+                } else if let message = weather.errorMessage {
                     SpeciesFocusCard(species: species)
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                                Text(cachedPressure.pressure.formatted(.measurement(width: .abbreviated, usage: .barometric)))
-                                    .font(.title.weight(.semibold))
-                                    .contentTransition(.numericText())
-                                Label(cachedPressure.tendency.label, systemImage: cachedPressure.tendency.symbolName)
-                                    .font(.subheadline.weight(.medium))
-                                    .foregroundStyle(cachedPressure.tendency == .falling ? .green : .secondary)
-                                if let perHour = cachedPressure.changePerHour, abs(perHour) >= 0.1 {
-                                    Text(String(format: "%+.1f hPa/hr", perHour))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                    if let loc = activeLocation, let cachedPressure = WeatherSnapshots.cachedPressure(for: loc) {
+                        CachedPressureCard(reading: cachedPressure, samples: hourlySamples)
+                    }
+                    ContentUnavailableView {
+                        Label("Couldn't load conditions", systemImage: "wifi.slash")
+                    } description: {
+                        Text(message)
+                    } actions: {
+                        Button("Retry") {
+                            Task {
+                                if let activeLocation {
+                                    await weather.load(for: activeLocation, force: true)
                                 }
                             }
-                            Text(cachedPressure.tendency.fishingNote)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                            if !hourlySamples.isEmpty {
-                                PressureTrendChart(samples: hourlySamples, now: .now)
-                                    .padding(.top, 4)
-                            }
                         }
+                        .buttonStyle(.borderedProminent)
                     }
+                    .padding(.top, 8)
+                } else if let loc = activeLocation, let cachedPressure = WeatherSnapshots.cachedPressure(for: loc) {
+                    SpeciesFocusCard(species: species)
+                    CachedPressureCard(reading: cachedPressure, samples: hourlySamples)
                     ContentUnavailableView(
                         "Live weather unavailable",
                         systemImage: "cloud.slash",
@@ -130,19 +129,47 @@ struct FishingView: View {
         }
         return []
     }
-
-    private func makeConditions() -> FishingConditions? {
-        guard let current = weather.current,
-              let hourly = weather.hourly,
-              let today = weather.daily?.forecast.first else { return nil }
-        return FishingConditions.make(current: current, hourly: hourly, today: today)
-    }
 }
 
 private extension Double {
     func rounded(toPlaces places: Int) -> Double {
         let multiplier = pow(10.0, Double(places))
         return (self * multiplier).rounded() / multiplier
+    }
+}
+
+// MARK: - Cached pressure fallback
+
+/// Shown when live weather is unavailable but an offline snapshot exists.
+private struct CachedPressureCard: View {
+    let reading: PressureReading
+    var samples: [HourSample] = []
+
+    var body: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(reading.pressure.formatted(.measurement(width: .abbreviated, usage: .barometric)))
+                        .font(.title.weight(.semibold))
+                        .contentTransition(.numericText())
+                    Label(reading.tendency.label, systemImage: reading.tendency.symbolName)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(reading.tendency == .falling ? .green : .secondary)
+                    if let perHour = reading.changePerHour, abs(perHour) >= 0.1 {
+                        Text(String(format: "%+.1f hPa/hr", perHour))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Text(reading.tendency.fishingNote)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                if !samples.isEmpty {
+                    PressureTrendChart(samples: samples, now: .now)
+                        .padding(.top, 4)
+                }
+            }
+        }
     }
 }
 
@@ -199,6 +226,9 @@ private struct BiteWindowsCard: View {
                 }
             }
         }
+        // The card outlives its windows (weather refresh, spot switch): a
+        // "Reminder set" badge must not survive for a window it never covered.
+        .onChange(of: conditions.nextWindow()?.start) { reminderState = .none }
     }
 
     @ViewBuilder

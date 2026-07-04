@@ -11,13 +11,18 @@ struct RootView: View {
         spots.selectedSpot?.location ?? location.location
     }
 
-    /// Changes whenever the selected spot or the GPS coordinate changes, so the
-    /// load task re-runs on either.
+    /// Changes when the *active* coordinate changes: the spot's identity while
+    /// a saved spot is selected (GPS drift must not re-key it), otherwise the
+    /// GPS coordinate rounded to ~0.7 mi so every minor fix doesn't cancel an
+    /// in-flight fetch and refetch the full forecast.
     private var loadKey: String {
-        let selection = spots.selectedSpotID?.uuidString ?? "gps"
-        let lat = location.location?.coordinate.latitude ?? 0
-        let lon = location.location?.coordinate.longitude ?? 0
-        return "\(selection)-\(lat),\(lon)"
+        if let spot = spots.selectedSpot {
+            return "spot-\(spot.id.uuidString)"
+        }
+        guard let coord = location.location?.coordinate else { return "gps-none" }
+        let lat = (coord.latitude * 100).rounded() / 100
+        let lon = (coord.longitude * 100).rounded() / 100
+        return "gps-\(lat),\(lon)"
     }
 
     var body: some View {
