@@ -1,0 +1,171 @@
+import SwiftUI
+
+/// The Weekly Trip Planner screen: a ranked list of the coming week's best
+/// fishing windows for the active spot, reached from the Fishing tab. Purely
+/// presentational — the loader owns fetching and passes the outlook + state.
+struct TripPlannerView: View {
+    let outlook: WeekOutlook?
+    var isLoading: Bool = false
+    var errorMessage: String? = nil
+    var onRetry: (() -> Void)? = nil
+
+    var body: some View {
+        ScrollView {
+            content
+                .padding(.horizontal)
+                .padding(.bottom, 24)
+        }
+        .background(Ink.backdrop)
+        .navigationTitle("Plan the Week")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let outlook, !outlook.isEmpty {
+            GlassCardStack(spacing: 12) {
+                header(outlook)
+                ForEach(outlook.windows) { window in
+                    ScoredWindowRow(window: window)
+                }
+                legend
+            }
+        } else if isLoading {
+            ProgressView("Scoring the week…")
+                .padding(.top, 80)
+        } else if let errorMessage {
+            ContentUnavailableView {
+                Label("Couldn't load the forecast", systemImage: "cloud.slash")
+            } description: {
+                Text(errorMessage)
+            } actions: {
+                if let onRetry {
+                    Button("Try again", action: onRetry)
+                        .buttonStyle(.glassProminent)
+                }
+            }
+            .padding(.top, 60)
+        } else {
+            ContentUnavailableView(
+                "No strong windows this week",
+                systemImage: "calendar.badge.clock",
+                description: Text("Conditions look flat. Check back as the forecast firms up.")
+            )
+            .padding(.top, 60)
+        }
+    }
+
+    private func header(_ outlook: WeekOutlook) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Best This Week")
+                .font(.system(.title2, design: .rounded).weight(.bold))
+                .foregroundStyle(Ink.chart)
+            Text(outlook.locationName)
+                .instrumentLabel(Ink.brass)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+    }
+
+    private var legend: some View {
+        HStack(spacing: 14) {
+            legendItem(filled: true, "High confidence")
+            legendItem(filled: false, "Forecast further out")
+            Spacer()
+        }
+        .padding(.top, 4)
+        .padding(.horizontal, 4)
+    }
+
+    private func legendItem(filled: Bool, _ label: String) -> some View {
+        HStack(spacing: 5) {
+            Circle()
+                .strokeBorder(Ink.chartDim, lineWidth: filled ? 0 : 1.2)
+                .background(Circle().fill(filled ? Ink.chartDim : .clear))
+                .frame(width: 7, height: 7)
+            Text(label)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(Ink.chartDim)
+        }
+    }
+}
+
+private struct ScoredWindowRow: View {
+    let window: ScoredWindow
+
+    private var timeRange: String {
+        let start = window.start.formatted(date: .omitted, time: .shortened)
+        let end = window.end.formatted(date: .omitted, time: .shortened)
+        return "\(start) – \(end)"
+    }
+
+    var body: some View {
+        GlassCard {
+            HStack(spacing: 14) {
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 8) {
+                        Text(window.start, format: .dateTime.weekday(.wide))
+                            .font(.system(.subheadline, design: .rounded).weight(.bold))
+                        periodPill
+                    }
+                    Text(timeRange)
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                    scoreBar
+                    if !window.factors.isEmpty {
+                        Text(window.factors.joined(separator: " · "))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer(minLength: 8)
+
+                VStack(spacing: 4) {
+                    Text("\(window.score)")
+                        .font(.system(size: 30, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Ink.band(for: window.score))
+                    confidenceTag
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(window.start.formatted(date: .complete, time: .omitted)), \(timeRange), score \(window.score), \(window.confidence == .high ? "high" : "lower") confidence")
+    }
+
+    private var periodPill: some View {
+        Text(window.period.rawValue)
+            .font(.system(size: 9, weight: .bold, design: .monospaced))
+            .tracking(0.5)
+            .textCase(.uppercase)
+            .foregroundStyle(Ink.abyss)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(window.period == .major ? Ink.bite : Ink.brass, in: .capsule)
+    }
+
+    private var scoreBar: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Ink.hullLine)
+                Capsule()
+                    .fill(Ink.band(for: window.score))
+                    .frame(width: max(4, geo.size.width * CGFloat(window.score) / 100))
+            }
+        }
+        .frame(height: 5)
+    }
+
+    private var confidenceTag: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .strokeBorder(Ink.chartDim, lineWidth: window.confidence == .high ? 0 : 1)
+                .background(Circle().fill(window.confidence == .high ? Ink.chartDim : .clear))
+                .frame(width: 6, height: 6)
+            Text(window.confidence == .high ? "HIGH" : "LOW")
+                .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Ink.chartDim)
+        }
+    }
+}
