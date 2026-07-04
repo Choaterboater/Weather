@@ -9,11 +9,46 @@ struct DebugPreviewHost: View {
         if CommandLine.arguments.contains("guide") {
             NavigationStack { SpeciesGuideView() }
                 .environment(SpotStore())
+        } else if CommandLine.arguments.contains("tide") {
+            DebugTideCard()
         } else if CommandLine.arguments.contains("scorecard") {
             DebugScoreCard()
         } else {
             Text("Unknown -uiPreview target")
         }
+    }
+}
+
+private struct DebugTideCard: View {
+    private let start = Date.now.addingTimeInterval(-6 * 3600)
+
+    private var samples: [TideSample] {
+        (0..<49).map { i in
+            let t = Double(i) * 0.5 // hours
+            let h = 2.6 + 1.7 * sin((t / 12.42) * 2 * .pi + 1.0)
+            return TideSample(time: start.addingTimeInterval(t * 3600), heightFeet: h)
+        }
+    }
+
+    private var events: [TideEvent] {
+        [
+            TideEvent(time: start.addingTimeInterval(1.8 * 3600), kind: .low, heightFeet: 0.9),
+            TideEvent(time: start.addingTimeInterval(8.0 * 3600), kind: .high, heightFeet: 4.3),
+            TideEvent(time: start.addingTimeInterval(14.2 * 3600), kind: .low, heightFeet: 0.9),
+            TideEvent(time: start.addingTimeInterval(20.4 * 3600), kind: .high, heightFeet: 4.3),
+        ]
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                TideCard(events: events, samples: samples,
+                         stationName: "Fort De Soto", distanceMiles: 3, isLoading: false)
+            }
+            .padding(.horizontal)
+            .padding(.top, 20)
+        }
+        .background(Ink.backdrop)
     }
 }
 
