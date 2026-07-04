@@ -25,9 +25,23 @@ struct DebugPreviewHost: View {
             DebugScoreCard()
         } else if CommandLine.arguments.contains("patterns") {
             DebugPatterns()
+        } else if CommandLine.arguments.contains("settings") {
+            DebugSettings()
         } else {
             Text("Unknown -uiPreview target")
         }
+    }
+}
+
+private struct DebugSettings: View {
+    @State private var settings: AlertSettings = {
+        let s = AlertSettings()
+        s.preferences.enabled = true
+        return s
+    }()
+
+    var body: some View {
+        SettingsView().environment(settings)
     }
 }
 
