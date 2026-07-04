@@ -86,15 +86,15 @@ struct FishingView: View {
                 } else if weather.isLoading || (activeLocation != nil && weather.current == nil && weather.errorMessage == nil) {
                     ProgressView("Reading conditions…")
                         .padding(.top, 80)
-                } else if let message = weather.errorMessage {
+                } else if weather.errorMessage != nil {
                     SpeciesFocusCard(species: species)
                     if let loc = activeLocation, let cachedPressure = WeatherSnapshots.cachedPressure(for: loc) {
                         CachedPressureCard(reading: cachedPressure, samples: hourlySamples)
                     }
                     ContentUnavailableView {
-                        Label("Couldn't load conditions", systemImage: "wifi.slash")
+                        Label("Conditions unavailable", systemImage: "wifi.slash")
                     } description: {
-                        Text(message)
+                        Text("Couldn't reach the weather service. Pull to refresh, or retry once you're back online.")
                     } actions: {
                         Button("Retry") {
                             Task {
@@ -104,6 +104,7 @@ struct FishingView: View {
                             }
                         }
                         .buttonStyle(.glassProminent)
+                        .controlSize(.large)
                     }
                     .padding(.top, 8)
                 } else if let loc = activeLocation, let cachedPressure = WeatherSnapshots.cachedPressure(for: loc) {
