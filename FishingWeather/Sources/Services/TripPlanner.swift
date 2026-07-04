@@ -47,7 +47,9 @@ enum TripPlanner {
                     score: score.overall,
                     confidence: hourlyCond == nil ? .low : .high,
                     period: window.period,
-                    factors: topFactors(of: score),
+                    factors: makeFactors(window: window,
+                                         tendency: hourlyCond?.tendency,
+                                         score: score),
                     species: species
                 ))
             }
@@ -88,12 +90,32 @@ enum TripPlanner {
         return (nearest.windSpeedMph, tendency, changePerHour)
     }
 
-    /// The window's period plus the single highest-contributing scorer factor,
-    /// for the row's one-line "why".
-    private static func topFactors(of score: FishingScore, limit: Int = 2) -> [String] {
-        score.factors
-            .sorted { $0.contribution > $1.contribution }
-            .prefix(limit)
-            .map(\.label)
+    /// The window's period plus its most favorable non-solunar driver, as short
+    /// human phrases for the row's one-line "why" (e.g. "Major window",
+    /// "Falling pressure").
+    private static func makeFactors(
+        window: BiteWindow, tendency: PressureTendency?, score: FishingScore
+    ) -> [String] {
+        var result = ["\(window.period.rawValue) window"]
+
+        // Best-contributing non-solunar factor, only if it's genuinely favorable.
+        let driver = score.factors
+            .filter { $0.kind != .solunar }
+            .max { $0.contribution < $1.contribution }
+        if let driver, driver.raw >= 0.5 {
+            switch driver.kind {
+            case .pressure:
+                switch tendency {
+                case .falling: result.append("Falling pressure")
+                case .rising: result.append("Rising pressure")
+                default: result.append("Steady pressure")
+                }
+            case .tide: result.append("Moving tide")
+            case .wind: result.append("Good wind")
+            case .season: result.append("In season")
+            case .solunar: break
+            }
+        }
+        return result
     }
 }

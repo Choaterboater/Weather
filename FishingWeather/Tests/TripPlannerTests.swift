@@ -88,6 +88,16 @@ struct TripPlannerTests {
         #expect(outlook.isEmpty)
     }
 
+    @Test("Every window's why-line leads with its solunar period")
+    func factorsLeadWithPeriod() {
+        let outlook = TripPlanner.outlook(
+            days: [makeDay(0)], hourly: hourly, tidesByDay: [:],
+            species: .bass, locationName: "Lake", now: now, maxWindows: 100
+        )
+        #expect(!outlook.windows.isEmpty)
+        #expect(outlook.windows.allSatisfy { $0.factors.first?.hasSuffix("window") == true })
+    }
+
     @Test("Only future windows are included")
     func onlyFutureWindows() {
         // `now` is midday, so this morning's windows are already past.
