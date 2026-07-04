@@ -63,28 +63,13 @@ final class WeatherStore {
             isLoading = false
 
             // Persist a lightweight snapshot to disk for offline charts/pressure.
-            // Keyed by GeoTile (0.1 degree, ~11 km) — deliberately coarser than the
-            // 0.01-degree TTL cache key above; do not unify the two.
-            let samples = hourly.samples()
-            let pressure = PressureReading.analyze(current: current, hourly: hourly.forecast, now: .now)
-            let snapshotKey = GeoTile.key(lat: location.coordinate.latitude, lon: location.coordinate.longitude)
-            // Build a JSON entry compatible with WeatherSnapshots
-            struct SnapshotHour: Codable { let date: Date; let temperature: Double; let pressureHPa: Double; let precipChance: Double }
-            struct SnapshotPressure: Codable { let pressureHPa: Double; let tendency: String; let changePerHour: Double? }
-            struct SnapshotEntry: Codable { let timestamp: Date; let samples: [SnapshotHour]; let pressure: SnapshotPressure }
-            let entry = SnapshotEntry(
-                timestamp: .now,
-                samples: samples.map { SnapshotHour(date: $0.date, temperature: $0.temperature, pressureHPa: $0.pressureHPa, precipChance: $0.precipChance) },
-                pressure: SnapshotPressure(pressureHPa: pressure.pressure.converted(to: .hectopascals).value, tendency: pressure.tendency.label.lowercased(), changePerHour: pressure.changePerHour)
+            // WeatherSnapshots keys by GeoTile (0.1 degree, ~11 km) — deliberately
+            // coarser than the 0.01-degree TTL cache key above; do not unify the two.
+            WeatherSnapshots.save(
+                samples: hourly.samples(),
+                pressure: PressureReading.analyze(current: current, hourly: hourly.forecast, now: .now),
+                for: location
             )
-            let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
-            if let data = try? encoder.encode(entry) {
-                let fm = FileManager.default
-                let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("WeatherSnapshots", isDirectory: true)
-                try? fm.createDirectory(at: base, withIntermediateDirectories: true)
-                let file = base.appendingPathComponent("\(snapshotKey).json")
-                try? data.write(to: file, options: .atomic)
-            }
         } catch {
             guard id == loadID else { return }
             isLoading = false
