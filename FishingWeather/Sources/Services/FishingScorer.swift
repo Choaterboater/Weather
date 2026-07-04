@@ -9,6 +9,24 @@ import WeatherKit
 /// still sums to 1.0.
 enum FishingScorer {
 
+    // MARK: - Tunable parameters
+
+    /// Weighting between phase vs. window proximity in the solunar factor.
+    private static let solunarPhaseWeight: Double = 0.4
+    private static let solunarWindowWeight: Double = 0.6
+
+    /// Bias applied to proximity for major/minor windows.
+    private static let majorWindowBias: Double = 1.0
+    private static let minorWindowBias: Double = 0.85
+
+    /// Half-width (mph) around key thresholds where we blend wind scores to avoid cliffs.
+    private static let windThresholdHalfWidth: Double = 0.5
+
+    /// Maximum boost applied to the tide factor based on daily range (ft),
+    /// and the normalization divisor that maps typical ranges to small boosts.
+    private static let tideBoostCap: Double = 0.08
+    private static let tideBoostNormalization: Double = 10.0
+
     static func score(
         conditions: FishingConditions,
         species: Species,
@@ -62,6 +80,11 @@ enum FishingScorer {
             w_tide = 0
         }
 
+        #if DEBUG
+        let __sum = w_solunar + w_pressure + w_wind + w_tide + w_season
+        assert(abs(__sum - 1.0) < 0.0001, "FishingScorer: weights must sum to 1.0 (got \(__sum))")
+        #endif
+
         let solunar = scoreSolunar(moonPhase: moonPhase, activeWindow: activeWindow, nextWindow: nextWindow, now: now)
         let pressure = scorePressure(tendency: pressureTendency, changePerHour: pressureChangePerHour)
         let wind = scoreWind(mph: windMph)
@@ -87,7 +110,27 @@ enum FishingScorer {
 
     // MARK: - Per-factor scoring
 
-    private static func scoreSolunar(moonPhase: MoonPhase, activeWindow: BiteWindow?, nextWindow: BiteWindow?, now: Date) -> Subscore {
+    /// Smooth proximity to a bite window's peak, normalized to [0, 1].
+    /// Uses a cosine falloff across roughly two half-durations around peak,
+    /// and biases major windows slightly higher than minor.
+    private static func solunarProximity(window: BiteWindow, now: Date) -> Double {
+        let half = window.period.duration / 2
+        let dist = abs(window.peak.timeIntervalSince(now))
+        // Map distance to [0, 1] where 1 is at peak, 0 is far from it.
+        let x = max(0.0, 1.0 - dist / (2.0 * half))
+        // Cosine smoothing: 1 at peak, ~0 at the edge of the support.
+        let base = 0.5 * (1.0 + cos((1.0 - x) * .pi))
+        let bias = (window.period == .major) ? Self.majorWindowBias : Self.minorWindowBias
+        return min(1.0, max(0.0, base * bias))
+    }
+
+    private static func scoreSolunar(
+        moonPhase: MoonPhase,
+        activeWindow: BiteWindow?,
+        nextWindow: BiteWindow?,
+        now: Date
+    ) -> Subscore {
+        // Phase contribution: coarse but stable.
         let phaseScore: Double
         switch moonPhase {
         case .new, .full: phaseScore = 1.0
@@ -96,34 +139,33 @@ enum FishingScorer {
         @unknown default: phaseScore = 0.6
         }
 
+        // Window proximity contribution: smooth falloff around peak.
         let windowScore: Double
         let windowDetail: String
         if let active = activeWindow {
+            windowScore = solunarProximity(window: active, now: now)
             if active.period == .major {
-                windowScore = 1.0
                 windowDetail = "Major bite window active until \(active.end.formatted(date: .omitted, time: .shortened))"
             } else {
-                windowScore = 0.8
                 windowDetail = "Minor bite window active until \(active.end.formatted(date: .omitted, time: .shortened))"
             }
         } else if let next = nextWindow {
-            let minutes = next.peak.timeIntervalSince(now) / 60
+            windowScore = solunarProximity(window: next, now: now)
+            let minutes = Int(max(0, next.peak.timeIntervalSince(now) / 60))
             if minutes < 60 {
-                windowScore = 0.7
-                windowDetail = "Next window in \(Int(minutes)) min (\(next.period.rawValue.lowercased()))"
+                windowDetail = "Next window in \(minutes) min (\(next.period.rawValue.lowercased()))"
             } else if minutes < 180 {
-                windowScore = 0.5
-                windowDetail = "Next window in \(Int(minutes / 60)) hr"
+                windowDetail = "Next window in \(minutes / 60) hr"
             } else {
-                windowScore = 0.3
                 windowDetail = "No nearby bite window"
             }
         } else {
+            // No windows available today — keep a neutral-ish baseline.
             windowScore = 0.4
             windowDetail = "No solunar windows today"
         }
 
-        let raw = 0.4 * phaseScore + 0.6 * windowScore
+        let raw = Self.solunarPhaseWeight * phaseScore + Self.solunarWindowWeight * windowScore
         let detail = "\(moonPhase.displayName) — \(windowDetail)"
         return Subscore(raw: raw, detail: detail)
     }
@@ -144,22 +186,59 @@ enum FishingScorer {
     }
 
     private static func scoreWind(mph: Double) -> Subscore {
-        let raw: Double
+        // Base piecewise values
+        let base: Double
         let note: String
         switch mph {
         case ..<2:
-            raw = 0.55; note = "Glassy — fish can be spooky."
+            base = 0.55; note = "Glassy — fish can be spooky."
         case 2..<6:
-            raw = 0.85; note = "Light chop — good visibility under the surface."
+            base = 0.85; note = "Light chop — good visibility under the surface."
         case 6..<13:
-            raw = 1.0; note = "Ideal chop — moving water on the surface."
+            base = 1.0; note = "Ideal chop — moving water on the surface."
         case 13..<19:
-            raw = 0.65; note = "Breezy — tougher casting; fish lee shores."
+            base = 0.65; note = "Breezy — tougher casting; fish lee shores."
         case 19..<25:
-            raw = 0.4; note = "Strong wind — limited spot selection."
+            base = 0.4; note = "Strong wind — limited spot selection."
         default:
-            raw = 0.2; note = "Heavy wind — stay safe, watch the forecast."
+            base = 0.2; note = "Heavy wind — stay safe, watch the forecast."
         }
+
+        // Smooth transitions near key thresholds to avoid cliffs.
+        func lerp(_ a: Double, _ b: Double, _ t: Double) -> Double { a + (b - a) * min(max(t, 0), 1) }
+        var raw = base
+        let halfWidth = Self.windThresholdHalfWidth
+
+        // 2 mph threshold: 0.55 -> 0.85
+        if abs(mph - 2.0) <= halfWidth {
+            let t = (mph - (2.0 - halfWidth)) / (2 * halfWidth)
+            raw = lerp(0.55, 0.85, t)
+        }
+
+        // 6 mph threshold: 0.85 -> 1.0
+        if abs(mph - 6.0) <= halfWidth {
+            let t = (mph - (6.0 - halfWidth)) / (2 * halfWidth)
+            raw = lerp(0.85, 1.0, t)
+        }
+
+        // 13 mph threshold: 1.0 -> 0.65
+        if abs(mph - 13.0) <= halfWidth {
+            let t = (mph - (13.0 - halfWidth)) / (2 * halfWidth)
+            raw = lerp(1.0, 0.65, t)
+        }
+
+        // 19 mph threshold: 0.65 -> 0.40
+        if abs(mph - 19.0) <= halfWidth {
+            let t = (mph - (19.0 - halfWidth)) / (2 * halfWidth)
+            raw = lerp(0.65, 0.40, t)
+        }
+
+        // 25 mph threshold: 0.40 -> 0.20
+        if abs(mph - 25.0) <= halfWidth {
+            let t = (mph - (25.0 - halfWidth)) / (2 * halfWidth)
+            raw = lerp(0.40, 0.20, t)
+        }
+
         return Subscore(raw: raw, detail: "\(Int(mph)) mph — \(note)")
     }
 
@@ -167,12 +246,12 @@ enum FishingScorer {
         guard !events.isEmpty else {
             return Subscore(raw: 0.5, detail: "No tide data available.")
         }
-        // Find minutes to the nearest hi or low.
-        let nearest = events
-            .map { abs($0.time.timeIntervalSince(now)) / 60 }
-            .min() ?? 360
-        let raw: Double
-        let label: String
+        // Find minutes offset to the nearest hi or low (negative = past, positive = future).
+        let offsets = events.map { $0.time.timeIntervalSince(now) / 60 }
+        let nearestOffset = offsets.min(by: { abs($0) < abs($1) }) ?? 0
+        let nearest = abs(nearestOffset)
+        var raw: Double
+        var label: String
         switch nearest {
         case ..<20:
             raw = 0.5; label = "Slack water at the turn — bite often pauses."
@@ -185,12 +264,31 @@ enum FishingScorer {
         default:
             raw = 0.5; label = "Off-peak tide phase."
         }
-        return Subscore(raw: raw, detail: label)
+
+        // Small boost based on the day's tide range, when heights are available.
+        let heights = events.compactMap { $0.heightFeet }
+        if heights.count >= 2, let minH = heights.min(), let maxH = heights.max() {
+            let range = maxH - minH
+            let boost = min(Self.tideBoostCap, max(0.0, range / Self.tideBoostNormalization))
+            raw = min(1.0, raw + boost)
+        }
+
+        // Add timing hint for the nearest tide.
+        let suffix: String = {
+            let minutes = Int(nearest.rounded())
+            if nearest < 60 {
+                return nearestOffset >= 0 ? "Next tide in \(minutes) min" : "Last tide \(minutes) min ago"
+            } else {
+                let hours = Int((nearest / 60).rounded())
+                return nearestOffset >= 0 ? "Next tide in \(hours) hr" : "Last tide \(hours) hr ago"
+            }
+        }()
+        return Subscore(raw: raw, detail: "\(label) — \(suffix)")
     }
 
     private static func scoreSeason(species: Species, now: Date) -> Subscore {
         let month = Calendar.current.component(.month, from: now)
-        let peaks = peakMonths(for: species)
+        let peaks = species.peakMonths
         if peaks.isEmpty {
             return Subscore(raw: 0.7, detail: "Available year-round.")
         }
@@ -211,27 +309,39 @@ enum FishingScorer {
         return min(d, 12 - d)
     }
 
-    /// Rough peak feeding/availability months per species. Empty array means
-    /// "year-round; no strong seasonal bias".
-    private static func peakMonths(for species: Species) -> Set<Int> {
-        switch species {
-        case .all: []
-        case .bass: [3, 4, 5, 6, 9, 10, 11]
-        case .crappie: [2, 3, 4, 5]
-        case .catfish: [5, 6, 7, 8, 9]
-        case .bluegill: [5, 6, 7, 8]
-        case .redfish: [9, 10, 11]
-        case .speckledTrout: [3, 4, 5, 10, 11]
-        case .pompano: [3, 4, 5, 6, 10, 11]
-        case .flounder: [9, 10, 11]
-        case .sheepshead: [2, 3, 4]
-        case .snook: [4, 5, 6, 7, 8, 9]
-        case .mangroveSnapper: [5, 6, 7, 8, 9]
-        }
-    }
-
     private struct Subscore {
         let raw: Double
         let detail: String
     }
+    
+    #if DEBUG
+    /// Human-readable factor breakdown for quick tuning in debug builds.
+    static func debugDescribe(
+        moonPhase: MoonPhase,
+        activeWindow: BiteWindow?,
+        nextWindow: BiteWindow?,
+        pressureTendency: PressureTendency,
+        pressureChangePerHour: Double?,
+        windMph: Double,
+        species: Species,
+        tideEvents: [TideEvent] = [],
+        now: Date = .now
+    ) -> String {
+        let score = score(
+            moonPhase: moonPhase,
+            activeWindow: activeWindow,
+            nextWindow: nextWindow,
+            pressureTendency: pressureTendency,
+            pressureChangePerHour: pressureChangePerHour,
+            windMph: windMph,
+            species: species,
+            tideEvents: tideEvents,
+            now: now
+        )
+        let lines = score.factors.map { f in
+            "\(f.label): raw=\(Int((f.raw * 100).rounded()))% · weight=\(Int((f.weight * 100).rounded()))% → +\(f.contribution) — \(f.detail)"
+        }
+        return lines.joined(separator: "\n")
+    }
+    #endif
 }

@@ -150,3 +150,29 @@ enum Species: String, CaseIterable, Identifiable, Codable {
         }
     }
 }
+extension Species {
+    /// Rough peak feeding/availability months per species. Empty set means
+    /// year-round/no strong seasonal bias.
+    var peakMonths: Set<Int> {
+        switch self {
+        case .all: []
+        case .bass: [3, 4, 5, 6, 9, 10, 11]
+        case .crappie: [2, 3, 4, 5]
+        case .catfish: [5, 6, 7, 8, 9]
+        case .bluegill: [5, 6, 7, 8]
+        case .redfish: [9, 10, 11]
+        case .speckledTrout: [3, 4, 5, 10, 11]
+        case .pompano: [3, 4, 5, 6, 10, 11]
+        case .flounder: [9, 10, 11]
+        case .sheepshead: [2, 3, 4]
+        case .snook: [4, 5, 6, 7, 8, 9]
+        case .mangroveSnapper: [5, 6, 7, 8, 9]
+        }
+    }
+
+    func isInSeason(on date: Date) -> Bool {
+        let month = Calendar.current.component(.month, from: date)
+        return peakMonths.contains(month)
+    }
+}
+

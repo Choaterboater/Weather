@@ -65,17 +65,19 @@ struct TideCard: View {
                     .interpolationMethod(.catmullRom)
                 }
                 ForEach(events) { event in
-                    PointMark(
-                        x: .value("Time", event.time),
-                        y: .value("ft", event.heightFeet)
-                    )
-                    .symbol(.circle)
-                    .symbolSize(70)
-                    .foregroundStyle(event.kind == .high ? .blue : .teal)
-                    .annotation(position: .top, alignment: .center, spacing: 2) {
-                        Text(event.kind.label.first.map(String.init) ?? "")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(event.kind == .high ? .blue : .teal)
+                    if let h = event.heightFeet {
+                        PointMark(
+                            x: .value("Time", event.time),
+                            y: .value("ft", h)
+                        )
+                        .symbol(.circle)
+                        .symbolSize(70)
+                        .foregroundStyle(event.kind == .high ? .blue : .teal)
+                        .annotation(position: .top, alignment: .center, spacing: 2) {
+                            Text(event.kind.label.first.map(String.init) ?? "")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(event.kind == .high ? .blue : .teal)
+                        }
                     }
                 }
                 RuleMark(x: .value("Now", Date.now))
@@ -113,7 +115,7 @@ struct TideCard: View {
                     Text(event.time.formatted(date: .omitted, time: .shortened))
                         .font(.subheadline)
                         .monospacedDigit()
-                    Text(String(format: "%.1f ft", event.heightFeet))
+                    Text(event.heightFeet.map { String(format: "%.1f ft", $0) } ?? "—")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .frame(width: 56, alignment: .trailing)
@@ -139,3 +141,4 @@ struct TideCard: View {
         .foregroundStyle(.secondary)
     }
 }
+

@@ -24,7 +24,7 @@ struct TideEvent: Identifiable, Equatable {
     let id = UUID()
     let time: Date
     let kind: Kind
-    let heightFeet: Double
+    let heightFeet: Double?
 }
 
 /// One sample on the continuous tide curve, used by the chart.
