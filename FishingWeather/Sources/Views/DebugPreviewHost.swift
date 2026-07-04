@@ -23,9 +23,42 @@ struct DebugPreviewHost: View {
             DebugTideCard()
         } else if CommandLine.arguments.contains("scorecard") {
             DebugScoreCard()
+        } else if CommandLine.arguments.contains("patterns") {
+            DebugPatterns()
         } else {
             Text("Unknown -uiPreview target")
         }
+    }
+}
+
+private struct DebugPatterns: View {
+    private var catches: [CatchEntry] {
+        let base = Date(timeIntervalSince1970: 1_700_000_000)
+        func c(_ bait: String, _ pressure: String, _ moon: String, _ hour: Int, _ day: Int) -> CatchEntry {
+            CatchEntry(date: base.addingTimeInterval(Double(day) * 86_400 + Double(hour) * 3600),
+                       species: .bass, bait: bait, pressureTendency: pressure, moonPhase: moon)
+        }
+        return [
+            c("Chatterbait", "Falling", "First Quarter", 6, 0),
+            c("Chatterbait", "Falling", "First Quarter", 7, 2),
+            c("Chatterbait", "Falling", "Last Quarter", 6, 5),
+            c("Chatterbait", "Falling", "First Quarter", 8, 8),
+            c("Chatterbait", "Falling", "First Quarter", 7, 11),
+            c("Chatterbait", "Falling", "Last Quarter", 6, 12),
+            c("Jig", "Falling", "First Quarter", 6, 14),
+            c("Jig", "Falling", "First Quarter", 9, 17),
+            c("Jig", "Steady", "First Quarter", 7, 20),
+            c("Spinnerbait", "Falling", "Last Quarter", 6, 23),
+            c("Spinnerbait", "Falling", "First Quarter", 15, 26),
+            c("Jig", "Falling", "First Quarter", 8, 32),
+        ]
+    }
+
+    var body: some View {
+        YourPatternsView(
+            insights: PersonalInsightsBuilder.build(from: catches, species: .bass),
+            species: .bass
+        )
     }
 }
 

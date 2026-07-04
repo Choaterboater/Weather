@@ -11,6 +11,7 @@ struct FishingView: View {
     @Environment(CatchLog.self) private var catchLog
     @AppStorage("selectedSpecies") private var species: Species = .all
     @State private var engine = BaitEngine()
+    @State private var showsPatterns = false
 
     /// Weights tuned to the angler's catch history for the active species —
     /// standard weights until they've logged enough catches to learn from.
@@ -53,7 +54,8 @@ struct FishingView: View {
                                 weights: personalWeights,
                                 now: context.date
                             ),
-                            tunedCount: tunedCatchCount
+                            tunedCount: tunedCatchCount,
+                            onTapTuned: { showsPatterns = true }
                         )
                     }
                     SpeciesFocusCard(species: species)
@@ -122,6 +124,12 @@ struct FishingView: View {
             .padding(.bottom, 24)
         }
         .background(Ink.backdrop)
+        .sheet(isPresented: $showsPatterns) {
+            YourPatternsView(
+                insights: PersonalInsightsBuilder.build(from: catchLog.entries, species: species),
+                species: species
+            )
+        }
         .task(id: activeLocationKey) {
             if let coordinate = activeLocation {
                 await tides.load(near: coordinate)
