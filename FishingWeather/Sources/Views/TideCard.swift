@@ -57,7 +57,7 @@ struct TideCard: View {
                     )
                     .foregroundStyle(
                         LinearGradient(
-                            colors: [.cyan.opacity(0.45), .cyan.opacity(0.05)],
+                            colors: [Ink.tide.opacity(0.45), Ink.tide.opacity(0.04)],
                             startPoint: .top,
                             endPoint: .bottom
                         )
@@ -66,7 +66,7 @@ struct TideCard: View {
                         x: .value("Time", sample.time),
                         y: .value("ft", sample.heightFeet)
                     )
-                    .foregroundStyle(.cyan)
+                    .foregroundStyle(Ink.tide)
                     .interpolationMethod(.catmullRom)
                 }
                 ForEach(events) { event in
@@ -77,16 +77,16 @@ struct TideCard: View {
                         )
                         .symbol(.circle)
                         .symbolSize(70)
-                        .foregroundStyle(event.kind == .high ? .blue : .teal)
+                        .foregroundStyle(event.kind == .high ? Ink.brass : Ink.tide)
                         .annotation(position: .top, alignment: .center, spacing: 2) {
                             Text(event.kind.label.first.map(String.init) ?? "")
                                 .font(.caption2.weight(.bold))
-                                .foregroundStyle(event.kind == .high ? .blue : .teal)
+                                .foregroundStyle(event.kind == .high ? Ink.brass : Ink.tide)
                         }
                     }
                 }
                 RuleMark(x: .value("Now", Date.now))
-                    .foregroundStyle(.orange.opacity(0.6))
+                    .foregroundStyle(.secondary.opacity(0.7))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
             }
             .chartXAxis {
@@ -111,7 +111,7 @@ struct TideCard: View {
             ForEach(events) { event in
                 HStack(spacing: 12) {
                     Image(systemName: event.kind.symbolName)
-                        .foregroundStyle(event.kind == .high ? .blue : .teal)
+                        .foregroundStyle(event.kind == .high ? Ink.brass : Ink.tide)
                         .font(.headline)
                         .frame(width: 22)
                     Text(event.kind.label)

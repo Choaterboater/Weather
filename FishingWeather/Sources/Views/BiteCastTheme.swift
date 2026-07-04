@@ -13,6 +13,7 @@ enum Ink {
     static let brass    = Color(red: 0.878, green: 0.627, blue: 0.235) // #E0A03C accent
     static let bite     = Color(red: 0.247, green: 0.725, blue: 0.541) // #3FB98A go
     static let slack    = Color(red: 0.776, green: 0.314, blue: 0.243) // #C6503E caution
+    static let tide     = Color(red: 0.302, green: 0.678, blue: 0.784) // #4DADC8 water
 
     /// Score-band color on the marine palette (bite → brass → slack).
     static func band(for score: Int) -> Color {
