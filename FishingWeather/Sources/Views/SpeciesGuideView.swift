@@ -5,10 +5,14 @@ import SwiftUI
 struct SpeciesGuideView: View {
     @Environment(SpotStore.self) private var spots
     @State private var waterFilter: WaterType? = nil
+    /// Once the user taps a chip, stop auto-applying the spot's water type.
+    @State private var userPickedFilter = false
+    @State private var didApplyDefault = false
 
-    /// Inferred default filter: if the active spot is saltwater, start there.
+    /// Inferred default filter: salt/fresh from the active spot; brackish → All.
     private var defaultFilter: WaterType? {
-        spots.selectedSpot?.waterType
+        guard let type = spots.selectedSpot?.waterType, type != .brackish else { return nil }
+        return type
     }
 
     private var species: [Species] {
@@ -23,14 +27,23 @@ struct SpeciesGuideView: View {
             // cards weld together across the grid's column gutter.
             GlassCardStack(spacing: 16, mergeSpacing: 8) {
                 filterChips
-                LazyVGrid(columns: columns, spacing: 12) {
-                    ForEach(species) { species in
-                        NavigationLink {
-                            SpeciesDetailView(species: species)
-                        } label: {
-                            SpeciesCard(species: species)
+                if species.isEmpty {
+                    ContentUnavailableView(
+                        "No species for this filter",
+                        systemImage: "fish",
+                        description: Text("Try All, or pick freshwater or saltwater.")
+                    )
+                    .padding(.top, 40)
+                } else {
+                    LazyVGrid(columns: columns, spacing: 12) {
+                        ForEach(species) { species in
+                            NavigationLink {
+                                SpeciesDetailView(species: species)
+                            } label: {
+                                SpeciesCard(species: species)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -45,17 +58,25 @@ struct SpeciesGuideView: View {
             )
             .ignoresSafeArea()
         )
-        .onAppear {
-            if waterFilter == nil, let inferred = defaultFilter {
-                waterFilter = inferred
-            }
+        .onAppear(perform: applyDefaultFilter)
+        .onChange(of: spots.selectedSpotID) {
+            guard !userPickedFilter else { return }
+            didApplyDefault = false
+            applyDefaultFilter()
         }
+    }
+
+    private func applyDefaultFilter() {
+        guard !userPickedFilter, !didApplyDefault else { return }
+        waterFilter = defaultFilter
+        didApplyDefault = true
     }
 
     @ViewBuilder
     private var filterChips: some View {
         HStack(spacing: 8) {
             chip(title: "All", isSelected: waterFilter == nil) {
+                userPickedFilter = true
                 waterFilter = nil
             }
             ForEach(WaterType.allCases.filter { $0 != .brackish }) { type in
@@ -64,6 +85,7 @@ struct SpeciesGuideView: View {
                     systemImage: type.symbolName,
                     isSelected: waterFilter == type
                 ) {
+                    userPickedFilter = true
                     waterFilter = type
                 }
             }

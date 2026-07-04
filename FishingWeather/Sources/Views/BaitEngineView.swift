@@ -3,6 +3,7 @@ import SwiftUI
 struct BaitEngineView: View {
     let conditions: FishingConditions
     let species: Species
+    var tideEvents: [TideEvent] = []
     let engine: BaitEngine
 
     @State private var question = ""
@@ -34,7 +35,13 @@ struct BaitEngineView: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                         Button("Get recommendation", systemImage: "wand.and.stars") {
-                            Task { await engine.generate(conditions: conditions, species: species) }
+                            Task {
+                                await engine.generate(
+                                    conditions: conditions,
+                                    species: species,
+                                    tideEvents: tideEvents
+                                )
+                            }
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -62,7 +69,13 @@ struct BaitEngineView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Button("Try again") {
-                            Task { await engine.generate(conditions: conditions, species: species) }
+                            Task {
+                                await engine.generate(
+                                    conditions: conditions,
+                                    species: species,
+                                    tideEvents: tideEvents
+                                )
+                            }
                         }
                         .buttonStyle(.bordered)
                     }

@@ -1,15 +1,24 @@
+import CoreLocation
 import PhotosUI
 import SwiftUI
 import UIKit
 
 struct ScoutView: View {
     @Environment(WeatherStore.self) private var weather
+    @Environment(SpotStore.self) private var spots
+    @Environment(LocationManager.self) private var location
     @AppStorage("selectedSpecies") private var species: Species = .all
 
     @State private var scout = WaterScout()
     @State private var image: UIImage?
     @State private var pickerItem: PhotosPickerItem?
     @State private var showCamera = false
+
+    private var liveConditions: FishingConditions? {
+        guard let loc = spots.selectedSpot?.location ?? location.location,
+              weather.hasData(for: loc) else { return nil }
+        return weather.conditions
+    }
 
     var body: some View {
         ScrollView {
@@ -52,6 +61,10 @@ struct ScoutView: View {
                     analyze(picked)
                 }
             }
+        }
+        .onChange(of: species) {
+            scout.reset()
+            if let image { analyze(image) }
         }
     }
 
@@ -137,7 +150,7 @@ struct ScoutView: View {
     }
 
     private func analyze(_ image: UIImage) {
-        Task { await scout.analyze(image: image, species: species, conditions: weather.conditions) }
+        Task { await scout.analyze(image: image, species: species, conditions: liveConditions) }
     }
 }
 

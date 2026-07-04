@@ -11,31 +11,40 @@ struct FishingView: View {
     @AppStorage("selectedSpecies") private var species: Species = .all
     @State private var engine = BaitEngine()
 
-    /// True when the active spot is saltwater, or unknown and tide data came back.
+    /// True when the active spot is salt/brackish, or (no spot) we're loading /
+    /// have / failed a coastal tide fetch — so the card isn't hidden mid-load.
     private var showsTides: Bool {
         if let waterType = spots.selectedSpot?.waterType {
             return waterType != .freshwater
         }
-        // Unknown water type: trust whether NOAA found a nearby station.
-        return tides.station != nil
+        return tides.isLoading || tides.station != nil || tides.lastError != nil
     }
 
     var body: some View {
         ScrollView {
             GlassCardStack(spacing: 20) {
-                SpeciesPicker(selection: $species)
+                SpeciesPicker(selection: $species, waterType: spots.selectedSpot?.waterType)
                     .padding(.top, 4)
 
-                if let conditions = weather.conditions {
-                    FishingScoreCard(score: FishingScorer.score(
+                if let conditions = liveConditions {
+                    // Re-evaluate score / active windows as the clock moves.
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                        FishingScoreCard(score: FishingScorer.score(
+                            conditions: conditions,
+                            species: species,
+                            // allEvents spans yesterday–tomorrow so late-evening
+                            // scoring sees the next event after midnight.
+                            tideEvents: showsTides ? tides.allEvents : [],
+                            now: context.date
+                        ))
+                    }
+                    SpeciesFocusCard(species: species)
+                    BaitEngineView(
                         conditions: conditions,
                         species: species,
-                        // allEvents spans yesterday–tomorrow so late-evening
-                        // scoring sees the next event after midnight.
-                        tideEvents: showsTides ? tides.allEvents : []
-                    ))
-                    SpeciesFocusCard(species: species)
-                    BaitEngineView(conditions: conditions, species: species, engine: engine)
+                        tideEvents: showsTides ? tides.allEvents : [],
+                        engine: engine
+                    )
                     BiteWindowsCard(conditions: conditions)
                     if showsTides {
                         TideCard(
@@ -43,12 +52,13 @@ struct FishingView: View {
                             samples: tides.samples,
                             stationName: tides.station?.name,
                             distanceMiles: tides.distanceMiles,
-                            isLoading: tides.isLoading
+                            isLoading: tides.isLoading,
+                            lastError: tides.lastError
                         )
                     }
                     PressureCard(reading: conditions.pressure, samples: hourlySamples)
                     SolunarDetailsCard(conditions: conditions)
-                } else if weather.isLoading {
+                } else if weather.isLoading || (activeLocation != nil && weather.current == nil && weather.errorMessage == nil) {
                     ProgressView("Reading conditions…")
                         .padding(.top, 80)
                 } else if let message = weather.errorMessage {
@@ -107,11 +117,18 @@ struct FishingView: View {
             }
         }
         .onChange(of: species) { engine.reset() }
+        .onChange(of: activeLocationKey) { engine.reset() }
         .sensoryFeedback(.selection, trigger: species)
     }
 
     private var activeLocation: CLLocation? {
         spots.selectedSpot?.location ?? location.location
+    }
+
+    /// Only present weather that belongs to the active location.
+    private var liveConditions: FishingConditions? {
+        guard let activeLocation, weather.hasData(for: activeLocation) else { return nil }
+        return weather.conditions
     }
 
     /// Re-keys the tide task whenever the active spot or GPS coordinate changes.
@@ -121,7 +138,8 @@ struct FishingView: View {
     }
 
     private var hourlySamples: [HourSample] {
-        if let live = weather.hourly?.samples(), !live.isEmpty {
+        if let loc = activeLocation, weather.hasData(for: loc),
+           let live = weather.hourly?.samples(), !live.isEmpty {
             return live
         }
         if let loc = activeLocation {
@@ -210,18 +228,20 @@ private struct BiteWindowsCard: View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: "Bite Windows", systemImage: "timer")
             GlassCard {
-                VStack(alignment: .leading, spacing: 14) {
-                    headline
-                    if conditions.windows.isEmpty {
-                        Text("No solunar windows for today (moonrise/moonset unavailable).")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        BiteWindowsTimeline(windows: conditions.windows, now: .now)
-                        ForEach(conditions.windows) { window in
-                            BiteWindowRow(window: window)
+                TimelineView(.periodic(from: .now, by: 60)) { context in
+                    VStack(alignment: .leading, spacing: 14) {
+                        headline(at: context.date)
+                        if conditions.windows.isEmpty {
+                            Text("No solunar windows for today (moonrise/moonset unavailable).")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            BiteWindowsTimeline(windows: conditions.windows, now: context.date)
+                            ForEach(conditions.windows) { window in
+                                BiteWindowRow(window: window, now: context.date)
+                            }
+                            reminderControl(at: context.date)
                         }
-                        reminderControl
                     }
                 }
             }
@@ -232,8 +252,8 @@ private struct BiteWindowsCard: View {
     }
 
     @ViewBuilder
-    private var reminderControl: some View {
-        if let next = conditions.nextWindow() {
+    private func reminderControl(at date: Date) -> some View {
+        if let next = conditions.nextWindow(after: date) {
             Group {
                 switch reminderState {
                 case .none:
@@ -271,8 +291,8 @@ private struct BiteWindowsCard: View {
     }
 
     @ViewBuilder
-    private var headline: some View {
-        if let active = conditions.activeWindow() {
+    private func headline(at date: Date) -> some View {
+        if let active = conditions.activeWindow(at: date) {
             Label {
                 Text("\(active.period.rawValue) window now — until \(active.end.formatted(date: .omitted, time: .shortened))")
                     .font(.headline)
@@ -281,7 +301,7 @@ private struct BiteWindowsCard: View {
                     .foregroundStyle(.green)
                     .symbolEffect(.variableColor.iterative, options: .repeating)
             }
-        } else if let next = conditions.nextWindow() {
+        } else if let next = conditions.nextWindow(after: date) {
             Label {
                 Text("Next: \(next.period.rawValue) at \(next.peak.formatted(date: .omitted, time: .shortened))")
                     .font(.headline)
@@ -298,8 +318,9 @@ private struct BiteWindowsCard: View {
 
 private struct BiteWindowRow: View {
     let window: BiteWindow
+    var now: Date = .now
 
-    private var isActive: Bool { window.isActive(at: .now) }
+    private var isActive: Bool { window.isActive(at: now) }
 
     private var timeRange: String {
         let start = window.start.formatted(date: .omitted, time: .shortened)

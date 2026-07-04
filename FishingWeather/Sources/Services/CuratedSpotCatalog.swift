@@ -1,4 +1,5 @@
 import CoreLocation
+import CryptoKit
 import Foundation
 
 /// Loads bundled curated fishing spots and answers proximity queries against
@@ -51,6 +52,7 @@ final class CuratedSpotCatalog {
         }
         spots = wrapper.spots.map { entry in
             FishingSpot(
+                id: Self.stableID(name: entry.name, latitude: entry.latitude, longitude: entry.longitude),
                 name: entry.name,
                 latitude: entry.latitude,
                 longitude: entry.longitude,
@@ -61,5 +63,18 @@ final class CuratedSpotCatalog {
                 notes: entry.notes
             )
         }
+    }
+
+    /// Deterministic ID so "Set as active" doesn't mint a new saved copy every launch.
+    nonisolated static func stableID(name: String, latitude: Double, longitude: Double) -> UUID {
+        let key = "\(name)|\(String(format: "%.5f", latitude))|\(String(format: "%.5f", longitude))"
+        let digest = SHA256.hash(data: Data(key.utf8))
+        let bytes = Array(digest.prefix(16))
+        return UUID(uuid: (
+            bytes[0], bytes[1], bytes[2], bytes[3],
+            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[8], bytes[9], bytes[10], bytes[11],
+            bytes[12], bytes[13], bytes[14], bytes[15]
+        ))
     }
 }

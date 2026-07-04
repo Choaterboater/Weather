@@ -32,17 +32,22 @@ final class FishRecognizer {
             // 1) On-device Core ML model
             if let classifier = CoreMLFishClassifier(),
                let hit = await classifier.classify(imageData: data) {
+                guard !Task.isCancelled else { return }
                 let made = Self.make(label: hit.label, confidence: hit.confidence)
                 await MainActor.run {
+                    guard !Task.isCancelled else { return }
                     currentSelf.result = made
                     currentSelf.status = .ready
                 }
                 return
             }
 
+            guard !Task.isCancelled else { return }
+
             // 2) Cloud vision model via Replicate, if a token is set
             guard let client = ReplicateVisionClient() else {
                 await MainActor.run {
+                    guard !Task.isCancelled else { return }
                     currentSelf.status = .unavailable("For fish ID, bundle a Core ML model (FishClassifier) for on-device use, or add a Replicate API token.")
                 }
                 return
@@ -50,13 +55,17 @@ final class FishRecognizer {
 
             do {
                 let text = try await client.identify(imageData: data, prompt: prompt)
+                guard !Task.isCancelled else { return }
                 let parsed = Self.parse(text)
                 await MainActor.run {
+                    guard !Task.isCancelled else { return }
                     currentSelf.result = parsed
                     currentSelf.status = .ready
                 }
             } catch {
+                guard !Task.isCancelled else { return }
                 await MainActor.run {
+                    guard !Task.isCancelled else { return }
                     currentSelf.status = .failed(error.localizedDescription)
                 }
             }
@@ -65,20 +74,20 @@ final class FishRecognizer {
 
     func reset() {
         task?.cancel()
+        task = nil
         status = .idle
         result = nil
     }
 
     private static let prompt = """
-    Identify the freshwater fish species in this photo. Reply with the common \
-    name only, for example "Largemouth Bass" or "Black Crappie". If it is not a \
-    fish or you are unsure, say "Unknown".
+    Identify the fish species in this photo (freshwater or saltwater). Reply with \
+    the common name only, for example "Largemouth Bass", "Redfish", or "Speckled Trout". \
+    If it is not a fish or you are unsure, say "Unknown".
     """
 
     /// Builds a result from a Core ML classification label + confidence.
     nonisolated static func make(label: String, confidence: Float) -> FishIdentification {
-        let lower = label.lowercased()
-        let matched = Species.allCases.first { $0 != .all && lower.contains($0.rawValue) }
+        let matched = matchSpecies(in: label)
         let percent = Int((confidence * 100).rounded())
         return FishIdentification(
             commonName: label,
@@ -91,13 +100,41 @@ final class FishRecognizer {
         let name = text
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "\n", with: " ")
-        let lower = name.lowercased()
-        let matched = Species.allCases.first { $0 != .all && lower.contains($0.rawValue) }
+        let matched = matchSpecies(in: name)
         return FishIdentification(
             commonName: name.isEmpty ? "Unknown" : name,
             matchedSpecies: matched,
             note: matched == nil ? "Not one of the tracked species." : ""
         )
+    }
+
+    /// Match on display name and common aliases, not just camelCase raw values.
+    nonisolated static func matchSpecies(in text: String) -> Species? {
+        let lower = text.lowercased()
+        // Prefer longer display names first so "mangrove snapper" beats "snapper".
+        let candidates = Species.allCases
+            .filter { $0 != .all }
+            .sorted { $0.displayName.count > $1.displayName.count }
+        for species in candidates {
+            if lower.contains(species.displayName.lowercased()) { return species }
+            if lower.contains(species.rawValue.lowercased()) { return species }
+        }
+        // Aliases the model commonly returns.
+        let aliases: [(String, Species)] = [
+            ("largemouth", .bass),
+            ("black bass", .bass),
+            ("red drum", .redfish),
+            ("channel cat", .catfish),
+            ("spotted seatrout", .speckledTrout),
+            ("speckled seatrout", .speckledTrout),
+            ("seatrout", .speckledTrout),
+            ("gray snapper", .mangroveSnapper),
+            ("grey snapper", .mangroveSnapper),
+        ]
+        for (alias, species) in aliases where lower.contains(alias) {
+            return species
+        }
+        return nil
     }
 
     private nonisolated static func downscaled(_ image: UIImage, maxDimension: CGFloat = 768) -> UIImage {

@@ -57,10 +57,19 @@ final class TideService {
 
     func load(near location: CLLocation, on date: Date = .now, force: Bool = false) async {
         let key = Self.locationKey(location, date: date)
-        if !force, key == lastKey { return }
         loadID += 1
         let id = loadID
 
+        if !force, key == lastKey {
+            isLoading = false
+            return
+        }
+
+        // Drop prior-location tides so the card can't show another station's curve.
+        if lastKey != key {
+            clear()
+            lastKey = nil
+        }
         isLoading = true
         lastError = nil
 
@@ -153,6 +162,10 @@ final class TideService {
         let (data, response) = try await URLSession.shared.data(from: url)
         try HTTPStatusError.validate(response)
         let stations = try decodeStations(data)
+        // Never persist an empty catalog — it would suppress tides for 30 days.
+        guard !stations.isEmpty else {
+            throw NOAADataError(message: "No tide stations returned.")
+        }
         try? data.write(to: cacheURL, options: .atomic)
         return stations
     }

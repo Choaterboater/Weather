@@ -12,14 +12,14 @@ struct SpeciesDetailView: View {
     @Environment(INaturalistClient.self) private var inaturalist
     @AppStorage("selectedSpecies") private var selectedSpecies: Species = .all
 
-    @State private var stateCode: String
+    @State private var stateCode: String?
     /// Once the user picks a state from the menu, stop auto-tracking their
     /// location so a late-arriving geocode can't yank the selection back.
     @State private var userPickedState = false
 
     init(species: Species) {
         self.species = species
-        _stateCode = State(initialValue: "FL")
+        _stateCode = State(initialValue: nil)
     }
 
     private var here: CLLocation? {
@@ -41,12 +41,18 @@ struct SpeciesDetailView: View {
         )
     }
 
+    private var resolvedStateCode: String? {
+        stateCode ?? defaultStateCode
+    }
+
     private var regulation: Regulation? {
-        regulations.regulation(for: species, in: stateCode)
+        guard let resolvedStateCode else { return nil }
+        return regulations.regulation(for: species, in: resolvedStateCode)
     }
 
     private var stateInfo: StateRegulations? {
-        regulations.stateInfo(stateCode)
+        guard let resolvedStateCode else { return nil }
+        return regulations.stateInfo(resolvedStateCode)
     }
 
     var body: some View {
@@ -85,8 +91,8 @@ struct SpeciesDetailView: View {
     }
 
     private func applyDefaultState() {
-        guard !userPickedState, let code = defaultStateCode else { return }
-        stateCode = code
+        guard !userPickedState else { return }
+        stateCode = defaultStateCode
     }
 
     private var sightingsKey: String {
@@ -134,7 +140,7 @@ struct SpeciesDetailView: View {
     }
 
     private var inSeasonCard: some View {
-        let inSeason = isInSeason(species: species, on: .now)
+        let inSeason = species.isInSeason(on: .now)
         return GlassCard {
             HStack(spacing: 12) {
                 Image(systemName: inSeason ? "circle.fill" : "circle")
@@ -164,8 +170,12 @@ struct SpeciesDetailView: View {
                     statePicker
                     if let regulation {
                         regulationDetail(regulation)
+                    } else if let resolvedStateCode {
+                        Text("No regulation data on file for \(species.displayName.lowercased()) in \(resolvedStateCode).")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     } else {
-                        Text("No regulation data on file for \(species.displayName.lowercased()) in \(stateCode).")
+                        Text("Waiting for location to pick a state…")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -191,7 +201,7 @@ struct SpeciesDetailView: View {
     private var statePicker: some View {
         if regulations.loadedStateCodes.count > 1 {
             Picker("State", selection: Binding(
-                get: { stateCode },
+                get: { resolvedStateCode ?? regulations.loadedStateCodes[0] },
                 set: { stateCode = $0; userPickedState = true }
             )) {
                 ForEach(regulations.loadedStateCodes, id: \.self) { code in
@@ -241,7 +251,7 @@ struct SpeciesDetailView: View {
             VStack(alignment: .leading, spacing: 8) {
                 SectionHeader(title: "Recently Seen Nearby", systemImage: "binoculars")
                 GlassCard {
-                    if inaturalist.isLoading.contains(species) && sightings.isEmpty {
+                    if inaturalist.isLoading.contains(species) {
                         HStack {
                             ProgressView()
                             Text("Searching iNaturalist…")
@@ -249,7 +259,7 @@ struct SpeciesDetailView: View {
                                 .foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    } else if let error = inaturalist.lastError, sightings.isEmpty {
+                    } else if let error = inaturalist.lastError[species], sightings.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
                             Label(error, systemImage: "exclamationmark.triangle")
                                 .font(.caption)
@@ -370,27 +380,6 @@ struct SpeciesDetailView: View {
         }
     }
 
-    private func isInSeason(species: Species, on date: Date) -> Bool {
-        // Same data the scorer uses; duplicated as a small local table to
-        // avoid coupling to the scorer's internals.
-        let month = Calendar.current.component(.month, from: date)
-        let peaks: Set<Int>
-        switch species {
-        case .all: return true
-        case .bass: peaks = [3, 4, 5, 6, 9, 10, 11]
-        case .crappie: peaks = [2, 3, 4, 5]
-        case .catfish: peaks = [5, 6, 7, 8, 9]
-        case .bluegill: peaks = [5, 6, 7, 8]
-        case .redfish: peaks = [9, 10, 11]
-        case .speckledTrout: peaks = [3, 4, 5, 10, 11]
-        case .pompano: peaks = [3, 4, 5, 6, 10, 11]
-        case .flounder: peaks = [9, 10, 11]
-        case .sheepshead: peaks = [2, 3, 4]
-        case .snook: peaks = [4, 5, 6, 7, 8, 9]
-        case .mangroveSnapper: peaks = [5, 6, 7, 8, 9]
-        }
-        return peaks.contains(month)
-    }
 }
 
 private struct SightingRow: View {

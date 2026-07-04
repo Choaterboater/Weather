@@ -10,12 +10,13 @@ struct TideCard: View {
     let stationName: String?
     let distanceMiles: Double?
     let isLoading: Bool
+    var lastError: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: "Tides", systemImage: "water.waves")
             GlassCard {
-                if isLoading && events.isEmpty {
+                if isLoading {
                     HStack {
                         ProgressView()
                         Text("Loading tide predictions…")
@@ -23,6 +24,10 @@ struct TideCard: View {
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                } else if let lastError {
+                    Label(lastError, systemImage: "wifi.slash")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 } else if events.isEmpty && samples.isEmpty {
                     Text("No tide station in range.")
                         .font(.subheadline)
@@ -141,4 +146,3 @@ struct TideCard: View {
         .foregroundStyle(.secondary)
     }
 }
-

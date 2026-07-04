@@ -100,6 +100,38 @@ struct FishingScorerTests {
     }
 
     @Test
+    func allSpeciesIncludesTideWhenEventsProvided() {
+        let now = Self.fixedSpringDate
+        let events = [TideEvent(time: now, kind: .high, heightFeet: 2.0)]
+
+        let all = FishingScorer.score(
+            moonPhase: .firstQuarter,
+            activeWindow: nil,
+            nextWindow: nil,
+            pressureTendency: .steady,
+            pressureChangePerHour: 0,
+            windMph: 8,
+            species: .all,
+            tideEvents: events,
+            now: now
+        )
+        let bass = FishingScorer.score(
+            moonPhase: .firstQuarter,
+            activeWindow: nil,
+            nextWindow: nil,
+            pressureTendency: .steady,
+            pressureChangePerHour: 0,
+            windMph: 8,
+            species: .bass,
+            tideEvents: events,
+            now: now
+        )
+
+        #expect(all.factors.map(\.label).contains("Tide"))
+        #expect(!bass.factors.map(\.label).contains("Tide"))
+    }
+
+    @Test
     func fallingPressureBeatsRising() {
         let now = Self.fixedSpringDate
         let fall = FishingScorer.score(

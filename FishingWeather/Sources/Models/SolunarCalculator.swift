@@ -24,11 +24,16 @@ enum SolunarCalculator {
             windows.append(BiteWindow(period: .major, peak: overhead, cause: "Moon overhead"))
 
             // The opposing (underfoot) transit is ~12h25m away. Prefer the one
-            // that falls on the same calendar day; otherwise show the later one.
+            // that falls on the same calendar day; omit it when neither does
+            // (overhead near noon can push both off "today").
             let earlier = overhead.addingTimeInterval(-halfLunarDay)
             let later = overhead.addingTimeInterval(halfLunarDay)
-            let underfoot = Calendar.current.isDate(earlier, inSameDayAs: day) ? earlier : later
-            windows.append(BiteWindow(period: .major, peak: underfoot, cause: "Moon underfoot"))
+            let calendar = Calendar.current
+            if calendar.isDate(earlier, inSameDayAs: day) {
+                windows.append(BiteWindow(period: .major, peak: earlier, cause: "Moon underfoot"))
+            } else if calendar.isDate(later, inSameDayAs: day) {
+                windows.append(BiteWindow(period: .major, peak: later, cause: "Moon underfoot"))
+            }
         }
 
         return windows.sorted { $0.peak < $1.peak }

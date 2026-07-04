@@ -112,4 +112,11 @@ struct FishingSpot: Identifiable, Codable, Equatable, Hashable {
     var location: CLLocation {
         CLLocation(latitude: latitude, longitude: longitude)
     }
+
+    /// Same place even when UUIDs differ (legacy curated saves used random IDs).
+    func isSamePlace(as other: FishingSpot) -> Bool {
+        name == other.name
+            && abs(latitude - other.latitude) < 0.0001
+            && abs(longitude - other.longitude) < 0.0001
+    }
 }

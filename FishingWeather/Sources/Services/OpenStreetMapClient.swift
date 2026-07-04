@@ -50,23 +50,36 @@ final class OpenStreetMapClient {
     private struct CacheEntry { let timestamp: Date; let pins: [RampPin] }
     private var cache: [String: CacheEntry] = [:]
     private let cacheTTL: TimeInterval = 60 * 60 * 12 // 12h
+    private var loadID = 0
 
     func loadRamps(near location: CLLocation, radiusMiles: Double = 25) async {
         let key = Self.tileKey(location)
+        // Always bump so an in-flight fetch for another tile can't overwrite us,
+        // including when we serve a cache hit.
+        loadID += 1
+        let id = loadID
+
         if let entry = cache[key], -entry.timestamp.timeIntervalSinceNow < cacheTTL {
             ramps = entry.pins
+            lastError = nil
+            isLoading = false
             return
         }
+
         isLoading = true
         lastError = nil
-        defer { isLoading = false }
         do {
             let pins = try await fetch(near: location, radiusMiles: radiusMiles)
+            guard id == loadID else { return }
             cache[key] = CacheEntry(timestamp: .now, pins: pins)
             ramps = pins
+            isLoading = false
         } catch {
+            guard id == loadID else { return }
+            isLoading = false
+            if error is CancellationError || (error as? URLError)?.code == .cancelled { return }
             lastError = error.localizedDescription
-            ramps = []
+            // Keep the previous list when a refresh fails.
         }
     }
 
@@ -123,9 +136,15 @@ final class OpenStreetMapClient {
         struct Center: Decodable { let lat: Double; let lon: Double }
 
         var pin: RampPin? {
-            guard let coord = lat.flatMap({ ($0, lon ?? 0) }) ?? center.map({ ($0.lat, $0.lon) }) else {
-                return nil
+            let coord: (Double, Double)?
+            if let lat, let lon {
+                coord = (lat, lon)
+            } else if let center {
+                coord = (center.lat, center.lon)
+            } else {
+                coord = nil
             }
+            guard let coord else { return nil }
             let tags = tags ?? [:]
             let kind: RampPin.Kind
             if tags["amenity"] == "boat_ramp" {

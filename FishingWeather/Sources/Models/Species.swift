@@ -124,10 +124,11 @@ enum Species: String, CaseIterable, Identifiable, Codable {
     }
 
     /// Whether this species is available to pick given the active spot's water type.
-    /// `.all` is always available; species match their own water type.
+    /// `.all` is always available; brackish spots show both fresh and salt species.
     func isAvailable(for waterType: WaterType?) -> Bool {
         guard let waterType else { return true }
         guard let mine = self.waterType else { return true }
+        if waterType == .brackish { return true }
         return mine == waterType
     }
 
@@ -171,6 +172,7 @@ extension Species {
     }
 
     func isInSeason(on date: Date) -> Bool {
+        if peakMonths.isEmpty { return true }
         let month = Calendar.current.component(.month, from: date)
         return peakMonths.contains(month)
     }

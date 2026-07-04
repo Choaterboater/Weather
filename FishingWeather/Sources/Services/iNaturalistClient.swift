@@ -24,11 +24,12 @@ struct SpeciesSighting: Identifiable, Equatable {
 final class INaturalistClient {
     private(set) var sightings: [Species: [SpeciesSighting]] = [:]
     private(set) var isLoading: Set<Species> = []
-    private(set) var lastError: String?
+    private(set) var lastError: [Species: String] = [:]
 
     private struct CacheEntry { let timestamp: Date; let sightings: [SpeciesSighting] }
     private var cache: [String: CacheEntry] = [:]
     private let cacheTTL: TimeInterval = 60 * 60 * 6 // 6 h
+    private var loadID: [Species: Int] = [:]
 
     func loadSightings(for species: Species, near location: CLLocation, radiusMiles: Double = 50) async {
         guard let taxonName = species.scientificName else {
@@ -36,19 +37,32 @@ final class INaturalistClient {
             return
         }
         let key = Self.cacheKey(species: species, location: location)
+        // Always bump so an in-flight fetch for another tile can't overwrite us.
+        let id = (loadID[species] ?? 0) + 1
+        loadID[species] = id
+
         if let entry = cache[key], -entry.timestamp.timeIntervalSinceNow < cacheTTL {
             sightings[species] = entry.sightings
+            lastError[species] = nil
+            isLoading.remove(species)
             return
         }
+
         isLoading.insert(species)
-        defer { isLoading.remove(species) }
-        lastError = nil
+        lastError[species] = nil
+        // Clear prior-location results so the UI doesn't label them "nearby".
+        sightings[species] = []
         do {
             let fetched = try await fetch(taxonName: taxonName, near: location, radiusMiles: radiusMiles)
+            guard loadID[species] == id else { return }
             cache[key] = CacheEntry(timestamp: .now, sightings: fetched)
             sightings[species] = fetched
+            isLoading.remove(species)
         } catch {
-            lastError = error.localizedDescription
+            guard loadID[species] == id else { return }
+            isLoading.remove(species)
+            if error is CancellationError || (error as? URLError)?.code == .cancelled { return }
+            lastError[species] = error.localizedDescription
             sightings[species] = []
         }
     }

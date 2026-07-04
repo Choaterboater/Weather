@@ -31,6 +31,7 @@ final class BaitEngine {
     var isAnswering = false
 
     private var session: LanguageModelSession?
+    private var generateID = 0
 
     /// Whether the device can run the on-device model right now.
     var availabilityMessage: String? {
@@ -42,6 +43,7 @@ final class BaitEngine {
     }
 
     func reset() {
+        generateID += 1
         status = .idle
         report = nil
         recommendation = nil
@@ -49,17 +51,27 @@ final class BaitEngine {
         session = nil
     }
 
-    func generate(conditions: FishingConditions, species: Species) async {
+    func generate(
+        conditions: FishingConditions,
+        species: Species,
+        tideEvents: [TideEvent] = []
+    ) async {
         if let message = availabilityMessage {
             status = .unavailable(message)
             return
         }
 
+        generateID += 1
+        let id = generateID
         status = .working
         report = nil
         recommendation = nil
 
-        let context = Self.contextSummary(conditions: conditions, species: species)
+        let context = Self.contextSummary(
+            conditions: conditions,
+            species: species,
+            tideEvents: tideEvents
+        )
         let session = LanguageModelSession(instructions: Self.instructions)
         self.session = session
 
@@ -70,7 +82,8 @@ final class BaitEngine {
 
             \(context)
             """
-            report = try await session.respond(to: reportPrompt).content
+            let reportText = try await session.respond(to: reportPrompt).content
+            guard id == generateID else { return }
 
             let baitPrompt = """
             Recommend the single best bait for \(species.promptName) given these conditions. \
@@ -78,13 +91,17 @@ final class BaitEngine {
 
             \(context)
             """
-            recommendation = try await session.respond(
+            let recommendation = try await session.respond(
                 to: baitPrompt,
                 generating: BaitRecommendation.self
             ).content
+            guard id == generateID else { return }
 
+            report = reportText
+            self.recommendation = recommendation
             status = .ready
         } catch {
+            guard id == generateID else { return }
             status = .failed(error.localizedDescription)
         }
     }
@@ -117,7 +134,11 @@ final class BaitEngine {
     available baits. Never invent data you weren't given.
     """
 
-    private static func contextSummary(conditions: FishingConditions, species: Species) -> String {
+    private static func contextSummary(
+        conditions: FishingConditions,
+        species: Species,
+        tideEvents: [TideEvent]
+    ) -> String {
         var lines: [String] = []
         lines.append("Species focus: \(species.promptName)")
 
@@ -134,6 +155,20 @@ final class BaitEngine {
             lines.append("Bite window: \(active.period.rawValue.lowercased()) active now until \(active.end.formatted(date: .omitted, time: .shortened))")
         } else if let next = conditions.nextWindow() {
             lines.append("Next bite window: \(next.period.rawValue.lowercased()) at \(next.peak.formatted(date: .omitted, time: .shortened))")
+        }
+
+        if !tideEvents.isEmpty {
+            let now = Date.now
+            let nearest = tideEvents.min(by: {
+                abs($0.time.timeIntervalSince(now)) < abs($1.time.timeIntervalSince(now))
+            })
+            if let nearest {
+                let minutes = Int(nearest.time.timeIntervalSince(now) / 60)
+                let when = minutes >= 0
+                    ? "in \(abs(minutes)) min"
+                    : "\(abs(minutes)) min ago"
+                lines.append("Tide: nearest \(nearest.kind.label.lowercased()) \(when)")
+            }
         }
 
         return lines.joined(separator: "\n")

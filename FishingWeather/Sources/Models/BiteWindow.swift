@@ -16,7 +16,8 @@ enum BitePeriod: String {
 
 /// A single bite window with a peak time and a span around it.
 struct BiteWindow: Identifiable {
-    let id = UUID()
+    /// Stable across `FishingConditions` recomputes (conditions is derived state).
+    var id: String { "\(period.rawValue)|\(peak.timeIntervalSince1970)|\(cause)" }
     let period: BitePeriod
     let peak: Date
     let start: Date
