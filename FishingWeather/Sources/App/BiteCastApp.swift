@@ -14,16 +14,28 @@ struct BiteCastApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(locationManager)
-                .environment(weatherStore)
-                .environment(spotStore)
-                .environment(catchLog)
-                .environment(regulationStore)
-                .environment(tideService)
-                .environment(spotCatalog)
-                .environment(osmClient)
-                .environment(inaturalist)
+            #if DEBUG
+            if CommandLine.arguments.contains("-uiPreview") {
+                DebugPreviewHost()
+            } else {
+                appContent
+            }
+            #else
+            appContent
+            #endif
         }
+    }
+
+    private var appContent: some View {
+        RootView()
+            .environment(locationManager)
+            .environment(weatherStore)
+            .environment(spotStore)
+            .environment(catchLog)
+            .environment(regulationStore)
+            .environment(tideService)
+            .environment(spotCatalog)
+            .environment(osmClient)
+            .environment(inaturalist)
     }
 }

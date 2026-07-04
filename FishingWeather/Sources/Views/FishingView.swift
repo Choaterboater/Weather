@@ -103,14 +103,7 @@ struct FishingView: View {
             .padding(.horizontal)
             .padding(.bottom, 24)
         }
-        .background(
-            LinearGradient(
-                colors: [.teal.opacity(0.35), .green.opacity(0.12)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-        )
+        .background(Ink.backdrop)
         .task(id: activeLocationKey) {
             if let coordinate = activeLocation {
                 await tides.load(near: coordinate)
