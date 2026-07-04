@@ -10,6 +10,7 @@ struct LogCatchView: View {
     @Environment(WeatherStore.self) private var weather
     @Environment(LocationManager.self) private var location
     @Environment(SpotStore.self) private var spots
+    @Environment(TideService.self) private var tides
 
     @AppStorage("selectedSpecies") private var defaultSpecies: Species = .all
 
@@ -179,6 +180,22 @@ struct LogCatchView: View {
         return weather.current?.temperature.converted(to: .fahrenheit).value
     }
 
+    /// Tide movement now — "Rising", "Falling", or "Slack" — but only at a
+    /// coastal spot whose tide data is already loaded (no fetch is forced when
+    /// opening the form). Nil inland or when tides haven't been viewed.
+    private var tidePhase: String? {
+        guard tides.station != nil else { return nil }
+        let now = Date.now
+        guard let next = tides.allEvents.first(where: { $0.time > now }),
+              let prev = tides.allEvents.last(where: { $0.time <= now }) else { return nil }
+        let slackWindow: TimeInterval = 45 * 60
+        if next.time.timeIntervalSince(now) < slackWindow
+            || now.timeIntervalSince(prev.time) < slackWindow {
+            return "Slack"
+        }
+        return next.kind == .high ? "Rising" : "Falling"
+    }
+
     private var conditionsSnapshot: [(label: String, value: String)]? {
         guard let conditions else { return nil }
         var items: [(String, String)] = []
@@ -215,7 +232,8 @@ struct LogCatchView: View {
             pressureTendency: conditions?.pressure.tendency.label,
             moonPhase: conditions?.moonPhase.displayName,
             airTempF: airTempF,
-            windMph: conditions.map { $0.wind.speed.converted(to: .milesPerHour).value }
+            windMph: conditions.map { $0.wind.speed.converted(to: .milesPerHour).value },
+            tidePhase: tidePhase
         )
         log.add(entry, photo: photo)
         dismiss()

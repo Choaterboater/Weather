@@ -50,6 +50,7 @@ enum PersonalScoreModel {
         if let a = mean(sample.map(moonAffinity)) { affinity[.solunar] = a }
         if let a = mean(sample.map { seasonAffinity($0, species: species) }) { affinity[.season] = a }
         if let a = mean(sample.map(windAffinity)) { affinity[.wind] = a }
+        if let a = mean(sample.map(tideAffinity)) { affinity[.tide] = a }
 
         guard !affinity.isEmpty else { return base }
         let reference = affinity.values.reduce(0, +) / Double(affinity.count)
@@ -106,6 +107,15 @@ enum PersonalScoreModel {
         case 19..<25: return 0.4
         default: return 0.2
         }
+    }
+
+    /// Tide favorability — moving water is prime, slack is poor. Set only on
+    /// catches logged at a coastal spot with loaded tide data.
+    static func tideAffinity(_ entry: CatchEntry) -> Double? {
+        guard let phase = entry.tidePhase?.lowercased() else { return nil }
+        if phase.contains("slack") { return 0.4 }
+        if phase.contains("rising") || phase.contains("falling") { return 1.0 }
+        return nil
     }
 
     static func seasonAffinity(_ entry: CatchEntry, species: Species) -> Double? {

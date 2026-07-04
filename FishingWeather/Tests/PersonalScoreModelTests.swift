@@ -6,12 +6,13 @@ import Testing
 struct PersonalScoreModelTests {
     private func makeCatch(_ species: Species, pressure: String?,
                            moon: String? = "First Quarter", month: Int = 6,
-                           wind: Double? = nil) -> CatchEntry {
+                           wind: Double? = nil, tide: String? = nil) -> CatchEntry {
         var comps = DateComponents()
         comps.year = 2025; comps.month = month; comps.day = 15
         let date = Calendar.current.date(from: comps)!
         return CatchEntry(date: date, species: species, bait: "jig",
-                          pressureTendency: pressure, moonPhase: moon, windMph: wind)
+                          pressureTendency: pressure, moonPhase: moon,
+                          windMph: wind, tidePhase: tide)
     }
 
     private func sum(_ w: FactorWeights) -> Double {
@@ -63,6 +64,18 @@ struct PersonalScoreModelTests {
         let catches = (0..<15).map { _ in makeCatch(.bass, pressure: "Rising", wind: 8) }
         let w = PersonalScoreModel.weights(from: catches, species: .bass)
         #expect(w.wind > FactorWeights.standard.wind)
+    }
+
+    @Test("Tide is personalized once catches capture it")
+    func tideAffinityFromSnapshot() {
+        // Moving water (1.0) against a weak solunar signal — tide should gain
+        // weight; without tidePhase it would stay at the reference.
+        let catches = (0..<15).map { i in
+            makeCatch(.redfish, pressure: "Steady", moon: "First Quarter",
+                      tide: i.isMultiple(of: 5) ? "Slack" : "Falling")
+        }
+        let w = PersonalScoreModel.weights(from: catches, species: .redfish)
+        #expect(w.tide > FactorWeights.standard.tide)
     }
 
     @Test("More catches means a stronger shift (confidence ramp)")
