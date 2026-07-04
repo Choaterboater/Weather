@@ -18,6 +18,7 @@ struct BiteCastApp: App {
             if CommandLine.arguments.contains("-uiPreview") {
                 DebugPreviewHost()
                     .preferredColorScheme(.dark)
+                    .tint(Ink.brass)
             } else {
                 appContent
             }
@@ -34,6 +35,9 @@ struct BiteCastApp: App {
             // glass cards render as dark instrument panels regardless of the
             // device's system appearance.
             .preferredColorScheme(.dark)
+            // Brass is the instrument accent — tab-bar selection, prominent
+            // buttons, links, pickers all pick it up instead of system blue.
+            .tint(Ink.brass)
             .environment(locationManager)
             .environment(weatherStore)
             .environment(spotStore)
