@@ -47,7 +47,10 @@ struct PersonalInsightsTests {
 
     @Test("Catching on falling pressure marks the pressure factor up")
     func factorChangeReflectsWeights() {
-        let catches = (0..<15).map { _ in makeCatch(pressure: "Falling") }
+        // Quarter moons keep solunar affinity low so falling pressure stands out
+        // above the reference. (A uniformly favorable pattern nets to "steady" —
+        // correct behavior, but not what this test checks.)
+        let catches = (0..<15).map { _ in makeCatch(pressure: "Falling", moon: "First Quarter") }
         let insights = PersonalInsightsBuilder.build(from: catches, species: .bass)
         let pressure = insights?.factorChanges.first { $0.kind == .pressure }
         #expect(pressure?.direction == .up)
