@@ -75,7 +75,7 @@ struct SpeciesDetailView: View {
                 setFocusButton
             }
             .padding(.horizontal)
-            .padding(.bottom, 24)
+            .padding(.bottom, 80)
         }
         .navigationTitle(species.displayName)
         .navigationBarTitleDisplayMode(.inline)

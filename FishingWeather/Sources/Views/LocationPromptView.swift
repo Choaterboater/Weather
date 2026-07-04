@@ -12,6 +12,7 @@ struct LocationPromptView: View {
         } actions: {
             Button("Use My Location", action: onRequest)
                 .buttonStyle(.glassProminent)
+                .controlSize(.large)
         }
     }
 }

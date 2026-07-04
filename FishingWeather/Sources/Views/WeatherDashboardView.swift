@@ -29,8 +29,8 @@ struct WeatherDashboardView: View {
                 } else if weather.isLoading && !hasLiveWeather {
                     ProgressView("Loading weather…")
                         .padding(.top, 80)
-                } else if let message = weather.errorMessage, !hasLiveWeather {
-                    ErrorStateView(message: message)
+                } else if weather.errorMessage != nil, !hasLiveWeather {
+                    ErrorStateView()
                         .padding(.top, 80)
                 } else if hasLiveWeather {
                     if !weather.alerts.isEmpty {
@@ -68,13 +68,11 @@ struct WeatherDashboardView: View {
 }
 
 private struct ErrorStateView: View {
-    let message: String
-
     var body: some View {
         ContentUnavailableView {
-            Label("Couldn't load weather", systemImage: "cloud.bolt.rain")
+            Label("Weather unavailable", systemImage: "cloud.bolt.rain")
         } description: {
-            Text(message)
+            Text("BiteCast couldn't reach the weather service. Pull down to refresh, or try again once you're back online.")
         }
     }
 }

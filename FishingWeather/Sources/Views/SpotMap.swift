@@ -116,9 +116,9 @@ struct SpotsOverviewMap: View {
             MapUserLocationButton()
             MapCompass()
         }
-        .frame(height: 260)
-        .clipShape(.rect(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(.white.opacity(0.2)))
+        .frame(height: 440)
+        .clipShape(.rect(cornerRadius: 22))
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Ink.hullLine, lineWidth: 1))
         .overlay(alignment: .top) {
             MapStylePicker(selection: $style)
                 .padding(8)

@@ -13,8 +13,13 @@ struct CatchLogView: View {
                 } description: {
                     Text("Log a catch to start tracking what's working.")
                 } actions: {
-                    Button("Log a Catch") { showingForm = true }
-                        .buttonStyle(.glassProminent)
+                    Button {
+                        showingForm = true
+                    } label: {
+                        Label("Log a Catch", systemImage: "plus.circle.fill")
+                    }
+                    .buttonStyle(.glassProminent)
+                    .controlSize(.large)
                 }
             } else {
                 List {

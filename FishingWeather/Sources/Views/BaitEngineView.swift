@@ -43,7 +43,8 @@ struct BaitEngineView: View {
                                 )
                             }
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.glassProminent)
+                        .controlSize(.large)
                     }
                 }
             case .working:
