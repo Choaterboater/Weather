@@ -88,6 +88,10 @@ enum PersonalInsightsBuilder {
             stats.append(.init(icon: "barometer", label: "\(label) pressure",
                                detail: "\(n) of \(total) catches"))
         }
+        if let (label, n) = topCount(sample.compactMap(\.tidePhase)) {
+            stats.append(.init(icon: "water.waves", label: "\(label) tide",
+                               detail: "\(n) of \(total) catches"))
+        }
         if let (label, n) = topCount(sample.map { timeOfDay(for: $0.date) }) {
             stats.append(.init(icon: "clock", label: label, detail: "\(n) of \(total) catches"))
         }
