@@ -32,6 +32,34 @@ final class RegulationStore {
         states[stateCode.uppercased()]
     }
 
+    /// Which state the regulations picker should default to. Prefers a saved
+    /// spot's state, then the device's state, but only when we actually have
+    /// data for it; otherwise the first loaded state. Falls out to `nil` only
+    /// when no regulation data is loaded at all.
+    func defaultStateCode(spotState: String?, deviceState: String?) -> String? {
+        Self.resolveDefaultState(
+            spotState: spotState,
+            deviceState: deviceState,
+            available: loadedStateCodes,
+            hasData: { stateInfo($0) != nil }
+        )
+    }
+
+    /// Pure decision logic behind `defaultStateCode`, separated so it can be
+    /// unit-tested without loading the bundle. The device state is the fix for
+    /// the picker defaulting to the alphabetically-first state (Alabama) when
+    /// no spot is selected.
+    nonisolated static func resolveDefaultState(
+        spotState: String?,
+        deviceState: String?,
+        available: [String],
+        hasData: (String) -> Bool
+    ) -> String? {
+        if let spotState, hasData(spotState) { return spotState }
+        if let deviceState, hasData(deviceState) { return deviceState }
+        return available.first
+    }
+
     /// All species we have regulations for in a given state, optionally filtered
     /// by water type. Useful for "what can I catch here" listings.
     func species(in stateCode: String, waterType: WaterType? = nil) -> [Species] {
