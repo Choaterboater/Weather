@@ -14,6 +14,8 @@ struct SpotsView: View {
     @Environment(OpenStreetMapClient.self) private var osm
 
     @State private var showsAddSheet = false
+    @State private var routedSpot: FishingSpot?
+    @AppStorage("spotMapStyle") private var mapStyleRaw = SpotMapStyle.standard.rawValue
 
     private var here: CLLocation? {
         spots.selectedSpot?.location ?? location.location
@@ -27,6 +29,7 @@ struct SpotsView: View {
     var body: some View {
         ScrollView {
             GlassCardStack(spacing: 18) {
+                overviewMapSection
                 activeSection
                 if !curated.isEmpty {
                     curatedSection
@@ -38,6 +41,9 @@ struct SpotsView: View {
             }
             .padding(.horizontal)
             .padding(.bottom, 24)
+        }
+        .navigationDestination(item: $routedSpot) { spot in
+            SpotDetailView(spot: spot)
         }
         .background(
             LinearGradient(
@@ -77,6 +83,59 @@ struct SpotsView: View {
     }
 
     // MARK: - Sections
+
+    @ViewBuilder
+    private var overviewMapSection: some View {
+        if let here {
+            SpotsOverviewMap(
+                center: here.coordinate,
+                annotations: mapAnnotations,
+                style: SpotMapStyle.stored($mapStyleRaw),
+                onSelect: handleMapSelection
+            )
+        }
+    }
+
+    /// Curated + saved spots (which drill into detail) plus OSM ramps (which
+    /// open in Maps), unified into map pins.
+    private var mapAnnotations: [SpotAnnotation] {
+        let spotPins = (curated + spots.spots).map { spot in
+            SpotAnnotation(
+                id: "spot-\(spot.id)",
+                coordinate: spot.location.coordinate,
+                title: spot.name,
+                symbol: spot.kind?.symbolName ?? "mappin",
+                color: spot.waterType?.tint ?? .teal,
+                payload: .spot(spot)
+            )
+        }
+        let rampPins = osm.ramps.prefix(20).map { pin in
+            SpotAnnotation(
+                id: "ramp-\(pin.id)",
+                coordinate: pin.location.coordinate,
+                title: pin.name ?? pin.kind.displayName,
+                symbol: pin.kind.symbolName,
+                color: .brown,
+                payload: .ramp(pin)
+            )
+        }
+        return spotPins + rampPins
+    }
+
+    private func handleMapSelection(_ annotation: SpotAnnotation) {
+        switch annotation.payload {
+        case .spot(let spot): routedSpot = spot
+        case .ramp(let pin): openInMaps(pin)
+        }
+    }
+
+    private func openInMaps(_ pin: RampPin) {
+        let item = MKMapItem(location: pin.location, address: nil)
+        item.name = pin.name ?? pin.kind.displayName
+        item.openInMaps(launchOptions: [
+            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+        ])
+    }
 
     private var activeSection: some View {
         VStack(alignment: .leading, spacing: 8) {

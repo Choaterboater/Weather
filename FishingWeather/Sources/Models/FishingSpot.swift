@@ -53,7 +53,7 @@ enum SpotKind: String, CaseIterable, Codable, Identifiable {
 ///
 /// All metadata beyond `name` and coordinates is optional so legacy persisted
 /// spots (before the metadata expansion) still decode cleanly.
-struct FishingSpot: Identifiable, Codable, Equatable {
+struct FishingSpot: Identifiable, Codable, Equatable, Hashable {
     let id: UUID
     var name: String
     var latitude: Double

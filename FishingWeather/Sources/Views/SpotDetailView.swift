@@ -13,6 +13,7 @@ struct SpotDetailView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var cameraPosition: MapCameraPosition
+    @AppStorage("spotMapStyle") private var mapStyleRaw = SpotMapStyle.standard.rawValue
 
     init(spot: FishingSpot) {
         self.spot = spot
@@ -65,14 +66,19 @@ struct SpotDetailView: View {
     private var map: some View {
         Map(position: $cameraPosition, interactionModes: [.pan, .zoom]) {
             Marker(spot.name, coordinate: spot.location.coordinate)
-                .tint(spot.waterType.flatMap { $0.tint } ?? .teal)
+                .tint(spot.waterType?.tint ?? .teal)
         }
+        .mapStyle(SpotMapStyle.stored($mapStyleRaw).wrappedValue.mapStyle)
         .frame(height: 220)
         .clipShape(.rect(cornerRadius: 20))
         .overlay(
             RoundedRectangle(cornerRadius: 20)
                 .stroke(.white.opacity(0.2))
         )
+        .overlay(alignment: .top) {
+            MapStylePicker(selection: SpotMapStyle.stored($mapStyleRaw))
+                .padding(8)
+        }
     }
 
     private var header: some View {
@@ -262,16 +268,6 @@ private struct RegulationRow: View {
                 .foregroundStyle(.secondary)
             Text(value)
                 .font(.caption.weight(.semibold))
-        }
-    }
-}
-
-private extension WaterType {
-    var tint: Color {
-        switch self {
-        case .freshwater: .green
-        case .saltwater: .cyan
-        case .brackish: .teal
         }
     }
 }

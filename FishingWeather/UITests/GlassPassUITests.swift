@@ -22,8 +22,20 @@ final class GlassPassUITests: XCTestCase {
         snap(name: "2-fishing")
 
         openTab(app, "Spots")
-        Thread.sleep(forTimeInterval: 2)
+        // The overview map is gated on the device location resolving; wait for
+        // it rather than a fixed sleep, then let tiles paint.
+        let overviewMap = app.descendants(matching: .any)["Map of nearby spots and ramps"]
+        _ = overviewMap.waitForExistence(timeout: 15)
+        Thread.sleep(forTimeInterval: 4)
         snap(name: "3-spots")
+
+        // Flip the overview map to satellite imagery and re-capture.
+        let satellite = app.buttons["Satellite"]
+        if satellite.waitForExistence(timeout: 3) {
+            satellite.tap()
+            Thread.sleep(forTimeInterval: 4)   // imagery tiles stream in
+            snap(name: "3b-spots-satellite")
+        }
 
         openTab(app, "Guide")
         Thread.sleep(forTimeInterval: 2)
