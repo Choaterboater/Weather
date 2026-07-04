@@ -11,7 +11,7 @@ struct LocationPromptView: View {
             Text("BiteCast needs your location to show local conditions and forecasts.")
         } actions: {
             Button("Use My Location", action: onRequest)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.glassProminent)
         }
     }
 }
@@ -25,7 +25,7 @@ struct LocationDeniedView: View {
         } actions: {
             if let url = URL(string: UIApplication.openSettingsURLString) {
                 Link("Open Settings", destination: url)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
             }
         }
     }

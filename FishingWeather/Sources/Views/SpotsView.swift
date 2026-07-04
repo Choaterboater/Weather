@@ -26,7 +26,7 @@ struct SpotsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 18) {
+            GlassCardStack(spacing: 18) {
                 activeSection
                 if !curated.isEmpty {
                     curatedSection

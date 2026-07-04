@@ -18,6 +18,21 @@ struct GlassCard<Content: View>: View {
     }
 }
 
+/// Wraps a screen's card stack in a GlassEffectContainer so sibling glass
+/// shapes blend/morph correctly and never sample each other. Glass cannot
+/// sample glass, so this must wrap SIBLING cards — it can't live inside
+/// GlassCard itself.
+struct GlassCardStack<Content: View>: View {
+    var spacing: CGFloat = 20
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        GlassEffectContainer(spacing: spacing) {
+            VStack(spacing: spacing) { content }
+        }
+    }
+}
+
 /// Small labeled section header used above each card.
 struct SectionHeader: View {
     let title: String

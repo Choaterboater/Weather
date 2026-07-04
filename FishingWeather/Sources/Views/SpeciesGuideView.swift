@@ -19,7 +19,7 @@ struct SpeciesGuideView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 16) {
+            GlassCardStack(spacing: 16) {
                 filterChips
                 LazyVGrid(columns: columns, spacing: 12) {
                     ForEach(species) { species in
