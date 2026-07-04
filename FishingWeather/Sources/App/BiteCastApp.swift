@@ -17,6 +17,7 @@ struct BiteCastApp: App {
             #if DEBUG
             if CommandLine.arguments.contains("-uiPreview") {
                 DebugPreviewHost()
+                    .preferredColorScheme(.dark)
             } else {
                 appContent
             }
@@ -28,6 +29,11 @@ struct BiteCastApp: App {
 
     private var appContent: some View {
         RootView()
+            // The marine-instrument identity is a dark theme; lock the app to
+            // dark so bare text on the abyss backdrop stays legible and the
+            // glass cards render as dark instrument panels regardless of the
+            // device's system appearance.
+            .preferredColorScheme(.dark)
             .environment(locationManager)
             .environment(weatherStore)
             .environment(spotStore)

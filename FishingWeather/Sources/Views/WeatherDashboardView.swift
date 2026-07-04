@@ -62,13 +62,7 @@ struct WeatherDashboardView: View {
             .padding(.bottom, 24)
         }
         .background {
-            Color(.systemBackground)
-            LinearGradient(
-                colors: WeatherTheme.gradient(for: hasLiveWeather ? weather.current?.condition : nil),
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            WeatherTheme.skyBackdrop(for: hasLiveWeather ? weather.current?.condition : nil)
         }
     }
 }
