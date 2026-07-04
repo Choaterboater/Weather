@@ -17,12 +17,45 @@ struct DebugPreviewHost: View {
         } else if CommandLine.arguments.contains("log") {
             NavigationStack { CatchLogView() }
                 .environment(CatchLog())
+        } else if CommandLine.arguments.contains("planner") {
+            DebugTripPlanner()
         } else if CommandLine.arguments.contains("tide") {
             DebugTideCard()
         } else if CommandLine.arguments.contains("scorecard") {
             DebugScoreCard()
         } else {
             Text("Unknown -uiPreview target")
+        }
+    }
+}
+
+private struct DebugTripPlanner: View {
+    private let start = Date.now
+
+    private var outlook: WeekOutlook {
+        let cal = Calendar.current
+        func win(_ day: Int, _ hour: Int, _ dur: Double, _ score: Int,
+                 _ conf: ScoredWindow.Confidence, _ period: BitePeriod,
+                 _ factors: [String]) -> ScoredWindow {
+            let d = cal.date(byAdding: .day, value: day, to: cal.startOfDay(for: start))!
+            let s = d.addingTimeInterval(Double(hour) * 3600)
+            return ScoredWindow(date: d, start: s, end: s.addingTimeInterval(dur * 3600),
+                                score: score, confidence: conf, period: period,
+                                factors: factors, species: .redfish)
+        }
+        return WeekOutlook(locationName: "Fort De Soto", generatedAt: start, windows: [
+            win(0, 6, 1.8, 86, .high, .major, ["Major window", "Falling pressure"]),
+            win(1, 7, 1.5, 78, .high, .minor, ["Minor window", "Ideal wind"]),
+            win(0, 18, 1.8, 71, .high, .major, ["Dusk major", "Strong tide"]),
+            win(4, 5, 1.8, 66, .low, .major, ["Major window", "Full moon"]),
+            win(2, 12, 1.5, 58, .high, .minor, ["Midday minor"]),
+            win(5, 19, 1.8, 52, .low, .major, ["Evening major"]),
+        ])
+    }
+
+    var body: some View {
+        NavigationStack {
+            TripPlannerView(outlook: outlook)
         }
     }
 }
