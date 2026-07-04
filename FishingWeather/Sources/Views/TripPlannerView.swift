@@ -9,6 +9,7 @@ struct TripPlannerScreen: View {
     let species: Species
     let locationName: String
 
+    @Environment(TideService.self) private var tides
     @State private var loader = TripForecastLoader()
 
     var body: some View {
@@ -22,8 +23,11 @@ struct TripPlannerScreen: View {
     }
 
     private func load(force: Bool = false) async {
-        await loader.load(for: location, species: species,
-                          locationName: locationName, force: force)
+        await loader.load(
+            for: location, species: species, locationName: locationName,
+            tides: { await tides.weekTidesByDay(near: $0) },
+            force: force
+        )
     }
 
     private var taskKey: String {

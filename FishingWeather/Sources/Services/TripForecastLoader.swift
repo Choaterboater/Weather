@@ -21,6 +21,7 @@ final class TripForecastLoader {
     private let hourlyHorizon: TimeInterval = 60 * 3600
 
     func load(for location: CLLocation, species: Species, locationName: String,
+              tides: (CLLocation) async -> [Date: [TideEvent]] = { _ in [:] },
               force: Bool = false) async {
         let key = Self.cacheKey(location: location, species: species)
         if !force, outlook != nil, lastKey == key { return }
@@ -45,13 +46,14 @@ final class TripForecastLoader {
                 )
             }
 
+            // A week of NOAA hi/lo predictions grouped by day; empty for inland
+            // spots (the scorer then drops the tide factor).
+            let tidesByDay = await tides(location)
+
             let result = TripPlanner.outlook(
                 days: days,
                 hourly: hourly.samples(72, now: now),
-                // Tides omitted in v1 — freshwater scores without them and the
-                // scorer degrades gracefully for saltwater. A week of NOAA tide
-                // predictions is a planned follow-up.
-                tidesByDay: [:],
+                tidesByDay: tidesByDay,
                 species: species,
                 locationName: locationName,
                 now: now

@@ -116,6 +116,34 @@ final class TideService {
         }
     }
 
+    /// High/low tide events for the coming `days`, grouped by local day — for
+    /// the Weekly Trip Planner's tide factor. Independent of the display load;
+    /// returns empty (the planner then scores without tides) when inland or on
+    /// failure, rather than surfacing an error.
+    func weekTidesByDay(near location: CLLocation, on date: Date = .now,
+                        days: Int = 7) async -> [Date: [TideEvent]] {
+        do {
+            if stations.isEmpty {
+                stations = try await Self.loadStations()
+            }
+            guard let nearest = nearestStation(to: location) else { return [:] }
+            let miles = location.distance(from: CLLocation(
+                latitude: nearest.latitude, longitude: nearest.longitude
+            )) / 1609.34
+            guard miles <= maxStationDistanceMiles else { return [:] }
+
+            let calendar = Calendar.current
+            let end = calendar.date(byAdding: .day, value: days, to: date)
+                ?? date.addingTimeInterval(Double(days) * 86_400)
+            let points = try await Self.fetchHiLoRange(stationId: nearest.id, from: date, to: end)
+            return Dictionary(grouping: points.compactMap(\.event)) {
+                calendar.startOfDay(for: $0.time)
+            }
+        } catch {
+            return [:]
+        }
+    }
+
     /// A successful load that found no station in range — a real answer, not an error.
     private func finishInland(key: String) {
         clear()
@@ -198,6 +226,34 @@ final class TideService {
             URLQueryItem(name: "time_zone", value: "gmt"),
             URLQueryItem(name: "format", value: "json"),
             URLQueryItem(name: "interval", value: interval)
+        ]
+        let (data, response) = try await URLSession.shared.data(from: components.url!)
+        try HTTPStatusError.validate(response)
+        return try parsePredictions(data)
+    }
+
+    /// High/low predictions across an arbitrary date range (used by the trip
+    /// planner's week fetch), in GMT.
+    nonisolated private static func fetchHiLoRange(
+        stationId: String, from: Date, to: Date
+    ) async throws -> [TidePoint] {
+        let dayFormatter = DateFormatter()
+        dayFormatter.dateFormat = "yyyyMMdd"
+        dayFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dayFormatter.timeZone = TimeZone(identifier: "GMT")
+
+        var components = URLComponents(string: "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter")!
+        components.queryItems = [
+            URLQueryItem(name: "product", value: "predictions"),
+            URLQueryItem(name: "application", value: "BiteCast"),
+            URLQueryItem(name: "station", value: stationId),
+            URLQueryItem(name: "begin_date", value: dayFormatter.string(from: from)),
+            URLQueryItem(name: "end_date", value: dayFormatter.string(from: to)),
+            URLQueryItem(name: "datum", value: "MLLW"),
+            URLQueryItem(name: "units", value: "english"),
+            URLQueryItem(name: "time_zone", value: "gmt"),
+            URLQueryItem(name: "format", value: "json"),
+            URLQueryItem(name: "interval", value: "hilo")
         ]
         let (data, response) = try await URLSession.shared.data(from: components.url!)
         try HTTPStatusError.validate(response)
