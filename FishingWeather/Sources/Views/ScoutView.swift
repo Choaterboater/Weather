@@ -31,12 +31,7 @@ struct ScoutView: View {
             .padding(.horizontal)
             .padding(.bottom, 24)
         }
-        .background {
-            Color(.systemBackground)
-            LinearGradient(colors: [.blue.opacity(0.3), .teal.opacity(0.12)],
-                           startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
-        }
+        .background(Ink.backdrop)
         .animation(.smooth(duration: 0.35), value: scout.status)
         .sensoryFeedback(trigger: scout.status) { _, newValue in
             switch newValue {

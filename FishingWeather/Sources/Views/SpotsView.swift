@@ -45,14 +45,7 @@ struct SpotsView: View {
         .navigationDestination(item: $routedSpot) { spot in
             SpotDetailView(spot: spot)
         }
-        .background(
-            LinearGradient(
-                colors: [.teal.opacity(0.25), .cyan.opacity(0.08)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-        )
+        .background(Ink.backdrop)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {

@@ -9,6 +9,14 @@ struct DebugPreviewHost: View {
         if CommandLine.arguments.contains("guide") {
             NavigationStack { SpeciesGuideView() }
                 .environment(SpotStore())
+        } else if CommandLine.arguments.contains("scout") {
+            NavigationStack { ScoutView() }
+                .environment(WeatherStore())
+                .environment(SpotStore())
+                .environment(LocationManager())
+        } else if CommandLine.arguments.contains("log") {
+            NavigationStack { CatchLogView() }
+                .environment(CatchLog())
         } else if CommandLine.arguments.contains("tide") {
             DebugTideCard()
         } else if CommandLine.arguments.contains("scorecard") {
