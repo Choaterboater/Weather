@@ -19,6 +19,7 @@ struct WeatherDashboardView: View {
                     }
                     if let current = weather.current {
                         CurrentConditionsView(current: current)
+                        WindCard(current: current, samples: weather.hourly?.samples() ?? [])
                     }
                     if let hourly = weather.hourly {
                         HourlyForecastView(hourly: hourly)

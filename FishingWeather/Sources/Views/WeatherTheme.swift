@@ -27,12 +27,16 @@ enum WeatherTheme {
 }
 
 /// A plottable sample of one hour, decoupled from WeatherKit's `Forecast`.
+/// Wind fields default so older call sites and offline snapshots that predate
+/// wind still construct cleanly (they read back as calm rather than failing).
 struct HourSample: Identifiable {
     let id = UUID()
     let date: Date
     let temperature: Double   // °F
     let pressureHPa: Double
     let precipChance: Double
+    var windSpeedMph: Double = 0
+    var windGustMph: Double? = nil
 }
 
 extension Forecast where Element == HourWeather {
@@ -46,7 +50,9 @@ extension Forecast where Element == HourWeather {
                     date: $0.date,
                     temperature: $0.temperature.converted(to: .fahrenheit).value,
                     pressureHPa: $0.pressure.converted(to: .hectopascals).value,
-                    precipChance: $0.precipitationChance
+                    precipChance: $0.precipitationChance,
+                    windSpeedMph: $0.wind.speed.converted(to: .milesPerHour).value,
+                    windGustMph: $0.wind.gust?.converted(to: .milesPerHour).value
                 )
             }
     }
