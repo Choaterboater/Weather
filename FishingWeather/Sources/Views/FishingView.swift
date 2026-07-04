@@ -8,8 +8,18 @@ struct FishingView: View {
     @Environment(SpotStore.self) private var spots
     @Environment(LocationManager.self) private var location
     @Environment(TideService.self) private var tides
+    @Environment(CatchLog.self) private var catchLog
     @AppStorage("selectedSpecies") private var species: Species = .all
     @State private var engine = BaitEngine()
+
+    /// Weights tuned to the angler's catch history for the active species —
+    /// standard weights until they've logged enough catches to learn from.
+    private var personalWeights: FactorWeights {
+        PersonalScoreModel.weights(from: catchLog.entries, species: species)
+    }
+    private var tunedCatchCount: Int {
+        PersonalScoreModel.informingCatchCount(catchLog.entries, species: species)
+    }
 
     /// True when the active spot is salt/brackish, or (no spot) we're loading /
     /// have / failed a coastal tide fetch — so the card isn't hidden mid-load.
@@ -33,14 +43,18 @@ struct FishingView: View {
                 if let conditions = liveConditions {
                     // Re-evaluate score / active windows as the clock moves.
                     TimelineView(.periodic(from: .now, by: 60)) { context in
-                        FishingScoreCard(score: FishingScorer.score(
-                            conditions: conditions,
-                            species: species,
-                            // allEvents spans yesterday–tomorrow so late-evening
-                            // scoring sees the next event after midnight.
-                            tideEvents: showsTides ? tides.allEvents : [],
-                            now: context.date
-                        ))
+                        FishingScoreCard(
+                            score: FishingScorer.score(
+                                conditions: conditions,
+                                species: species,
+                                // allEvents spans yesterday–tomorrow so late-evening
+                                // scoring sees the next event after midnight.
+                                tideEvents: showsTides ? tides.allEvents : [],
+                                weights: personalWeights,
+                                now: context.date
+                            ),
+                            tunedCount: tunedCatchCount
+                        )
                     }
                     SpeciesFocusCard(species: species)
                     BaitEngineView(

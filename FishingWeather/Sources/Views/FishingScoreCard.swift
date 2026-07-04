@@ -5,13 +5,28 @@ import SwiftUI
 /// styled as instrument readouts.
 struct FishingScoreCard: View {
     let score: FishingScore
+    /// Catches that personalized this score; 0 shows the standard, untuned score.
+    var tunedCount: Int = 0
     @State private var isExpanded = false
 
     var body: some View {
         InstrumentPanel {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Today's bite")
-                    .instrumentLabel(Ink.brass)
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Today's bite")
+                        .instrumentLabel(Ink.brass)
+                    Spacer()
+                    if tunedCount > 0 {
+                        HStack(spacing: 4) {
+                            Image(systemName: "sparkles")
+                            Text("Tuned · \(tunedCount)")
+                        }
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Ink.brass)
+                        .accessibilityElement()
+                        .accessibilityLabel("Personalized from your \(tunedCount) catches")
+                    }
+                }
 
                 ZStack {
                     BiteGauge(score: score.overall)
