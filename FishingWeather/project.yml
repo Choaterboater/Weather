@@ -47,15 +47,29 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: app.choatelabs.bitecast.tests
         GENERATE_INFOPLIST_FILE: YES
 
+  BiteCastUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: BiteCast
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.choatelabs.bitecast.uitests
+        GENERATE_INFOPLIST_FILE: YES
+
 schemes:
   BiteCast:
     build:
       targets:
         BiteCast: all
         BiteCastTests: [test]
+        BiteCastUITests: [test]
     test:
       targets:
         - BiteCastTests
+        - BiteCastUITests
       gatherCoverageData: true
     run:
       config: Debug

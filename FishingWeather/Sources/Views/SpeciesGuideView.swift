@@ -19,7 +19,9 @@ struct SpeciesGuideView: View {
 
     var body: some View {
         ScrollView {
-            GlassCardStack(spacing: 16) {
+            // mergeSpacing below the 12pt grid gap: at the default the glass
+            // cards weld together across the grid's column gutter.
+            GlassCardStack(spacing: 16, mergeSpacing: 8) {
                 filterChips
                 LazyVGrid(columns: columns, spacing: 12) {
                     ForEach(species) { species in

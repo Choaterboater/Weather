@@ -35,13 +35,13 @@ private struct SpeciesChip: View {
             .padding(.vertical, 9)
             .foregroundStyle(isSelected ? .white : .primary)
         }
-        .background {
-            if isSelected {
-                Capsule().fill(species.tint)
-            } else {
-                Capsule().fill(.clear).glassEffect(.regular, in: .capsule)
-            }
-        }
+        // Glass must wrap the label directly: a glassEffect on a .background
+        // shape gets hoisted into the enclosing GlassEffectContainer's layer
+        // and composites OVER the text, leaving it illegible.
+        .glassEffect(
+            isSelected ? .regular.tint(species.tint).interactive() : .regular.interactive(),
+            in: .capsule
+        )
         .buttonStyle(.plain)
         .scaleEffect(isSelected ? 1.0 : 0.96)
         .animation(.snappy(duration: 0.25, extraBounce: 0.1), value: isSelected)

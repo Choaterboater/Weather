@@ -1,0 +1,90 @@
+import XCTest
+
+/// Walks every tab (and the two detail screens with standalone glass buttons)
+/// attaching a screenshot of each, so a reviewer can eyeball the Liquid Glass
+/// rendering without driving the simulator by hand.
+final class GlassPassUITests: XCTestCase {
+
+    @MainActor
+    func testWalkTabsAndDetailScreens() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(tabBar.waitForExistence(timeout: 20), "Tab bar never appeared — still on the location gate?")
+
+        // Let the first weather fetch settle so cards render.
+        Thread.sleep(forTimeInterval: 6)
+        snap(name: "1-weather")
+
+        openTab(app, "Fishing")
+        Thread.sleep(forTimeInterval: 3)
+        snap(name: "2-fishing")
+
+        openTab(app, "Spots")
+        Thread.sleep(forTimeInterval: 2)
+        snap(name: "3-spots")
+
+        openTab(app, "Guide")
+        Thread.sleep(forTimeInterval: 2)
+        snap(name: "4-guide")
+
+        // Drill into a species card by name; only back out if the detail
+        // screen actually appeared (a blind "first button" tap can hit a
+        // filter chip or toolbar button instead).
+        let bassCard = app.scrollViews.staticTexts["Bass"].firstMatch
+        if bassCard.waitForExistence(timeout: 3) {
+            bassCard.tap()
+            let detailMarker = app.buttons["Set as Fishing tab focus"]
+            if detailMarker.waitForExistence(timeout: 5) {
+                Thread.sleep(forTimeInterval: 2)
+                snap(name: "4b-species-detail")
+                backOut(app)
+            }
+        }
+
+        openTab(app, "Log")
+        Thread.sleep(forTimeInterval: 1)
+        snap(name: "5-log")
+
+        openTab(app, "Scout")
+        Thread.sleep(forTimeInterval: 1)
+        snap(name: "6-scout")
+    }
+
+    /// Taps a tab by name, falling through to the More list when the tab bar
+    /// has overflowed.
+    @MainActor
+    private func openTab(_ app: XCUIApplication, _ name: String) {
+        let tab = app.tabBars.buttons[name]
+        if tab.exists {
+            tab.tap()
+            return
+        }
+        let more = app.tabBars.buttons["More"]
+        if more.exists {
+            more.tap()
+            let row = app.tables.staticTexts[name].firstMatch
+            if row.waitForExistence(timeout: 3) {
+                row.tap()
+                return
+            }
+        }
+        XCTFail("Could not reach tab \(name)")
+    }
+
+    @MainActor
+    private func backOut(_ app: XCUIApplication) {
+        let back = app.navigationBars.buttons.firstMatch
+        if back.exists { back.tap() }
+        Thread.sleep(forTimeInterval: 1)
+    }
+
+    @MainActor
+    private func snap(name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+}

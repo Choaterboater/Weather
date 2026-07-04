@@ -24,10 +24,15 @@ struct GlassCard<Content: View>: View {
 /// GlassCard itself.
 struct GlassCardStack<Content: View>: View {
     var spacing: CGFloat = 20
+    /// Distance at which sibling glass shapes start to visually merge.
+    /// Defaults to the layout spacing; pass something smaller when content
+    /// inside the stack packs glass shapes tighter than `spacing` (e.g. a
+    /// grid), or adjacent shapes weld together.
+    var mergeSpacing: CGFloat? = nil
     @ViewBuilder var content: Content
 
     var body: some View {
-        GlassEffectContainer(spacing: spacing) {
+        GlassEffectContainer(spacing: mergeSpacing ?? spacing) {
             VStack(spacing: spacing) { content }
         }
     }
