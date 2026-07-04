@@ -173,9 +173,9 @@ private struct ConfidenceBadge: View {
 
     private var tint: Color {
         switch value {
-        case 70...: .green
-        case 40..<70: .orange
-        default: .red
+        case 70...: Ink.bite
+        case 40..<70: Ink.brass
+        default: Ink.slack
         }
     }
 

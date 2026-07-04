@@ -165,7 +165,7 @@ private struct CachedPressureCard: View {
                         .contentTransition(.numericText())
                     Label(reading.tendency.label, systemImage: reading.tendency.symbolName)
                         .font(.subheadline.weight(.medium))
-                        .foregroundStyle(reading.tendency == .falling ? .green : .secondary)
+                        .foregroundStyle(reading.tendency == .falling ? Ink.bite : .secondary)
                     if let perHour = reading.changePerHour, abs(perHour) >= 0.1 {
                         Text(String(format: "%+.1f hPa/hr", perHour))
                             .font(.caption)
@@ -263,7 +263,7 @@ private struct BiteWindowsCard: View {
                 case .scheduled:
                     Label("Reminder set", systemImage: "bell.fill")
                         .font(.subheadline)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Ink.bite)
                         .symbolEffect(.bounce, value: reminderState == .scheduled)
                         .transition(.scale.combined(with: .opacity))
                 case .tooLate:
@@ -291,7 +291,7 @@ private struct BiteWindowsCard: View {
                     .font(.headline)
             } icon: {
                 Image(systemName: "dot.radiowaves.left.and.right")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Ink.bite)
                     .symbolEffect(.variableColor.iterative, options: .repeating)
             }
         } else if let next = conditions.nextWindow(after: date) {
@@ -300,7 +300,7 @@ private struct BiteWindowsCard: View {
                     .font(.headline)
             } icon: {
                 Image(systemName: "clock.badge")
-                    .foregroundStyle(.teal)
+                    .foregroundStyle(Ink.brass)
             }
         } else {
             Text("Today's feeding windows")
@@ -327,7 +327,7 @@ private struct BiteWindowRow: View {
                 .font(.caption.weight(.bold))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(window.period == .major ? .green.opacity(0.25) : .teal.opacity(0.2))
+                .background(window.period == .major ? Ink.bite.opacity(0.25) : Ink.brass.opacity(0.2))
                 .clipShape(.capsule)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -343,7 +343,7 @@ private struct BiteWindowRow: View {
             if isActive {
                 Image(systemName: "circle.fill")
                     .font(.caption2)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Ink.bite)
             }
         }
     }
@@ -375,7 +375,7 @@ private struct PressureCard: View {
                             .contentTransition(.numericText())
                         Label(reading.tendency.label, systemImage: reading.tendency.symbolName)
                             .font(.subheadline.weight(.medium))
-                            .foregroundStyle(reading.tendency == .falling ? .green : .secondary)
+                            .foregroundStyle(reading.tendency == .falling ? Ink.bite : .secondary)
                         if let changeText {
                             Text(changeText)
                                 .font(.caption)
