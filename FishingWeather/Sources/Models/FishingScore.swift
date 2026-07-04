@@ -33,6 +33,31 @@ struct FishingScore: Equatable {
     }
 }
 
+/// The relative weight of each scoring factor. Defaults to the fixed studio
+/// weights; the "learns your catches" personalization produces tuned instances
+/// (renormalized to sum to 1) from a user's catch history.
+struct FactorWeights: Equatable {
+    var solunar: Double
+    var pressure: Double
+    var wind: Double
+    var tide: Double
+    var season: Double
+
+    static let standard = FactorWeights(
+        solunar: 0.25, pressure: 0.20, wind: 0.15, tide: 0.25, season: 0.15
+    )
+
+    /// Renormalized so the five weights sum to 1 (a no-op when they already do).
+    var normalized: FactorWeights {
+        let total = solunar + pressure + wind + tide + season
+        guard total > 0 else { return .standard }
+        return FactorWeights(
+            solunar: solunar / total, pressure: pressure / total, wind: wind / total,
+            tide: tide / total, season: season / total
+        )
+    }
+}
+
 struct ScoreFactor: Identifiable, Equatable {
     enum Kind: String { case solunar, pressure, wind, tide, season }
     /// Stable across recomputes so charts/ForEach don't thrash every frame.
