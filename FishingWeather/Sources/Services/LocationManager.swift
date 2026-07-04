@@ -12,6 +12,10 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
 
     var location: CLLocation?
     var placeName: String?
+    /// Two-letter US state code for the current location (e.g. "FL"), or nil
+    /// offshore / outside the US. Used to default state-specific data like
+    /// fishing regulations when no saved spot is active.
+    var administrativeArea: String?
     var authorizationStatus: CLAuthorizationStatus
     var lastError: String?
 
@@ -72,8 +76,27 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         guard let request = MKReverseGeocodingRequest(location: location) else { return }
         let items = try? await request.mapItems
         guard let item = items?.first else { return }
+        let address = item.addressRepresentations
         // Prefer the locality (e.g. "Santa Rosa Beach"); fall back to the
         // map item's display name.
-        placeName = item.addressRepresentations?.cityName ?? item.name
+        placeName = address?.cityName ?? item.name
+        administrativeArea = Self.usStateCode(from: address)
+    }
+
+    /// iOS 26's MapKit exposes no structured administrative-area field — the
+    /// two-letter US state code only appears as text in
+    /// `cityWithContext(.short)` ("Naples, FL"). `regionCode` is the *country*
+    /// code, not the state. We take the trailing token (already the USPS
+    /// abbreviation for US addresses) and accept it only if it's two letters;
+    /// callers further validate it against the states they have data for. This
+    /// keeps us off the iOS-26-deprecated `CLGeocoder`/`CLPlacemark` path.
+    private static func usStateCode(from address: MKAddressRepresentations?) -> String? {
+        guard let cityWithState = address?.cityWithContext(.short),
+              let token = cityWithState.split(separator: ",").last?
+                  .trimmingCharacters(in: .whitespaces),
+              token.count == 2,
+              token.allSatisfy(\.isLetter)
+        else { return nil }
+        return token.uppercased()
     }
 }

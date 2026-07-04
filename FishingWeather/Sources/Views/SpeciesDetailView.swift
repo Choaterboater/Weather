@@ -13,6 +13,9 @@ struct SpeciesDetailView: View {
     @AppStorage("selectedSpecies") private var selectedSpecies: Species = .all
 
     @State private var stateCode: String
+    /// Once the user picks a state from the menu, stop auto-tracking their
+    /// location so a late-arriving geocode can't yank the selection back.
+    @State private var userPickedState = false
 
     init(species: Species) {
         self.species = species
@@ -29,8 +32,13 @@ struct SpeciesDetailView: View {
 
     private var profile: BaitProfile { BaitProfile.profile(for: species) }
 
-    private var inferredState: String? {
-        spots.selectedSpot?.stateCode
+    /// The state to default the picker to: the saved spot's state, else the
+    /// device's current state, else the first state we have data for.
+    private var defaultStateCode: String? {
+        regulations.defaultStateCode(
+            spotState: spots.selectedSpot?.stateCode,
+            deviceState: location.administrativeArea
+        )
     }
 
     private var regulation: Regulation? {
@@ -65,17 +73,20 @@ struct SpeciesDetailView: View {
         }
         .navigationTitle(species.displayName)
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            if let inferred = inferredState, regulations.stateInfo(inferred) != nil {
-                stateCode = inferred
-            } else if let first = regulations.loadedStateCodes.first {
-                stateCode = first
-            }
-        }
+        .onAppear(perform: applyDefaultState)
+        // The device state resolves asynchronously (reverse geocode), so the
+        // onAppear read can lose the race — re-apply when it lands, unless the
+        // user has since made a manual choice.
+        .onChange(of: defaultStateCode) { applyDefaultState() }
         .task(id: sightingsKey) {
             guard let here else { return }
             await inaturalist.loadSightings(for: species, near: here)
         }
+    }
+
+    private func applyDefaultState() {
+        guard !userPickedState, let code = defaultStateCode else { return }
+        stateCode = code
     }
 
     private var sightingsKey: String {
@@ -179,7 +190,10 @@ struct SpeciesDetailView: View {
     @ViewBuilder
     private var statePicker: some View {
         if regulations.loadedStateCodes.count > 1 {
-            Picker("State", selection: $stateCode) {
+            Picker("State", selection: Binding(
+                get: { stateCode },
+                set: { stateCode = $0; userPickedState = true }
+            )) {
                 ForEach(regulations.loadedStateCodes, id: \.self) { code in
                     Text(regulations.stateInfo(code)?.stateName ?? code).tag(code)
                 }
