@@ -125,7 +125,7 @@ private struct DebugScoreCard: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                FishingScoreCard(score: score)
+                FishingScoreCard(score: score, tunedCount: 12)
 
                 VStack(alignment: .leading, spacing: 8) {
                     SectionHeader(title: "Barometer", systemImage: "barometer")
