@@ -1,25 +1,47 @@
+import CoreLocation
 import SwiftUI
 import UIKit
 
 struct WeatherDashboardView: View {
     @Environment(WeatherStore.self) private var weather
+    @Environment(SpotStore.self) private var spots
+    @Environment(LocationManager.self) private var location
+
+    private var activeLocation: CLLocation? {
+        spots.selectedSpot?.location ?? location.location
+    }
+
+    private var hasLiveWeather: Bool {
+        guard let activeLocation else { return false }
+        return weather.hasData(for: activeLocation)
+    }
 
     var body: some View {
         ScrollView {
             GlassCardStack(spacing: 20) {
-                if weather.isLoading && weather.current == nil {
+                if activeLocation == nil {
+                    ContentUnavailableView(
+                        "Locating…",
+                        systemImage: "location",
+                        description: Text("Waiting for a GPS fix to load the forecast.")
+                    )
+                    .padding(.top, 80)
+                } else if weather.isLoading && !hasLiveWeather {
                     ProgressView("Loading weather…")
                         .padding(.top, 80)
-                } else if let message = weather.errorMessage, weather.current == nil {
+                } else if let message = weather.errorMessage, !hasLiveWeather {
                     ErrorStateView(message: message)
                         .padding(.top, 80)
-                } else {
+                } else if hasLiveWeather {
                     if !weather.alerts.isEmpty {
                         WeatherAlertsView(alerts: weather.alerts)
                     }
                     if let current = weather.current {
                         CurrentConditionsView(current: current)
-                        WindCard(current: current, samples: weather.hourly?.samples() ?? [])
+                        WindCard(
+                            current: current,
+                            samples: weather.hourly?.samples() ?? []
+                        )
                     }
                     if let hourly = weather.hourly {
                         HourlyForecastView(hourly: hourly)
@@ -27,6 +49,13 @@ struct WeatherDashboardView: View {
                     if let daily = weather.daily {
                         DailyForecastView(daily: daily)
                     }
+                } else {
+                    ContentUnavailableView(
+                        "No weather yet",
+                        systemImage: "cloud",
+                        description: Text("Pull to refresh once you have a location.")
+                    )
+                    .padding(.top, 80)
                 }
             }
             .padding(.horizontal)
@@ -35,7 +64,7 @@ struct WeatherDashboardView: View {
         .background {
             Color(.systemBackground)
             LinearGradient(
-                colors: WeatherTheme.gradient(for: weather.current?.condition),
+                colors: WeatherTheme.gradient(for: hasLiveWeather ? weather.current?.condition : nil),
                 startPoint: .top,
                 endPoint: .bottom
             )

@@ -21,7 +21,7 @@ struct TideEvent: Identifiable, Equatable {
         }
     }
 
-    let id = UUID()
+    var id: String { "\(kind.rawValue)|\(time.timeIntervalSince1970)" }
     let time: Date
     let kind: Kind
     let heightFeet: Double?
@@ -29,7 +29,7 @@ struct TideEvent: Identifiable, Equatable {
 
 /// One sample on the continuous tide curve, used by the chart.
 struct TideSample: Identifiable, Equatable {
-    let id = UUID()
+    var id: Date { time }
     let time: Date
     let heightFeet: Double
 }

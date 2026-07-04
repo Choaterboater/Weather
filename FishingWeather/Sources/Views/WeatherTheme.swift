@@ -30,7 +30,8 @@ enum WeatherTheme {
 /// Wind fields default so older call sites and offline snapshots that predate
 /// wind still construct cleanly (they read back as calm rather than failing).
 struct HourSample: Identifiable {
-    let id = UUID()
+    /// Use the sample's hour so charts keep identity across body re-evals.
+    var id: Date { date }
     let date: Date
     let temperature: Double   // °F
     let pressureHPa: Double
@@ -45,16 +46,24 @@ extension Forecast where Element == HourWeather {
         forecast
             .filter { $0.date >= now }
             .prefix(count)
-            .map {
-                HourSample(
-                    date: $0.date,
-                    temperature: $0.temperature.converted(to: .fahrenheit).value,
-                    pressureHPa: $0.pressure.converted(to: .hectopascals).value,
-                    precipChance: $0.precipitationChance,
-                    windSpeedMph: $0.wind.speed.converted(to: .milesPerHour).value,
-                    windGustMph: $0.wind.gust?.converted(to: .milesPerHour).value
-                )
-            }
+            .map(Self.hourSample(from:))
+    }
+
+    /// Full hourly window (including any past hours loaded for pressure trend).
+    /// Used for offline snapshots so charts still have a baseline.
+    func allSamples() -> [HourSample] {
+        forecast.map(Self.hourSample(from:))
+    }
+
+    private static func hourSample(from hour: HourWeather) -> HourSample {
+        HourSample(
+            date: hour.date,
+            temperature: hour.temperature.converted(to: .fahrenheit).value,
+            pressureHPa: hour.pressure.converted(to: .hectopascals).value,
+            precipChance: hour.precipitationChance,
+            windSpeedMph: hour.wind.speed.converted(to: .milesPerHour).value,
+            windGustMph: hour.wind.gust?.converted(to: .milesPerHour).value
+        )
     }
 }
 

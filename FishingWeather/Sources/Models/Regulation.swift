@@ -29,15 +29,19 @@ struct SeasonClosure: Codable, Equatable {
     let label: String
 
     func contains(_ date: Date, calendar: Calendar = .current) -> Bool {
+        // Compare calendar days only. `date(from:)` yields midnight at the
+        // *start* of each MM-DD, so comparing the wall-clock `date` directly
+        // treated the end day as open after 00:00.
+        let day = calendar.startOfDay(for: date)
         guard let startDate = Self.date(from: start, year: calendar.component(.year, from: date), calendar: calendar),
               let endDate = Self.date(from: end, year: calendar.component(.year, from: date), calendar: calendar) else {
             return false
         }
         if startDate <= endDate {
-            return date >= startDate && date <= endDate
+            return day >= startDate && day <= endDate
         } else {
             // Closure wraps the new year (e.g. Dec 15 – Jan 5).
-            return date >= startDate || date <= endDate
+            return day >= startDate || day <= endDate
         }
     }
 

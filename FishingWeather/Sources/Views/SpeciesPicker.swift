@@ -1,19 +1,31 @@
 import SwiftUI
 
 /// Horizontal tap-to-pick row of species. Binds to the persisted selection.
+/// When the active spot has a water type, only matching species (plus All) are shown.
 struct SpeciesPicker: View {
     @Binding var selection: Species
+    var waterType: WaterType? = nil
+
+    private var choices: [Species] {
+        Species.allCases.filter { $0 == .all || $0.isAvailable(for: waterType) }
+    }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
-                ForEach(Species.allCases) { species in
+                ForEach(choices) { species in
                     SpeciesChip(species: species, isSelected: species == selection) {
                         withAnimation(.snappy) { selection = species }
                     }
                 }
             }
             .padding(.horizontal, 2)
+        }
+        .onChange(of: waterType) {
+            // Drop a saltwater focus when the angler switches to a freshwater spot.
+            if !choices.contains(selection) {
+                selection = .all
+            }
         }
     }
 }

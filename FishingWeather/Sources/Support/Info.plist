@@ -2,53 +2,55 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleIdentifier</key>
-	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-	<key>CFBundleExecutable</key>
-	<string>$(EXECUTABLE_NAME)</string>
-	<key>CFBundlePackageType</key>
-	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<key>AmazonAccessKey</key>
+	<string>$(AMAZON_ACCESS_KEY)</string>
+	<key>AmazonPartnerTag</key>
+	<string>$(AMAZON_PARTNER_TAG)</string>
+	<key>AmazonSecretKey</key>
+	<string>$(AMAZON_SECRET_KEY)</string>
+	<key>BassProAffiliateTemplate</key>
+	<string>$(BASSPRO_AFFILIATE_TEMPLATE)</string>
 	<key>CFBundleDisplayName</key>
 	<string>BiteCast</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleName</key>
 	<string>BiteCast</string>
+	<key>CFBundlePackageType</key>
+	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>BiteCast uses your location to show local conditions, forecasts, and fishing windows.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>Take a photo of the water so the AI can suggest where to cast.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Choose a photo of the water so the AI can suggest where to cast.</string>
-	<key>ReplicateAPIToken</key>
-	<string>$(REPLICATE_API_TOKEN)</string>
-	<key>AmazonAccessKey</key>
-	<string>$(AMAZON_ACCESS_KEY)</string>
-	<key>AmazonSecretKey</key>
-	<string>$(AMAZON_SECRET_KEY)</string>
-	<key>AmazonPartnerTag</key>
-	<string>$(AMAZON_PARTNER_TAG)</string>
+	<key>EbayCampaignID</key>
+	<string>$(EBAY_CAMPAIGN_ID)</string>
 	<key>EbayClientID</key>
 	<string>$(EBAY_CLIENT_ID)</string>
 	<key>EbayClientSecret</key>
 	<string>$(EBAY_CLIENT_SECRET)</string>
-	<key>EbayCampaignID</key>
-	<string>$(EBAY_CAMPAIGN_ID)</string>
-	<key>TackleWarehouseAffiliateTemplate</key>
-	<string>$(TACKLEWAREHOUSE_AFFILIATE_TEMPLATE)</string>
-	<key>BassProAffiliateTemplate</key>
-	<string>$(BASSPRO_AFFILIATE_TEMPLATE)</string>
 	<key>FishUSAAffiliateTemplate</key>
 	<string>$(FISHUSA_AFFILIATE_TEMPLATE)</string>
-	<key>UILaunchScreen</key>
-	<dict/>
+	<key>NSCameraUsageDescription</key>
+	<string>Take a photo of the water so the AI can suggest where to cast.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>BiteCast uses your location to show local conditions, forecasts, and fishing windows.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choose a photo of the water so the AI can suggest where to cast.</string>
+	<key>ReplicateAPIToken</key>
+	<string>$(REPLICATE_API_TOKEN)</string>
+	<key>TackleWarehouseAffiliateTemplate</key>
+	<string>$(TACKLEWAREHOUSE_AFFILIATE_TEMPLATE)</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<true/>
 	</dict>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

@@ -35,7 +35,8 @@ struct FishingScore: Equatable {
 
 struct ScoreFactor: Identifiable, Equatable {
     enum Kind: String { case solunar, pressure, wind, tide, season }
-    let id = UUID()
+    /// Stable across recomputes so charts/ForEach don't thrash every frame.
+    var id: String { kind.rawValue }
     let kind: Kind
     let label: String
     /// 0–1 — share of the total score this factor can claim.

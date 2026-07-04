@@ -13,7 +13,7 @@ enum BiteWindowNotifier {
     }
 
     /// Schedules a reminder `leadTime` before the window starts. Returns false if
-    /// the lead time has already passed or authorization was denied.
+    /// the lead time has already passed, authorization was denied, or scheduling failed.
     @discardableResult
     static func scheduleReminder(for window: BiteWindow) async -> Bool {
         guard await requestAuthorization() else { return false }
@@ -36,7 +36,11 @@ enum BiteWindowNotifier {
 
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: [identifier])
-        try? await center.add(request)
-        return true
+        do {
+            try await center.add(request)
+            return true
+        } catch {
+            return false
+        }
     }
 }

@@ -27,7 +27,8 @@ struct SpotDetailView: View {
     }
 
     private var isActive: Bool {
-        spots.selectedSpotID == spot.id
+        guard let active = spots.selectedSpot else { return false }
+        return active.id == spot.id || active.isSamePlace(as: spot)
     }
 
     private var distanceMiles: Double? {
@@ -185,11 +186,8 @@ struct SpotDetailView: View {
             Button {
                 if isActive {
                     spots.select(nil)
-                } else if spots.spots.contains(where: { $0.id == spot.id }) {
-                    spots.select(spot)
                 } else {
-                    spots.add(spot)
-                    spots.select(spot)
+                    spots.activate(spot)
                 }
                 dismiss()
             } label: {

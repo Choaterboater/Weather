@@ -60,8 +60,10 @@ enum FishingScorer {
         tideEvents: [TideEvent] = [],
         now: Date = .now
     ) -> FishingScore {
-        let waterType = species.waterType ?? .freshwater
-        let includesTide = !tideEvents.isEmpty && waterType != .freshwater
+        // `.all` has no water type — include tide whenever events were supplied
+        // (caller already gated on saltwater/brackish spots). Only an explicit
+        // freshwater species drops the tide factor.
+        let includesTide = !tideEvents.isEmpty && species.waterType != .freshwater
 
         // Base weights (must sum to 1.0).
         var w_solunar = 0.25

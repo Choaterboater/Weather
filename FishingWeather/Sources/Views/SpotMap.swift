@@ -76,6 +76,7 @@ struct SpotAnnotation: Identifiable {
 /// Interactive map of every nearby spot and ramp. Tapping a pin calls back with
 /// its annotation; the caller decides whether to navigate or open Maps.
 struct SpotsOverviewMap: View {
+    let center: CLLocationCoordinate2D
     let annotations: [SpotAnnotation]
     @Binding var style: SpotMapStyle
     let onSelect: (SpotAnnotation) -> Void
@@ -93,14 +94,11 @@ struct SpotsOverviewMap: View {
         style: Binding<SpotMapStyle>,
         onSelect: @escaping (SpotAnnotation) -> Void
     ) {
+        self.center = center
         self.annotations = annotations
         self._style = style
         self.onSelect = onSelect
-        self._camera = State(initialValue: .region(MKCoordinateRegion(
-            center: center,
-            latitudinalMeters: 80_000,
-            longitudinalMeters: 80_000
-        )))
+        self._camera = State(initialValue: Self.region(for: center))
     }
 
     var body: some View {
@@ -125,6 +123,8 @@ struct SpotsOverviewMap: View {
             MapStylePicker(selection: $style)
                 .padding(8)
         }
+        .onChange(of: center.latitude) { recenterToActive() }
+        .onChange(of: center.longitude) { recenterToActive() }
         .onChange(of: selection) { _, newValue in
             guard let newValue,
                   let annotation = annotations.first(where: { $0.id == newValue })
@@ -134,5 +134,17 @@ struct SpotsOverviewMap: View {
             selection = nil
         }
         .accessibilityLabel("Map of nearby spots and ramps")
+    }
+
+    private func recenterToActive() {
+        camera = Self.region(for: center)
+    }
+
+    private static func region(for center: CLLocationCoordinate2D) -> MapCameraPosition {
+        .region(MKCoordinateRegion(
+            center: center,
+            latitudinalMeters: 80_000,
+            longitudinalMeters: 80_000
+        ))
     }
 }

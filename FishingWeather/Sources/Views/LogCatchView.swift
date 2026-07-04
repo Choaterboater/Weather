@@ -1,3 +1,4 @@
+import CoreLocation
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -158,22 +159,24 @@ struct LogCatchView: View {
 
     // MARK: - Conditions snapshot
 
+    private var activeCLLocation: CLLocation? {
+        spots.selectedSpot?.location ?? location.location
+    }
+
+    /// Only snapshot weather that belongs to the active location.
     private var conditions: FishingConditions? {
-        weather.conditions
+        guard let activeCLLocation, weather.hasData(for: activeCLLocation) else { return nil }
+        return weather.conditions
     }
 
     private var activeLocation: (latitude: Double, longitude: Double)? {
-        if let spot = spots.selectedSpot {
-            return (spot.latitude, spot.longitude)
-        }
-        if let coordinate = location.location?.coordinate {
-            return (coordinate.latitude, coordinate.longitude)
-        }
-        return nil
+        guard let activeCLLocation else { return nil }
+        return (activeCLLocation.coordinate.latitude, activeCLLocation.coordinate.longitude)
     }
 
     private var airTempF: Double? {
-        weather.current?.temperature.converted(to: .fahrenheit).value
+        guard let activeCLLocation, weather.hasData(for: activeCLLocation) else { return nil }
+        return weather.current?.temperature.converted(to: .fahrenheit).value
     }
 
     private var conditionsSnapshot: [(label: String, value: String)]? {

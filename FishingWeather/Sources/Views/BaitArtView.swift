@@ -11,18 +11,21 @@ final class BaitArtLoader {
 
     private(set) var state: State = .idle
     private var cache: [String: BaitImage] = [:]
+    private var loadID = 0
 
     func load(recommendation: BaitRecommendation, species: Species, preferred: Retailer, key: String) async {
+        loadID += 1
+        let id = loadID
+
         if let cached = cache[key] {
             state = .loaded(cached)
             return
         }
         state = .loading
         let image = await BaitImageService.firstImage(for: recommendation, species: species, preferred: preferred)
-        // `.task(id:)` cancelled us for a newer key; the providers swallow
-        // cancellation as nil, and writing .hidden/.loaded here would clobber
-        // the load that replaced this one.
-        guard !Task.isCancelled else { return }
+        // A newer key superseded us (or `.task(id:)` cancelled). Providers can
+        // also swallow cancellation as nil — never clobber the active load.
+        guard id == loadID, !Task.isCancelled else { return }
         if let image {
             cache[key] = image
             state = .loaded(image)

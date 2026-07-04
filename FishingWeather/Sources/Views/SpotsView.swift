@@ -75,11 +75,18 @@ struct SpotsView: View {
             guard let here else { return }
             await osm.loadRamps(near: here)
         }
+        .refreshable {
+            guard let here else { return }
+            await osm.loadRamps(near: here)
+        }
     }
 
     private var hereKey: String {
         guard let coord = here?.coordinate else { return "none" }
-        return "\(coord.latitude.rounded()),\(coord.longitude.rounded())"
+        // Match OpenStreetMapClient's 0.1° tile (~7 mi), not whole degrees.
+        let lat = (coord.latitude * 10).rounded() / 10
+        let lon = (coord.longitude * 10).rounded() / 10
+        return "\(lat),\(lon)"
     }
 
     // MARK: - Sections
@@ -97,11 +104,18 @@ struct SpotsView: View {
     }
 
     /// Curated + saved spots (which drill into detail) plus OSM ramps (which
-    /// open in Maps), unified into map pins.
+    /// open in Maps), unified into map pins. Saved spots win when a curated
+    /// entry is the same place (stable catalog ids would otherwise collide).
     private var mapAnnotations: [SpotAnnotation] {
-        let spotPins = (curated + spots.spots).map { spot in
+        var uniqueSpots: [FishingSpot] = []
+        for spot in spots.spots + curated {
+            if !uniqueSpots.contains(where: { $0.id == spot.id || $0.isSamePlace(as: spot) }) {
+                uniqueSpots.append(spot)
+            }
+        }
+        let spotPins = uniqueSpots.map { spot in
             SpotAnnotation(
-                id: "spot-\(spot.id)",
+                id: "spot-\(spot.id.uuidString)",
                 coordinate: spot.location.coordinate,
                 title: spot.name,
                 symbol: spot.kind?.symbolName ?? "mappin",
@@ -194,7 +208,7 @@ struct SpotsView: View {
                         SpotCard(
                             spot: spot,
                             distanceMiles: distance(to: spot),
-                            isActive: spots.selectedSpotID == spot.id
+                            isActive: spots.selectedSpot.map { $0.id == spot.id || $0.isSamePlace(as: spot) } ?? false
                         )
                     }
                     .buttonStyle(.plain)
@@ -268,7 +282,7 @@ struct SpotsView: View {
                         SpotCard(
                             spot: spot,
                             distanceMiles: distance(to: spot),
-                            isActive: spots.selectedSpotID == spot.id
+                            isActive: spots.selectedSpot.map { $0.id == spot.id || $0.isSamePlace(as: spot) } ?? false
                         )
                     }
                     .buttonStyle(.plain)
@@ -289,12 +303,12 @@ struct SpotsView: View {
     // MARK: - Helpers
 
     private func distance(to spot: FishingSpot) -> Double? {
-        guard let here = location.location else { return nil }
+        guard let here else { return nil }
         return here.distance(from: spot.location) / 1609.34
     }
 
     private func distance(to pin: RampPin) -> Double? {
-        guard let here = location.location else { return nil }
+        guard let here else { return nil }
         return here.distance(from: pin.location) / 1609.34
     }
 }
@@ -447,7 +461,7 @@ private struct AddSpotSheet: View {
             location: coordinate,
             waterType: waterType,
             kind: kind,
-            stateCode: nil,
+            stateCode: location.administrativeArea,
             targetSpecies: targets.isEmpty ? nil : Array(targets),
             notes: notes.isEmpty ? nil : notes
         )

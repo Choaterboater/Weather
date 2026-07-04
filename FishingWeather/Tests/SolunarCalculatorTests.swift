@@ -76,14 +76,29 @@ struct SolunarCalculatorTests {
     }
 
     @Test
-    func onlyMoonriseStillYieldsThreeWindows() {
+    func onlyMoonriseYieldsRiseAndOverheadWhenUnderfootIsOffDay() {
+        // Overhead ~12:12 → underfoot candidates fall on adjacent days and are omitted.
         let windows = SolunarCalculator.windows(
             moonrise: Self.date(hour: 6),
             moonset: nil,
             on: Self.date(hour: 12)
         )
-        #expect(windows.count == 3)
+        #expect(windows.count == 2)
         #expect(windows.filter { $0.period == .minor }.count == 1)
+        #expect(windows.filter { $0.cause == "Moon underfoot" }.isEmpty)
+    }
+
+    @Test
+    func underfootOmittedWhenNeitherCandidateIsToday() {
+        // Overhead at 12:00 → earlier 23:35 yesterday, later 00:25 tomorrow.
+        let windows = SolunarCalculator.windows(
+            moonrise: Self.date(hour: 5, minute: 30),
+            moonset: Self.date(hour: 18, minute: 30),
+            on: Self.date(hour: 12)
+        )
+        let underfoot = windows.first { $0.cause == "Moon underfoot" }
+        #expect(underfoot == nil)
+        #expect(windows.contains { $0.cause == "Moon overhead" })
     }
 
     @Test
