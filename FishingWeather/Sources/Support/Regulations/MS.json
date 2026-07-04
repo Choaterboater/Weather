@@ -1,0 +1,88 @@
+{
+  "stateCode": "MS",
+  "stateName": "Mississippi",
+  "sourceURL": "https://dmr.ms.gov/recreational-catch-limits/",
+  "lastVerifiedDate": "2026-07-03",
+  "regulations": [
+    {
+      "speciesId": "redfish",
+      "waterType": "saltwater",
+      "minSizeInches": 18,
+      "maxSizeInches": 30,
+      "slotDescription": "18–30\" total length, one over 30\" allowed",
+      "dailyBagLimit": 3,
+      "seasonClosures": [],
+      "notes": "Red drum. 3 per day; only one may exceed 30\" total length."
+    },
+    {
+      "speciesId": "speckledTrout",
+      "waterType": "saltwater",
+      "minSizeInches": 15,
+      "maxSizeInches": null,
+      "slotDescription": "15\" minimum total length",
+      "dailyBagLimit": 15,
+      "seasonClosures": [],
+      "notes": "Spotted seatrout. 15 per day."
+    },
+    {
+      "speciesId": "flounder",
+      "waterType": "saltwater",
+      "minSizeInches": 12,
+      "maxSizeInches": null,
+      "slotDescription": "12\" minimum total length",
+      "dailyBagLimit": 10,
+      "seasonClosures": [],
+      "notes": "Southern flounder. 10 per day."
+    },
+    {
+      "speciesId": "sheepshead",
+      "waterType": "saltwater",
+      "minSizeInches": 14,
+      "maxSizeInches": null,
+      "slotDescription": "14\" minimum total length",
+      "dailyBagLimit": 15,
+      "seasonClosures": [],
+      "notes": "15 per day."
+    },
+    {
+      "speciesId": "bass",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide length limit",
+      "dailyBagLimit": 10,
+      "seasonClosures": [],
+      "notes": "Black bass (largemouth/spotted/smallmouth combined): 10 per day. Named lakes set their own 14\"+ length/slot limits — check the waterbody."
+    },
+    {
+      "speciesId": "crappie",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide length limit",
+      "dailyBagLimit": 30,
+      "seasonClosures": [],
+      "notes": "30 per day combined. Named lakes set 9–12\" minimums; Arkabutla, Sardis, Enid & Grenada cap 25 per boat for 3+ anglers."
+    },
+    {
+      "speciesId": "catfish",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide limit",
+      "dailyBagLimit": null,
+      "seasonClosures": [],
+      "notes": "Blue/channel/flathead: no statewide size or creel limit. On AL/TN reciprocal waters, max 1 over 34\"; state and park lakes limit 10 (some 5)."
+    },
+    {
+      "speciesId": "bluegill",
+      "waterType": "freshwater",
+      "minSizeInches": null,
+      "maxSizeInches": null,
+      "slotDescription": "No statewide length limit",
+      "dailyBagLimit": 100,
+      "seasonClosures": [],
+      "notes": "Bream (bluegill, redear, other sunfish combined): 100 per day. Some park/state lakes are lower."
+    }
+  ]
+}
