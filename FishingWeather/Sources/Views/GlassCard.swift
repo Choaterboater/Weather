@@ -51,7 +51,9 @@ struct SectionHeader: View {
                 Image(systemName: systemImage)
             }
         }
-        .font(.headline)
+        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+        .tracking(1.5)
+        .textCase(.uppercase)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 4)
     }
