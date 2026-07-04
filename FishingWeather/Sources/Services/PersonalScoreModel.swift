@@ -33,6 +33,12 @@ enum PersonalScoreModel {
         informingSample(catches, species: species).count
     }
 
+    /// Catches counting toward personalization, even before the threshold — for
+    /// the "Learning · N/5" progress hint. Reaches `minCatches` when tuning begins.
+    static func sampleCount(_ catches: [CatchEntry], species: Species) -> Int {
+        sample(catches, species: species).count
+    }
+
     static func weights(from catches: [CatchEntry], species: Species,
                         base: FactorWeights = .standard) -> FactorWeights {
         let sample = sample(catches, species: species)

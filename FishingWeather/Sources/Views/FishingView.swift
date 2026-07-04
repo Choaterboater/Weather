@@ -21,6 +21,9 @@ struct FishingView: View {
     private var tunedCatchCount: Int {
         PersonalScoreModel.informingCatchCount(catchLog.entries, species: species)
     }
+    private var learningCatchCount: Int {
+        PersonalScoreModel.sampleCount(catchLog.entries, species: species)
+    }
 
     /// True when the active spot is salt/brackish, or (no spot) we're loading /
     /// have / failed a coastal tide fetch — so the card isn't hidden mid-load.
@@ -55,6 +58,8 @@ struct FishingView: View {
                                 now: context.date
                             ),
                             tunedCount: tunedCatchCount,
+                            learningCount: learningCatchCount,
+                            learningThreshold: PersonalScoreModel.minCatches,
                             onTapTuned: { showsPatterns = true }
                         )
                     }

@@ -7,6 +7,11 @@ struct FishingScoreCard: View {
     let score: FishingScore
     /// Catches that personalized this score; 0 shows the standard, untuned score.
     var tunedCount: Int = 0
+    /// Catches logged toward personalization before it unlocks (drives the
+    /// "Learning · N/5" hint). Ignored once `tunedCount` > 0.
+    var learningCount: Int = 0
+    /// Threshold at which personalization begins — for the learning hint.
+    var learningThreshold: Int = 5
     /// Tapped when the "Tuned" badge is pressed — opens the Your Patterns sheet.
     var onTapTuned: (() -> Void)? = nil
     @State private var isExpanded = false
@@ -36,6 +41,14 @@ struct FishingScoreCard: View {
                         .buttonStyle(.plain)
                         .disabled(onTapTuned == nil)
                         .accessibilityLabel("Personalized from your \(tunedCount) catches. Opens Your Patterns.")
+                    } else if learningCount > 0 {
+                        HStack(spacing: 4) {
+                            Image(systemName: "sparkles")
+                            Text("Learning · \(learningCount)/\(learningThreshold)")
+                        }
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
+                        .accessibilityLabel("Learning your patterns. \(learningCount) of \(learningThreshold) catches logged.")
                     }
                 }
 
