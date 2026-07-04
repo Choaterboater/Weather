@@ -28,13 +28,58 @@ private struct DebugScoreCard: View {
                     detail: "Shoulder month for redfish"),
     ])
 
+    private let start = Date(timeIntervalSince1970: 1_700_000_000)
+
+    private var samples: [HourSample] {
+        (0..<24).map { i in
+            HourSample(
+                date: start.addingTimeInterval(Double(i) * 3600),
+                temperature: 75,
+                pressureHPa: 1016 - Double(i) * 0.34,
+                precipChance: 0,
+                windSpeedMph: 9 + 5 * sin(Double(i) / 3.0),
+                windGustMph: 14 + 7 * sin(Double(i) / 3.0)
+            )
+        }
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
                 FishingScoreCard(score: score)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionHeader(title: "Barometer", systemImage: "barometer")
+                    GlassCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                Text("1013 hPa")
+                                    .font(.system(size: 28, weight: .semibold, design: .monospaced))
+                                Label("Falling", systemImage: "arrow.down.right")
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundStyle(Ink.bite)
+                                Spacer()
+                            }
+                            Text("A dropping barometer ahead of a front is the textbook trigger.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            PressureTrendChart(samples: samples,
+                                               now: start.addingTimeInterval(3 * 3600))
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionHeader(title: "Wind", systemImage: "wind")
+                    GlassCard {
+                        WindForecastChart(samples: samples,
+                                          now: start.addingTimeInterval(3 * 3600))
+                    }
+                }
             }
             .padding(.horizontal)
             .padding(.top, 20)
+            .padding(.bottom, 40)
         }
         .background(Ink.backdrop)
     }

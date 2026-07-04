@@ -24,32 +24,38 @@ struct PressureTrendChart: View {
             )
             .interpolationMethod(.catmullRom)
             .foregroundStyle(.linearGradient(
-                colors: [.teal.opacity(0.45), .teal.opacity(0.02)],
+                colors: [Ink.brass.opacity(0.42), Ink.brass.opacity(0.02)],
                 startPoint: .top, endPoint: .bottom
             ))
 
             LineMark(x: .value("Time", sample.date), y: .value("Pressure", sample.pressureHPa))
                 .interpolationMethod(.catmullRom)
                 .lineStyle(.init(lineWidth: 2.5))
-                .foregroundStyle(.teal)
+                .foregroundStyle(Ink.brass)
 
             RuleMark(x: .value("Now", now))
                 .lineStyle(.init(lineWidth: 1, dash: [4, 4]))
-                .foregroundStyle(.secondary.opacity(0.5))
+                .foregroundStyle(.secondary.opacity(0.7))
         }
         .chartYScale(domain: range)
         .chartYAxis {
             AxisMarks(position: .leading) { value in
                 AxisGridLine().foregroundStyle(.secondary.opacity(0.15))
                 AxisValueLabel {
-                    if let v = value.as(Double.self) { Text("\(Int(v))").font(.caption2) }
+                    if let v = value.as(Double.self) {
+                        Text("\(Int(v))").font(.caption2).foregroundStyle(.secondary)
+                    }
                 }
             }
         }
         .chartXAxis {
-            AxisMarks(values: .stride(by: .hour, count: 6)) { _ in
+            AxisMarks(values: .stride(by: .hour, count: 6)) { value in
                 AxisGridLine().foregroundStyle(.secondary.opacity(0.12))
-                AxisValueLabel(format: .dateTime.hour())
+                AxisValueLabel {
+                    if let d = value.as(Date.self) {
+                        Text(d, format: .dateTime.hour()).font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .frame(height: 130)
@@ -66,7 +72,7 @@ struct TemperatureChart: View {
             AreaMark(x: .value("Time", sample.date), y: .value("Temp", sample.temperature))
                 .interpolationMethod(.monotone)
                 .foregroundStyle(.linearGradient(
-                    colors: [.orange.opacity(0.25), .clear],
+                    colors: [Ink.brass.opacity(0.28), .clear],
                     startPoint: .top, endPoint: .bottom
                 ))
 
@@ -74,7 +80,7 @@ struct TemperatureChart: View {
                 .interpolationMethod(.monotone)
                 .lineStyle(.init(lineWidth: 3, lineCap: .round))
                 .foregroundStyle(.linearGradient(
-                    colors: [.orange, .pink, .blue],
+                    colors: [Ink.bite, Ink.brass, Ink.slack],
                     startPoint: .leading, endPoint: .trailing
                 ))
         }
@@ -82,13 +88,19 @@ struct TemperatureChart: View {
             AxisMarks { value in
                 AxisGridLine().foregroundStyle(.secondary.opacity(0.12))
                 AxisValueLabel {
-                    if let v = value.as(Double.self) { Text("\(Int(v))°") }
+                    if let v = value.as(Double.self) {
+                        Text("\(Int(v))°").foregroundStyle(.secondary)
+                    }
                 }
             }
         }
         .chartXAxis {
-            AxisMarks(values: .stride(by: .hour, count: 6)) { _ in
-                AxisValueLabel(format: .dateTime.hour())
+            AxisMarks(values: .stride(by: .hour, count: 6)) { value in
+                AxisValueLabel {
+                    if let d = value.as(Date.self) {
+                        Text(d, format: .dateTime.hour()).foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .frame(height: 120)
@@ -121,7 +133,7 @@ struct WindForecastChart: View {
                 )
                 .interpolationMethod(.catmullRom)
                 .foregroundStyle(.linearGradient(
-                    colors: [.teal.opacity(0.5), .teal.opacity(0.03)],
+                    colors: [Ink.bite.opacity(0.5), Ink.bite.opacity(0.03)],
                     startPoint: .top, endPoint: .bottom
                 ))
 
@@ -132,7 +144,7 @@ struct WindForecastChart: View {
                 )
                 .interpolationMethod(.catmullRom)
                 .lineStyle(.init(lineWidth: 2.5))
-                .foregroundStyle(.teal)
+                .foregroundStyle(Ink.bite)
             }
 
             ForEach(samples) { sample in
@@ -144,27 +156,33 @@ struct WindForecastChart: View {
                     )
                     .interpolationMethod(.catmullRom)
                     .lineStyle(.init(lineWidth: 1.5, dash: [3, 3]))
-                    .foregroundStyle(.orange.opacity(0.75))
+                    .foregroundStyle(Ink.brass.opacity(0.85))
                 }
             }
 
             RuleMark(x: .value("Now", now))
                 .lineStyle(.init(lineWidth: 1, dash: [4, 4]))
-                .foregroundStyle(.secondary.opacity(0.5))
+                .foregroundStyle(.secondary.opacity(0.7))
         }
         .chartYScale(domain: 0...domainMax)
         .chartYAxis {
             AxisMarks(position: .leading) { value in
                 AxisGridLine().foregroundStyle(.secondary.opacity(0.15))
                 AxisValueLabel {
-                    if let v = value.as(Double.self) { Text("\(Int(v))").font(.caption2) }
+                    if let v = value.as(Double.self) {
+                        Text("\(Int(v))").font(.caption2).foregroundStyle(.secondary)
+                    }
                 }
             }
         }
         .chartXAxis {
-            AxisMarks(values: .stride(by: .hour, count: 6)) { _ in
+            AxisMarks(values: .stride(by: .hour, count: 6)) { value in
                 AxisGridLine().foregroundStyle(.secondary.opacity(0.12))
-                AxisValueLabel(format: .dateTime.hour())
+                AxisValueLabel {
+                    if let d = value.as(Date.self) {
+                        Text(d, format: .dateTime.hour()).font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .frame(height: 130)
@@ -193,26 +211,30 @@ struct BiteWindowsTimeline: View {
                 )
                 .cornerRadius(6)
                 .foregroundStyle(
-                    (window.period == .major ? Color.green : Color.teal)
-                        .opacity(window.isActive(at: now) ? 0.85 : 0.45)
+                    (window.period == .major ? Ink.bite : Ink.brass)
+                        .opacity(window.isActive(at: now) ? 0.9 : 0.45)
                 )
                 .annotation(position: .top, alignment: .center, spacing: 2) {
                     Text(window.period.rawValue)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(window.period == .major ? .green : .teal)
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(window.period == .major ? Ink.bite : Ink.brass)
                 }
             }
 
             RuleMark(x: .value("Now", now))
                 .lineStyle(.init(lineWidth: 2))
-                .foregroundStyle(.primary.opacity(0.7))
+                .foregroundStyle(.primary.opacity(0.6))
         }
         .chartXScale(domain: dayBounds.start...dayBounds.end)
         .chartYAxis(.hidden)
         .chartXAxis {
-            AxisMarks(values: .stride(by: .hour, count: 4)) { _ in
+            AxisMarks(values: .stride(by: .hour, count: 4)) { value in
                 AxisGridLine().foregroundStyle(.secondary.opacity(0.12))
-                AxisValueLabel(format: .dateTime.hour())
+                AxisValueLabel {
+                    if let d = value.as(Date.self) {
+                        Text(d, format: .dateTime.hour()).foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .frame(height: 92)
@@ -230,9 +252,10 @@ struct MoonArc: View {
         } currentValueLabel: {
             Text(phase.illuminationFraction, format: .percent.precision(.fractionLength(0)))
                 .contentTransition(.numericText())
+                .foregroundStyle(.primary)
         }
         .gaugeStyle(.accessoryCircular)
-        .tint(LinearGradient(colors: [.indigo, .yellow], startPoint: .bottom, endPoint: .top))
+        .tint(LinearGradient(colors: [Ink.hullLine, Ink.brass], startPoint: .bottom, endPoint: .top))
         .accessibilityLabel("Moon illumination \(Int(phase.illuminationFraction * 100)) percent")
     }
 }
