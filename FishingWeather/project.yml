@@ -34,31 +34,6 @@ targets:
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1"
         DEVELOPMENT_TEAM: RAYW3WPJ98
-    dependencies:
-      - target: BiteCastWidgets
-
-  BiteCastWidgets:
-    type: app-extension
-    platform: iOS
-    sources:
-      - path: Widget
-      - path: Sources/Models/WidgetSnapshot.swift
-      - path: Sources/Services/WidgetSnapshotStore.swift
-      - path: Sources/Views/BiteWidgetView.swift
-      - path: Sources/Views/BiteCastTheme.swift
-    info:
-      path: Widget/Info.plist
-      properties:
-        CFBundleDisplayName: BiteCast
-        NSExtension:
-          NSExtensionPointIdentifier: com.apple.widgetkit-extension
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: app.choatelabs.bitecast.widgets
-        CODE_SIGN_ENTITLEMENTS: Widget/BiteCastWidgets.entitlements
-        CODE_SIGN_STYLE: Automatic
-        TARGETED_DEVICE_FAMILY: "1"
-        DEVELOPMENT_TEAM: RAYW3WPJ98
 
   BiteCastTests:
     type: bundle.unit-test
