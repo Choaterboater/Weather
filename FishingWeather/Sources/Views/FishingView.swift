@@ -2,7 +2,6 @@ import Foundation
 import CoreLocation
 import SwiftUI
 import WeatherKit
-import WidgetKit
 
 struct FishingView: View {
     @Environment(WeatherStore.self) private var weather
@@ -24,34 +23,6 @@ struct FishingView: View {
     }
     private var learningCatchCount: Int {
         PersonalScoreModel.sampleCount(catchLog.entries, species: species)
-    }
-
-    /// Re-publishes the widget snapshot when the score's inputs change.
-    private var widgetSnapshotKey: String {
-        "\(species.rawValue)|\(activeLocationKey)|\(weather.current != nil)|\(catchLog.entries.count)"
-    }
-
-    /// Shares the current bite reading with the Home Screen widget.
-    private func writeWidgetSnapshot() {
-        guard let conditions = liveConditions else { return }
-        let score = FishingScorer.score(
-            conditions: conditions, species: species,
-            tideEvents: showsTides ? tides.allEvents : [],
-            weights: personalWeights
-        )
-        let next = conditions.nextWindow(after: .now)
-        let snapshot = WidgetSnapshot(
-            score: score.overall,
-            summary: score.summary,
-            locationName: planLocationName,
-            speciesName: species.displayName,
-            nextWindowLabel: next.map {
-                "\($0.period.rawValue) window \($0.start.formatted(date: .omitted, time: .shortened))"
-            },
-            updatedAt: .now
-        )
-        WidgetSnapshotStore.write(snapshot)
-        WidgetCenter.shared.reloadAllTimelines()
     }
 
     /// True when the active spot is salt/brackish, or (no spot) we're loading /
@@ -164,7 +135,6 @@ struct FishingView: View {
                 species: species
             )
         }
-        .task(id: widgetSnapshotKey) { writeWidgetSnapshot() }
         .task(id: activeLocationKey) {
             if let coordinate = activeLocation {
                 await tides.load(near: coordinate)
