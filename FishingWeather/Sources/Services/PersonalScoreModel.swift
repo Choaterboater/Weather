@@ -18,11 +18,19 @@ enum PersonalScoreModel {
     /// Maximum weighting shift, at full confidence.
     static let maxShift = 0.5
 
+    /// The catches that actually inform personalization — the per-species sample
+    /// (or the fallback), but only once it clears `minCatches`. Empty otherwise.
+    /// Shared by the scorer and the "Your Patterns" analysis so they can't
+    /// disagree about which catches count.
+    static func informingSample(_ catches: [CatchEntry], species: Species) -> [CatchEntry] {
+        let s = sample(catches, species: species)
+        return s.count >= minCatches ? s : []
+    }
+
     /// How many catches informed the weights, for the "tuned to your N catches"
     /// badge. 0 means the score is the standard, un-personalized one.
     static func informingCatchCount(_ catches: [CatchEntry], species: Species) -> Int {
-        let s = sample(catches, species: species)
-        return s.count >= minCatches ? s.count : 0
+        informingSample(catches, species: species).count
     }
 
     static func weights(from catches: [CatchEntry], species: Species,
