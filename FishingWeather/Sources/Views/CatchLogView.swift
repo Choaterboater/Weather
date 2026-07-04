@@ -28,8 +28,10 @@ struct CatchLogView: View {
                         }
                     }
                 }
+                .scrollContentBackground(.hidden)
             }
         }
+        .background(Ink.backdrop)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button { showingForm = true } label: {
