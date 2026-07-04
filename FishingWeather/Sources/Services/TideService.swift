@@ -2,6 +2,25 @@ import CoreLocation
 import Foundation
 import Observation
 
+/// One parsed NOAA prediction point. `kind` is set for labeled high/low events
+/// (`interval=hilo`) and nil for hourly curve samples.
+struct TidePoint: Equatable, Sendable {
+    let time: Date
+    let heightFeet: Double
+    let kind: TideEvent.Kind?
+
+    var event: TideEvent? {
+        guard let kind else { return nil }
+        return TideEvent(time: time, kind: kind, heightFeet: heightFeet)
+    }
+}
+
+/// NOAA CO-OPS returns HTTP 200 with an error envelope instead of a status code.
+struct NOAADataError: LocalizedError {
+    let message: String
+    var errorDescription: String? { message }
+}
+
 /// Fetches NOAA CO-OPS tide predictions for the user's current location or
 /// selected spot. Free public API — no auth required.
 ///
@@ -11,11 +30,18 @@ import Observation
 /// * If the nearest station is farther than `maxStationDistanceMiles` we treat the
 ///   spot as effectively inland and surface no tide data.
 /// * Predictions are fetched in two passes: `hilo` for the labeled high/low events,
-///   plus hourly samples for a smooth curve.
+///   plus hourly samples for a smooth curve. All timestamps are requested and
+///   parsed in GMT so a saved spot renders correctly from any device timezone.
+/// * The prediction window spans yesterday–tomorrow so scoring near midnight
+///   still knows about the next event; `events`/`samples` are filtered to the
+///   display day, `allEvents` keeps the full window for the scorer.
 @MainActor
 @Observable
 final class TideService {
+    /// Today's labeled high/low events, for display.
     private(set) var events: [TideEvent] = []
+    /// The full 3-day event window, for scoring near midnight.
+    private(set) var allEvents: [TideEvent] = []
     private(set) var samples: [TideSample] = []
     private(set) var station: TideStation?
     private(set) var distanceMiles: Double?
@@ -27,47 +53,70 @@ final class TideService {
 
     private var stations: [TideStation] = []
     private var lastKey: String?
+    private var loadID = 0
 
-    func load(near location: CLLocation, on date: Date = .now) async {
+    func load(near location: CLLocation, on date: Date = .now, force: Bool = false) async {
         let key = Self.locationKey(location, date: date)
-        if key == lastKey { return }
-        lastKey = key
+        if !force, key == lastKey { return }
+        loadID += 1
+        let id = loadID
 
         isLoading = true
         lastError = nil
-        defer { isLoading = false }
 
         do {
             if stations.isEmpty {
-                stations = try await fetchStations()
+                let fetched = try await Self.loadStations()
+                guard id == loadID else { return }
+                stations = fetched
             }
             guard let nearest = nearestStation(to: location) else {
-                clear()
+                finishInland(key: key)
                 return
             }
             let miles = location.distance(from: CLLocation(
                 latitude: nearest.latitude, longitude: nearest.longitude
             )) / 1609.34
             guard miles <= maxStationDistanceMiles else {
-                clear()
+                finishInland(key: key)
                 return
             }
-            self.station = nearest
-            self.distanceMiles = miles
-            async let hilo = fetchPredictions(stationId: nearest.id, date: date, interval: "hilo")
-            async let hourly = fetchPredictions(stationId: nearest.id, date: date, interval: "h")
-            let hiloResults = try await hilo
-            let hourlyResults = try await hourly
-            self.events = hiloResults.compactMap(\.event)
-            self.samples = hourlyResults.map { TideSample(time: $0.time, heightFeet: $0.value) }
+            async let hilo = Self.fetchPredictions(stationId: nearest.id, date: date, interval: "hilo")
+            async let hourly = Self.fetchPredictions(stationId: nearest.id, date: date, interval: "h")
+            let (hiloResults, hourlyResults) = try await (hilo, hourly)
+            guard id == loadID else { return }
+
+            station = nearest
+            distanceMiles = miles
+            allEvents = hiloResults.compactMap(\.event)
+            let calendar = Calendar.current
+            events = allEvents.filter { calendar.isDate($0.time, inSameDayAs: date) }
+            samples = hourlyResults
+                .filter { calendar.isDate($0.time, inSameDayAs: date) }
+                .map { TideSample(time: $0.time, heightFeet: $0.heightFeet) }
+            // Only a successful load suppresses a reload; failures must retry
+            // the next time the tab appears.
+            lastKey = key
+            isLoading = false
         } catch {
+            guard id == loadID else { return }
+            isLoading = false
+            if error is CancellationError || (error as? URLError)?.code == .cancelled { return }
             lastError = error.localizedDescription
             clear()
         }
     }
 
+    /// A successful load that found no station in range — a real answer, not an error.
+    private func finishInland(key: String) {
+        clear()
+        lastKey = key
+        isLoading = false
+    }
+
     private func clear() {
         events = []
+        allEvents = []
         samples = []
         station = nil
         distanceMiles = nil
@@ -83,78 +132,85 @@ final class TideService {
 
     // MARK: - Networking
 
-    private struct StationListResponse: Decodable {
-        let stations: [StationDTO]
-    }
-    private struct StationDTO: Decodable {
-        let id: String
-        let name: String
-        let lat: Double
-        let lng: Double
+    /// Loads the station catalog from the disk cache when fresh (it changes a
+    /// few times a year at most), otherwise downloads and caches it. Runs off
+    /// the main actor — the ~1 MB decode caused a visible hitch.
+    nonisolated private static func loadStations() async throws -> [TideStation] {
+        let cacheURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("tide-stations.json")
+        let maxAge: TimeInterval = 30 * 24 * 3600
+
+        if let attributes = try? FileManager.default.attributesOfItem(atPath: cacheURL.path),
+           let modified = attributes[.modificationDate] as? Date,
+           Date.now.timeIntervalSince(modified) < maxAge,
+           let data = try? Data(contentsOf: cacheURL),
+           let cached = try? decodeStations(data),
+           !cached.isEmpty {
+            return cached
+        }
+
+        let url = URL(string: "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type=tidepredictions")!
+        let (data, response) = try await URLSession.shared.data(from: url)
+        try HTTPStatusError.validate(response)
+        let stations = try decodeStations(data)
+        try? data.write(to: cacheURL, options: .atomic)
+        return stations
     }
 
-    private func fetchStations() async throws -> [TideStation] {
-        let url = URL(string: "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type=tidepredictions")!
-        let (data, _) = try await URLSession.shared.data(from: url)
-        let decoded = try JSONDecoder().decode(StationListResponse.self, from: data)
-        return decoded.stations.map {
+    nonisolated private static func decodeStations(_ data: Data) throws -> [TideStation] {
+        try JSONDecoder().decode(StationListResponse.self, from: data).stations.map {
             TideStation(id: $0.id, name: $0.name, latitude: $0.lat, longitude: $0.lng)
         }
     }
 
-    private struct PredictionsResponse: Decodable {
-        let predictions: [PredictionDTO]?
-    }
-    private struct PredictionDTO: Decodable {
-        let t: String   // "yyyy-MM-dd HH:mm"
-        let v: String   // height in feet
-        let type: String? // "H" or "L" when interval=hilo
-    }
-
-    private struct PredictionPoint {
-        let time: Date
-        let value: Double
-        let kind: TideEvent.Kind?
-        var event: TideEvent? {
-            guard let kind else { return nil }
-            return TideEvent(time: time, kind: kind, heightFeet: value)
-        }
-    }
-
-    private func fetchPredictions(stationId: String, date: Date, interval: String) async throws -> [PredictionPoint] {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd"
-        formatter.timeZone = TimeZone.current
-        let day = formatter.string(from: date)
+    nonisolated private static func fetchPredictions(
+        stationId: String,
+        date: Date,
+        interval: String
+    ) async throws -> [TidePoint] {
+        let dayFormatter = DateFormatter()
+        dayFormatter.dateFormat = "yyyyMMdd"
+        dayFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dayFormatter.timeZone = TimeZone(identifier: "GMT")
 
         var components = URLComponents(string: "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter")!
         components.queryItems = [
             URLQueryItem(name: "product", value: "predictions"),
             URLQueryItem(name: "application", value: "BiteCast"),
             URLQueryItem(name: "station", value: stationId),
-            URLQueryItem(name: "begin_date", value: day),
-            URLQueryItem(name: "end_date", value: day),
+            URLQueryItem(name: "begin_date", value: dayFormatter.string(from: date.addingTimeInterval(-86_400))),
+            URLQueryItem(name: "end_date", value: dayFormatter.string(from: date.addingTimeInterval(86_400))),
             URLQueryItem(name: "datum", value: "MLLW"),
             URLQueryItem(name: "units", value: "english"),
-            URLQueryItem(name: "time_zone", value: "lst_ldt"),
+            URLQueryItem(name: "time_zone", value: "gmt"),
             URLQueryItem(name: "format", value: "json"),
             URLQueryItem(name: "interval", value: interval)
         ]
-        let (data, _) = try await URLSession.shared.data(from: components.url!)
+        let (data, response) = try await URLSession.shared.data(from: components.url!)
+        try HTTPStatusError.validate(response)
+        return try parsePredictions(data)
+    }
+
+    /// Parses a NOAA predictions payload. Internal (not private) so the GMT
+    /// date handling stays under test.
+    nonisolated static func parsePredictions(_ data: Data) throws -> [TidePoint] {
         let decoded = try JSONDecoder().decode(PredictionsResponse.self, from: data)
-        let timeFmt = DateFormatter()
-        timeFmt.dateFormat = "yyyy-MM-dd HH:mm"
-        timeFmt.timeZone = TimeZone.current
+        if let message = decoded.error?.message {
+            throw NOAADataError(message: message)
+        }
+        let timeFormatter = DateFormatter()
+        timeFormatter.dateFormat = "yyyy-MM-dd HH:mm"
+        timeFormatter.locale = Locale(identifier: "en_US_POSIX")
+        timeFormatter.timeZone = TimeZone(identifier: "GMT")
         return (decoded.predictions ?? []).compactMap { dto in
-            guard let t = timeFmt.date(from: dto.t),
-                  let v = Double(dto.v) else { return nil }
-            let kind: TideEvent.Kind?
-            switch dto.type {
-            case "H": kind = .high
-            case "L": kind = .low
-            default: kind = nil
+            guard let time = timeFormatter.date(from: dto.t),
+                  let value = Double(dto.v) else { return nil }
+            let kind: TideEvent.Kind? = switch dto.type {
+            case "H": .high
+            case "L": .low
+            default: nil
             }
-            return PredictionPoint(time: t, value: v, kind: kind)
+            return TidePoint(time: time, heightFeet: value, kind: kind)
         }
     }
 
@@ -164,5 +220,35 @@ final class TideService {
         let lat = (location.coordinate.latitude * 100).rounded() / 100
         let lon = (location.coordinate.longitude * 100).rounded() / 100
         return "\(lat),\(lon)-\(fmt.string(from: date))"
+    }
+}
+
+// MARK: - NOAA payloads
+// File scope so the nonisolated parsing helpers can decode them without
+// inheriting the service's main-actor isolation.
+
+private struct StationListResponse: Decodable {
+    let stations: [StationDTO]
+
+    struct StationDTO: Decodable {
+        let id: String
+        let name: String
+        let lat: Double
+        let lng: Double
+    }
+}
+
+private struct PredictionsResponse: Decodable {
+    let predictions: [PredictionDTO]?
+    let error: ErrorDTO?
+
+    struct PredictionDTO: Decodable {
+        let t: String     // "yyyy-MM-dd HH:mm" (GMT — we request time_zone=gmt)
+        let v: String     // height in feet
+        let type: String? // "H" or "L" when interval=hilo
+    }
+
+    struct ErrorDTO: Decodable {
+        let message: String?
     }
 }

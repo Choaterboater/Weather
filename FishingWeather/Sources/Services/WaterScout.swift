@@ -17,7 +17,15 @@ final class WaterScout {
     var status: Status = .idle
     var report: WaterScoutReport?
 
+    /// Bumped on every analyze()/reset(); state writes after an await bail out
+    /// when a newer photo superseded them, so the report always matches the
+    /// photo on screen.
+    private var generation = 0
+
     func analyze(image: UIImage, species: Species, conditions: FishingConditions?) async {
+        generation += 1
+        let gen = generation
+
         switch SystemLanguageModel.default.availability {
         case .available:
             break
@@ -32,22 +40,37 @@ final class WaterScout {
         status = .working
         report = nil
 
-        let imageData = image.pngData() ?? image.jpegData(compressionQuality: 0.8) ?? Data()
+        let imageData = await Self.analysisData(for: image)
+        guard gen == generation else { return }
         let labels = await ImageSceneAnalyzer.labels(forImageData: imageData)
+        guard gen == generation else { return }
         let prompt = Self.prompt(labels: labels, species: species, conditions: conditions)
 
         do {
             let session = LanguageModelSession(instructions: Self.instructions)
-            report = try await session.respond(to: prompt, generating: WaterScoutReport.self).content
+            let result = try await session.respond(to: prompt, generating: WaterScoutReport.self).content
+            guard gen == generation else { return }
+            report = result
             status = .ready
         } catch {
+            guard gen == generation else { return }
             status = .failed(error.localizedDescription)
         }
     }
 
     func reset() {
+        generation += 1
         status = .idle
         report = nil
+    }
+
+    /// Vision only needs a modest bitmap. Downscale + JPEG off the main actor
+    /// instead of PNG-encoding the full-resolution photo, which froze the UI
+    /// for seconds per photo.
+    nonisolated private static func analysisData(for image: UIImage) async -> Data {
+        await Task.detached(priority: .userInitiated) {
+            image.downscaled(maxDimension: 1024).jpegData(compressionQuality: 0.7) ?? Data()
+        }.value
     }
 
     private static let instructions = """

@@ -72,8 +72,10 @@ final class OpenStreetMapClient {
 
     private func fetch(near location: CLLocation, radiusMiles: Double) async throws -> [RampPin] {
         let meters = Int(radiusMiles * 1609.34)
-        let lat = location.coordinate.latitude
-        let lon = location.coordinate.longitude
+        // ~1.1 km granularity — matches the cache tile and keeps precise user
+        // coordinates out of a third party's request logs.
+        let lat = (location.coordinate.latitude * 100).rounded() / 100
+        let lon = (location.coordinate.longitude * 100).rounded() / 100
         let query = """
         [out:json][timeout:12];
         (
@@ -90,7 +92,10 @@ final class OpenStreetMapClient {
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.setValue("BiteCast/0.1 (https://github.com/secure-ssid)", forHTTPHeaderField: "User-Agent")
 
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        // The public Overpass instance routinely answers 429/504 with an HTML
+        // body; decode that and the user sees a cryptic "wrong format" error.
+        try HTTPStatusError.validate(response)
         let decoded = try JSONDecoder().decode(OverpassResponse.self, from: data)
         return decoded.elements.compactMap(\.pin)
     }

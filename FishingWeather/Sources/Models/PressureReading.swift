@@ -39,32 +39,49 @@ struct PressureReading {
     /// Change in hectopascals per hour over the comparison window, if computed.
     let changePerHour: Double?
 
+    /// A baseline younger than this can't support a slope: the current hour's
+    /// forecast entry may be only minutes old, and dividing a forecast-vs-
+    /// observation mismatch by minutes reads as a huge, spurious trend.
+    private static let minimumBaselineAge: TimeInterval = 3600
+
     static func analyze(current: CurrentWeather, hourly: [HourWeather], now: Date) -> PressureReading {
-        let nowPressure = current.pressure
+        let fallback: PressureTendency = switch current.pressureTrend {
+        case .rising: .rising
+        case .falling: .falling
+        default: .steady
+        }
+        return analyze(
+            nowHPa: current.pressure.converted(to: .hectopascals).value,
+            history: hourly.map { (date: $0.date, hPa: $0.pressure.converted(to: .hectopascals).value) },
+            now: now,
+            fallback: fallback
+        )
+    }
+
+    /// Pure core — WeatherKit's types have no public initializers, so tests
+    /// (and any future widget) drive this overload directly.
+    static func analyze(
+        nowHPa: Double,
+        history: [(date: Date, hPa: Double)],
+        now: Date,
+        fallback: PressureTendency
+    ) -> PressureReading {
+        let pressure = Measurement(value: nowHPa, unit: UnitPressure.hectopascals)
         let target = now.addingTimeInterval(-3 * 3600)
 
-        // Nearest past hour to ~3h ago that WeatherKit gives us.
-        let past = hourly
-            .filter { $0.date < now }
+        // Nearest sample to ~3h ago that's old enough to be a real baseline.
+        let past = history
+            .filter { now.timeIntervalSince($0.date) >= minimumBaselineAge }
             .min { abs($0.date.timeIntervalSince(target)) < abs($1.date.timeIntervalSince(target)) }
 
-        if let past {
-            let hours = now.timeIntervalSince(past.date) / 3600
-            let deltaHPa = nowPressure.converted(to: .hectopascals).value
-                - past.pressure.converted(to: .hectopascals).value
-            let perHour = hours > 0 ? deltaHPa / hours : 0
-            let tendency: PressureTendency =
-                perHour > 0.3 ? .rising : (perHour < -0.3 ? .falling : .steady)
-            return PressureReading(pressure: nowPressure, tendency: tendency, changePerHour: perHour)
+        guard let past else {
+            return PressureReading(pressure: pressure, tendency: fallback, changePerHour: nil)
         }
 
-        // No usable history — fall back to WeatherKit's reported trend.
-        let tendency: PressureTendency
-        switch current.pressureTrend {
-        case .rising: tendency = .rising
-        case .falling: tendency = .falling
-        default: tendency = .steady
-        }
-        return PressureReading(pressure: nowPressure, tendency: tendency, changePerHour: nil)
+        let hours = now.timeIntervalSince(past.date) / 3600
+        let perHour = (nowHPa - past.hPa) / hours
+        let tendency: PressureTendency =
+            perHour > 0.3 ? .rising : (perHour < -0.3 ? .falling : .steady)
+        return PressureReading(pressure: pressure, tendency: tendency, changePerHour: perHour)
     }
 }
