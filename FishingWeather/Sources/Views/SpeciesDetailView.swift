@@ -120,17 +120,17 @@ struct SpeciesDetailView: View {
                     .allowsHitTesting(false)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(species.displayName)
-                            .font(.title2.weight(.semibold))
+                            .font(.system(size: 20, weight: .bold, design: .monospaced))
                             .foregroundStyle(.white)
                         if let scientific = species.scientificName {
                             Text(scientific)
+                                .font(.system(size: 14, design: .monospaced))
                                 .italic()
-                                .font(.subheadline)
                                 .foregroundStyle(.white.opacity(0.85))
                         }
                         if let waterType = species.waterType {
                             Label(waterType.displayName, systemImage: waterType.symbolName)
-                                .font(.caption.weight(.medium))
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
                                 .foregroundStyle(.white.opacity(0.9))
                         }
                     }
@@ -145,10 +145,11 @@ struct SpeciesDetailView: View {
             HStack(spacing: 12) {
                 Image(systemName: inSeason ? "circle.fill" : "circle")
                     .foregroundStyle(inSeason ? .green : .orange)
-                    .font(.title3)
+                    .font(.system(size: 20, weight: .bold))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(inSeason ? "Peak season right now" : "Off-peak this month")
-                        .font(.subheadline.weight(.semibold))
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Ink.chart)
                     Text(inSeason
                         ? "Local activity tends to peak — prioritize this species."
                         : "Still catchable. Check tides, weather, and the score on the Fishing tab."
@@ -316,7 +317,8 @@ struct SpeciesDetailView: View {
                     ForEach(profile.baits, id: \.self) { bait in
                         Label(bait, systemImage: "circle.fill")
                             .labelStyle(BulletLabelStyle(color: species.tint))
-                            .font(.subheadline)
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Ink.chart)
                     }
                 }
             }
@@ -331,7 +333,8 @@ struct SpeciesDetailView: View {
                     ForEach(profile.techniques, id: \.self) { technique in
                         Label(technique, systemImage: "circle.fill")
                             .labelStyle(BulletLabelStyle(color: species.tint))
-                            .font(.subheadline)
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Ink.chart)
                     }
                 }
             }

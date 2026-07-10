@@ -182,7 +182,7 @@ private struct DebugScoreCard: View {
                                 Text("1013 hPa")
                                     .font(.system(size: 28, weight: .semibold, design: .monospaced))
                                 Label("Falling", systemImage: "arrow.down.right")
-                                    .font(.subheadline.weight(.medium))
+                                    .font(.system(size: 14, weight: .bold, design: .monospaced))
                                     .foregroundStyle(Ink.bite)
                                 Spacer()
                             }

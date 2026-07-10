@@ -212,7 +212,6 @@ private struct LabeledRow: View {
                 Text(value)
                     .font(.system(size: 14, weight: .medium, design: .monospaced))
                     .foregroundStyle(Ink.chart)
-                    .font(.subheadline)
             }
         }
     }

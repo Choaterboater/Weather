@@ -54,7 +54,7 @@ struct YourPatternsView: View {
     private func header(count: Int) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Tuned to you")
-                .font(.system(.title2, design: .rounded).weight(.bold))
+                .font(.system(size: 24, weight: .bold, design: .monospaced))
                 .foregroundStyle(Ink.chart)
             Text("Learned from your \(count) \(subject)\(count == 1 ? "catch" : "catches")")
                 .instrumentLabel(Ink.brass)
