@@ -80,6 +80,8 @@ struct FishingView: View {
                             isLoading: tides.isLoading,
                             lastError: tides.lastError
                         )
+                    } else if let loc = activeLocation {
+                        WaterConditionsCard(location: loc)
                     }
                     PressureCard(reading: conditions.pressure, samples: hourlySamples)
                     SolunarDetailsCard(conditions: conditions)
