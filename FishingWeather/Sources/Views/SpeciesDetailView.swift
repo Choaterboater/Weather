@@ -428,18 +428,26 @@ private struct SightingRow: View {
                         .scaledToFill()
                 case .failure:
                     Image(systemName: "fish")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Ink.chartDim)
                 default:
-                    Color.secondary.opacity(0.15)
+                    Color(Ink.hullLine).opacity(0.3)
                 }
             }
             .frame(width: 40, height: 40)
             .clipShape(.rect(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Ink.hullLine, lineWidth: 0.5)
+            )
         } else {
             Image(systemName: "fish")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Ink.chartDim)
                 .frame(width: 40, height: 40)
-                .background(Color.secondary.opacity(0.15), in: .rect(cornerRadius: 8))
+                .background(Color(Ink.hullLine).opacity(0.3), in: .rect(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Ink.hullLine, lineWidth: 0.5)
+                )
         }
     }
 }

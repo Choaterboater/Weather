@@ -81,14 +81,23 @@ struct ScoutView: View {
                 .frame(maxWidth: .infinity)
                 .clipShape(.rect(cornerRadius: 20))
         } else {
-            RoundedRectangle(cornerRadius: 20)
-                .fill(.quaternary)
-                .frame(height: 220)
-                .overlay {
-                    Image(systemName: "water.waves")
-                        .font(.system(size: 44))
-                        .foregroundStyle(.secondary)
-                }
+            LinearGradient(
+                colors: [Ink.hullLine.opacity(0.3), Ink.abyss.opacity(0.5)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .frame(height: 220)
+            .frame(maxWidth: .infinity)
+            .clipShape(.rect(cornerRadius: 20))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(Ink.hullLine, lineWidth: 1)
+            )
+            .overlay {
+                Image(systemName: "water.waves")
+                    .font(.system(size: 44))
+                    .foregroundStyle(Ink.chartDim.opacity(0.5))
+            }
         }
     }
 

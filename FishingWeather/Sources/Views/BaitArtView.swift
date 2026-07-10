@@ -122,7 +122,9 @@ struct BaitArtView: View {
                 img.resizable().scaledToFill()
             case .failure:
                 placeholder.overlay {
-                    Image(systemName: "photo").foregroundStyle(.secondary)
+                    Image(systemName: "photo")
+                        .font(.system(size: 32))
+                        .foregroundStyle(Ink.chartDim.opacity(0.5))
                 }
             default:
                 placeholder.overlay { ProgressView() }
@@ -134,9 +136,16 @@ struct BaitArtView: View {
     }
 
     private var placeholder: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .fill(.quaternary)
-            .frame(height: 170)
-            .frame(maxWidth: .infinity)
+        LinearGradient(
+            colors: [Ink.hullLine.opacity(0.3), Ink.abyss.opacity(0.5)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .frame(height: 170)
+        .frame(maxWidth: .infinity)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Ink.hullLine, lineWidth: 1)
+        )
     }
 }
