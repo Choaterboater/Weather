@@ -66,8 +66,8 @@ struct ScoutView: View {
     private var introCard: some View {
         GlassCard {
             Text("Snap the water in front of you. The on-device AI reads the scene and your conditions to suggest where to cast.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                .foregroundStyle(Ink.chartDim)
         }
     }
 
@@ -129,21 +129,26 @@ struct ScoutView: View {
             GlassCard {
                 HStack(spacing: 12) {
                     ProgressView()
-                    Text("Reading the water…").foregroundStyle(.secondary)
+                    Text("Reading the water…")
+                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
                 }
             }
         case .unavailable(let message):
             GlassCard {
                 Label(message, systemImage: "exclamationmark.bubble")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Ink.chartDim)
             }
         case .failed(let message):
             GlassCard {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("Couldn't read this photo", systemImage: "exclamationmark.triangle")
-                        .font(.subheadline.weight(.medium))
-                    Text(message).font(.caption).foregroundStyle(.secondary)
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Ink.chart)
+                    Text(message)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
                 }
             }
         case .ready:
@@ -166,15 +171,17 @@ private struct ScoutReportCard: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
                     Text("Best cast")
-                        .font(.headline)
+                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Ink.chart)
                     Spacer()
                     Text("\(report.rating)/100")
-                        .font(.headline)
+                        .font(.system(size: 16, weight: .bold, design: .monospaced))
                         .contentTransition(.numericText())
-                        .foregroundStyle(report.rating >= 60 ? .green : (report.rating >= 35 ? .orange : .red))
+                        .foregroundStyle(Ink.band(for: report.rating))
                 }
                 Text(report.bestSpot)
-                    .font(.subheadline)
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Ink.chartDim)
 
                 Divider()
 
@@ -194,13 +201,17 @@ private struct LabeledRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: systemImage)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Ink.chartDim)
                 .frame(width: 22)
             VStack(alignment: .leading, spacing: 2) {
                 Text(label)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .textCase(.uppercase)
+                    .tracking(1)
+                    .foregroundStyle(Ink.chartDim)
                 Text(value)
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Ink.chart)
                     .font(.subheadline)
             }
         }

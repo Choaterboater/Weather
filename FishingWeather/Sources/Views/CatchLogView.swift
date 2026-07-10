@@ -107,21 +107,22 @@ private struct CatchRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
                     Text(entry.species.displayName)
-                        .font(.headline)
+                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Ink.chart)
                     if let size = entry.sizeSummary {
                         Text(size)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     }
                 }
                 if !entry.bait.isEmpty {
                     Text(entry.bait)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
                 }
                 Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Ink.hullLine)
             }
             Spacer()
         }

@@ -61,8 +61,8 @@ struct SpeciesDetailView: View {
                 hero
                 if let credit = species.photoCredit {
                     Text(credit)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .padding(.top, -10)
                 }
@@ -153,8 +153,8 @@ struct SpeciesDetailView: View {
                         ? "Local activity tends to peak — prioritize this species."
                         : "Still catchable. Check tides, weather, and the score on the Fishing tab."
                     )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Ink.chartDim)
                     .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
@@ -172,24 +172,25 @@ struct SpeciesDetailView: View {
                         regulationDetail(regulation)
                     } else if let resolvedStateCode {
                         Text("No regulation data on file for \(species.displayName.lowercased()) in \(resolvedStateCode).")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 14, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     } else {
                         Text("Waiting for location to pick a state…")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 14, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     }
                     if let info = stateInfo {
                         Divider()
                         HStack(spacing: 4) {
-                            Image(systemName: "info.circle").font(.caption2)
+                            Image(systemName: "info.circle")
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
                             Text("Verified \(info.lastVerifiedDate). Always confirm before keeping fish.")
-                                .font(.caption2)
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
                         }
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Ink.chartDim)
                         Link(destination: info.sourceURL) {
                             Label("\(info.stateName) agency", systemImage: "arrow.up.right.square")
-                                .font(.caption.weight(.medium))
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
                         }
                     }
                 }
@@ -231,15 +232,15 @@ struct SpeciesDetailView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(reg.seasonClosures.enumerated()), id: \.offset) { _, closure in
                         Label(closure.label, systemImage: "calendar")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     }
                 }
             }
             if let notes = reg.notes {
                 Text(notes)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Ink.chartDim)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -255,15 +256,15 @@ struct SpeciesDetailView: View {
                         HStack {
                             ProgressView()
                             Text("Searching iNaturalist…")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Ink.chartDim)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     } else if let error = inaturalist.lastError[species], sightings.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
                             Label(error, systemImage: "exclamationmark.triangle")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Ink.chartDim)
                             Button {
                                 Task {
                                     if let here { await inaturalist.loadSightings(for: species, near: here) }
@@ -275,8 +276,8 @@ struct SpeciesDetailView: View {
                         }
                     } else if sightings.isEmpty {
                         Text("No verified observations within 50 mi in the last year.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 14, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         VStack(alignment: .leading, spacing: 10) {
@@ -293,16 +294,17 @@ struct SpeciesDetailView: View {
 
     private var attribution: some View {
         HStack(spacing: 4) {
-            Image(systemName: "info.circle").font(.caption2)
+            Image(systemName: "info.circle")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
             Text("Community observations · iNaturalist")
-                .font(.caption2)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
             Spacer()
             Link(destination: URL(string: "https://www.inaturalist.org")!) {
                 Text("inaturalist.org")
-                    .font(.caption2.weight(.medium))
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
             }
         }
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Ink.chartDim)
         .padding(.top, 2)
     }
 
@@ -342,11 +344,11 @@ struct SpeciesDetailView: View {
             GlassCard {
                 VStack(alignment: .leading, spacing: 8) {
                     Label(profile.habitatHint, systemImage: "mappin.and.ellipse")
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Ink.chart)
                     Label(profile.bestTimeOfDay, systemImage: "clock")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
                 }
             }
         }
@@ -373,10 +375,13 @@ struct SpeciesDetailView: View {
     private func fact(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(label)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .textCase(.uppercase)
+                .tracking(1)
+                .foregroundStyle(Ink.chartDim)
             Text(value)
-                .font(.subheadline.weight(.semibold))
+                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                .foregroundStyle(Ink.chart)
         }
     }
 
@@ -400,19 +405,20 @@ private struct SightingRow: View {
             thumbnail
             VStack(alignment: .leading, spacing: 2) {
                 Text(dateText)
-                    .font(.subheadline.weight(.medium))
+                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Ink.chart)
                 if let place = sighting.placeGuess {
                     Text(place)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
                         .lineLimit(1)
                 }
             }
             Spacer()
             if let distanceMiles {
                 Text("\(Int(distanceMiles)) mi")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Ink.chartDim)
             }
         }
     }

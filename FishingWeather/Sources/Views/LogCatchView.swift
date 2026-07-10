@@ -119,32 +119,34 @@ struct LogCatchView: View {
             if case .ready = recognizer.status, let result = recognizer.result {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Looks like \(result.commonName)")
-                        .font(.subheadline.weight(.medium))
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
                     if result.matchedSpecies != nil {
                         Text("Set species to \(result.matchedSpecies!.displayName).")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     } else if !result.note.isEmpty {
                         Text(result.note)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     }
                 }
             }
             if case .failed(let message) = recognizer.status {
                 Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Ink.chartDim)
             }
         case .working:
             HStack(spacing: 8) {
                 ProgressView()
-                Text("Identifying…").foregroundStyle(.secondary)
+                Text("Identifying…")
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Ink.chartDim)
             }
         case .unavailable(let message):
             Text(message)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(Ink.chartDim)
         }
     }
 

@@ -96,14 +96,14 @@ private struct WindCompass: View {
     var body: some View {
         ZStack {
             Circle()
-                .stroke(.secondary.opacity(0.25), lineWidth: 1.5)
+                .stroke(Ink.hullLine.opacity(0.5), lineWidth: 1.5)
             Text("N")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(Ink.chartDim)
                 .offset(y: -20)
             Image(systemName: "arrow.up")
                 .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(.teal)
+                .foregroundStyle(Ink.bite)
                 .rotationEffect(.degrees(fromDegrees + 180))
         }
         .frame(width: 54, height: 54)

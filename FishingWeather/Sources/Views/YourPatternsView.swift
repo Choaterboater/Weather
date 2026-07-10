@@ -74,7 +74,7 @@ struct YourPatternsView: View {
                                 .frame(width: 22)
                                 .foregroundStyle(Ink.chartDim)
                             Text(change.label)
-                                .font(.subheadline)
+                                .font(.system(size: 14, weight: .bold, design: .monospaced))
                                 .foregroundStyle(Ink.chart)
                             Spacer()
                             directionTag(change.direction)
@@ -113,11 +113,11 @@ struct YourPatternsView: View {
                                 .frame(width: 22)
                                 .foregroundStyle(Ink.brass)
                             Text(stat.label)
-                                .font(.subheadline)
+                                .font(.system(size: 14, weight: .bold, design: .monospaced))
                                 .foregroundStyle(Ink.chart)
                             Spacer()
                             Text(stat.detail)
-                                .font(.system(size: 11, design: .monospaced))
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
                                 .foregroundStyle(Ink.chartDim)
                         }
                     }
@@ -134,7 +134,7 @@ struct YourPatternsView: View {
                     ForEach(baits) { bait in
                         HStack {
                             Text(bait.bait)
-                                .font(.subheadline)
+                                .font(.system(size: 14, weight: .bold, design: .monospaced))
                                 .foregroundStyle(Ink.chart)
                             Spacer()
                             Text("×\(bait.count)")
@@ -149,8 +149,8 @@ struct YourPatternsView: View {
 
     private var disclaimer: some View {
         Text("BiteCast nudges your score toward the conditions you actually catch on — it never overrides the fundamentals. More catches, sharper tuning.")
-            .font(.footnote)
-            .foregroundStyle(.secondary)
+            .font(.system(size: 11, weight: .medium, design: .monospaced))
+            .foregroundStyle(Ink.chartDim)
             .padding(.horizontal, 4)
             .padding(.top, 4)
     }

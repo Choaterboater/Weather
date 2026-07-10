@@ -61,7 +61,7 @@ struct SectionHeader: View {
         .font(.system(size: 11, weight: .semibold, design: .monospaced))
         .tracking(1.5)
         .textCase(.uppercase)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Ink.chartDim)
         .padding(.horizontal, 4)
     }
 }
