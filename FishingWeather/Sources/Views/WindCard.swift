@@ -43,16 +43,17 @@ struct WindPanel: View {
                         WindCompass(fromDegrees: fromDegrees, compass: compass)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("\(compass) \(speedText)")
-                                .font(.title3.weight(.semibold))
+                                .font(.system(size: 20, weight: .bold, design: .monospaced))
+                                .foregroundStyle(Ink.chart)
                                 .contentTransition(.numericText())
                             if let gustText {
                                 Text("Gusts \(gustText)")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(Ink.chartDim)
                             }
                             Text(Self.descriptor(forMph: speedMph))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Ink.chartDim)
                         }
                         Spacer()
                     }
