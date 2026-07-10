@@ -38,7 +38,7 @@ struct SpeciesPhotoView: View {
     private var iconSize: CGFloat {
         switch size {
         case .card: 36
-        case .hero: 42
+        case .hero: 64
         case .square: 22
         }
     }

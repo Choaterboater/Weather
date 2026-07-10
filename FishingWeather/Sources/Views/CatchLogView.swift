@@ -79,12 +79,15 @@ private struct Stat: View {
     var body: some View {
         VStack(spacing: 4) {
             Text(value)
-                .font(.headline)
+                .font(.system(size: 16, weight: .bold, design: .monospaced))
+                .foregroundStyle(Ink.chart)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .textCase(.uppercase)
+                .tracking(1)
+                .foregroundStyle(Ink.chartDim)
         }
         .frame(maxWidth: .infinity)
     }
