@@ -55,6 +55,9 @@ struct CurrentConditionsView: View {
                     Metric(label: "Dew Point",
                            value: current.dewPoint.formatted(.measurement(width: .narrow, usage: .weather)),
                            systemImage: "drop.fill")
+                    Metric(label: "Visibility",
+                           value: current.visibility.formatted(.measurement(width: .abbreviated, usage: .general)),
+                           systemImage: "eye")
                     Metric(label: "UV", value: "\(current.uvIndex.value)", systemImage: "sun.max")
                 }
             }
@@ -75,10 +78,10 @@ private struct Metric: View {
             Image(systemName: systemImage)
                 .foregroundStyle(Ink.chartDim)
             Text(value)
-                .font(.system(size: 16, weight: .bold, design: .monospaced))
+                .font(.system(size: 14, weight: .bold, design: .monospaced))
                 .foregroundStyle(Ink.chart)
                 .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .minimumScaleFactor(0.5)
             Text(label)
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .textCase(.uppercase)
