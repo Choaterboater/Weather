@@ -42,10 +42,10 @@ private struct SpeciesChip: View {
             } icon: {
                 Image(systemName: "fish.fill")
             }
-            .font(.subheadline.weight(.semibold))
+            .font(.system(size: 14, weight: .bold, design: .monospaced))
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
-            .foregroundStyle(isSelected ? .white : .primary)
+            .foregroundStyle(isSelected ? .white : Ink.chartDim)
         }
         // Glass must wrap the label directly: a glassEffect on a .background
         // shape gets hoisted into the enclosing GlassEffectContainer's layer

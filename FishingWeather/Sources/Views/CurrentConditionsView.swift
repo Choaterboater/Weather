@@ -38,11 +38,11 @@ struct CurrentConditionsView: View {
                 }
 
                 Text(current.condition.description)
-                    .font(.title3.weight(.medium))
+                    .font(.system(size: 20, weight: .bold, design: .monospaced))
                     .foregroundStyle(Ink.chart)
 
                 Text("Feels like \(feelsLike)")
-                    .font(.subheadline.weight(.medium))
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
                     .foregroundStyle(Ink.chartDim)
 
                 Divider()

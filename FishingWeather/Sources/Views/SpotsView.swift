@@ -52,7 +52,7 @@ struct SpotsView: View {
                     showsAddSheet = true
                 } label: {
                     Image(systemName: "plus.circle.fill")
-                        .font(.title3)
+                        .font(.system(size: 20))
                 }
                 .disabled(location.location == nil)
             }
@@ -154,10 +154,10 @@ struct SpotsView: View {
                     GlassCard {
                         HStack(spacing: 12) {
                             Image(systemName: "location.fill")
-                                .font(.title2)
-                                .foregroundStyle(.orange)
+                                .font(.system(size: 24))
+                                .foregroundStyle(Ink.brass)
                                 .frame(width: 36, height: 36)
-                                .background(Circle().fill(Color.orange.opacity(0.15)))
+                                .background(Circle().fill(Ink.brass.opacity(0.15)))
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Current Location")
                                     .font(.system(size: 16, weight: .bold, design: .monospaced))
@@ -171,8 +171,8 @@ struct SpotsView: View {
                             Spacer()
                             if spots.selectedSpotID == nil {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                                    .font(.headline)
+                                    .foregroundStyle(Ink.bite)
+                                    .font(.system(size: 16, weight: .bold, design: .monospaced))
                             }
                         }
                     }
@@ -337,7 +337,7 @@ private struct RampRow: View {
                         .foregroundStyle(Ink.chartDim)
                 }
                 Image(systemName: "arrow.up.right.circle")
-                    .font(.subheadline)
+                    .font(.system(size: 14, weight: .bold, design: .monospaced))
                     .foregroundStyle(Ink.hullLine)
             }
         }

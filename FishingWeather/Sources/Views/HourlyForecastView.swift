@@ -46,7 +46,7 @@ private struct HourCell: View {
                 .foregroundStyle(Ink.chartDim)
             Image(systemName: hour.symbolName)
                 .symbolRenderingMode(.multicolor)
-                .font(.title3)
+                .font(.system(size: 20, weight: .bold))
             Text(hour.temperature.formatted(.measurement(width: .narrow, usage: .weather)))
                 .font(.system(size: 14, weight: .bold, design: .monospaced))
                 .foregroundStyle(Ink.chart)

@@ -162,7 +162,7 @@ struct FishingView: View {
             GlassCard {
                 HStack(spacing: 14) {
                     Image(systemName: "calendar.badge.clock")
-                        .font(.title2)
+                        .font(.system(size: 24))
                         .foregroundStyle(Ink.brass)
                         .frame(width: 32)
                     VStack(alignment: .leading, spacing: 2) {
@@ -175,7 +175,7 @@ struct FishingView: View {
                     }
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.subheadline)
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
                         .foregroundStyle(Ink.chartDim)
                 }
             }
@@ -259,7 +259,7 @@ private struct SpeciesFocusCard: View {
         GlassCard {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: "fish.fill")
-                    .font(.title3)
+                    .font(.system(size: 20))
                     .foregroundStyle(species.tint)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(species == .all ? "All species" : species.displayName)

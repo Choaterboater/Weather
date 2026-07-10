@@ -101,7 +101,7 @@ struct TripPlannerView: View {
     private func header(_ outlook: WeekOutlook) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Best This Week")
-                .font(.system(.title2, design: .rounded).weight(.bold))
+                .font(.system(size: 24, weight: .bold, design: .monospaced))
                 .foregroundStyle(Ink.chart)
             Text(outlook.locationName)
                 .instrumentLabel(Ink.brass)
@@ -149,7 +149,8 @@ private struct ScoredWindowRow: View {
                 VStack(alignment: .leading, spacing: 7) {
                     HStack(spacing: 8) {
                         Text(window.start, format: .dateTime.weekday(.wide))
-                            .font(.system(.subheadline, design: .rounded).weight(.bold))
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Ink.chart)
                         periodPill
                     }
                     Text(timeRange)

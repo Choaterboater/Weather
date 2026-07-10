@@ -12,12 +12,12 @@ struct SpotCard: View {
         GlassCard {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: spot.kind?.symbolName ?? "mappin.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(spot.waterType?.tint ?? .teal)
+                    .font(.system(size: 24))
+                    .foregroundStyle(spot.waterType?.tint ?? Ink.tide)
                     .frame(width: 36, height: 36)
                     .background(
                         Circle()
-                            .fill((spot.waterType?.tint ?? .teal).opacity(0.15))
+                            .fill((spot.waterType?.tint ?? Ink.tide).opacity(0.15))
                     )
 
                 VStack(alignment: .leading, spacing: 6) {
@@ -30,8 +30,8 @@ struct SpotCard: View {
                         if isActive {
                             Label("Active", systemImage: "checkmark.circle.fill")
                                 .labelStyle(.iconOnly)
-                                .foregroundStyle(.green)
-                                .font(.headline)
+                                .foregroundStyle(Ink.bite)
+                                .font(.system(size: 16, weight: .bold, design: .monospaced))
                         }
                     }
 

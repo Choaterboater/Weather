@@ -112,7 +112,7 @@ struct TideCard: View {
                 HStack(spacing: 12) {
                     Image(systemName: event.kind.symbolName)
                         .foregroundStyle(event.kind == .high ? Ink.brass : Ink.tide)
-                        .font(.headline)
+                        .font(.system(size: 16, weight: .bold, design: .monospaced))
                         .frame(width: 22)
                     Text(event.kind.label)
                         .font(.system(size: 14, weight: .bold, design: .monospaced))

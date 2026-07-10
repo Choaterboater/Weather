@@ -117,7 +117,8 @@ struct BaitEngineView: View {
                         .onSubmit(submit)
                     Button(action: submit) {
                         Image(systemName: "arrow.up.circle.fill")
-                            .font(.title2)
+                            .font(.system(size: 24))
+                            .foregroundStyle(Ink.bite)
                     }
                     .accessibilityLabel("Send question")
                     .disabled(question.trimmingCharacters(in: .whitespaces).isEmpty || engine.isAnswering)

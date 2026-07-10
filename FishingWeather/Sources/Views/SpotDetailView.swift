@@ -87,8 +87,8 @@ struct SpotDetailView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
                     Image(systemName: spot.kind?.symbolName ?? "mappin.circle.fill")
-                        .font(.title)
-                        .foregroundStyle(spot.waterType.flatMap { $0.tint } ?? .teal)
+                        .font(.system(size: 28))
+                        .foregroundStyle(spot.waterType.flatMap { $0.tint } ?? Ink.tide)
                     VStack(alignment: .leading) {
                         Text(spot.name)
                             .font(.system(size: 20, weight: .bold, design: .monospaced))
