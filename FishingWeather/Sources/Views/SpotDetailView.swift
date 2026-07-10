@@ -55,6 +55,12 @@ struct SpotDetailView: View {
                 if let code = spot.stateCode {
                     regulationsSection(stateCode: code)
                 }
+                
+                YouTubeVideoCarousel(
+                    title: "Local Videos",
+                    query: "\(spot.name) fishing"
+                )
+                
                 actions
             }
             .padding(.horizontal)

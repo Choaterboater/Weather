@@ -166,6 +166,11 @@ private struct BaitCard: View {
                 Text(recommendation.whyReason)
                     .font(.system(size: 14, weight: .medium, design: .monospaced))
                     .foregroundStyle(Ink.chartDim)
+                    
+                YouTubeVideoCarousel(
+                    title: "Tutorials",
+                    query: "How to fish \(recommendation.topBait) for \(species.displayName)"
+                )
             }
         }
         .accessibilityElement(children: .combine)
