@@ -52,6 +52,9 @@ struct CurrentConditionsView: View {
                     Metric(label: "Humidity",
                            value: current.humidity.formatted(.percent.precision(.fractionLength(0))),
                            systemImage: "humidity")
+                    Metric(label: "Dew Point",
+                           value: current.dewPoint.formatted(.measurement(width: .narrow, usage: .weather)),
+                           systemImage: "drop.fill")
                     Metric(label: "UV", value: "\(current.uvIndex.value)", systemImage: "sun.max")
                 }
             }
