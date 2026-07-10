@@ -78,6 +78,8 @@ struct SpotAnnotation: Identifiable {
 struct SpotsOverviewMap: View {
     let center: CLLocationCoordinate2D
     let annotations: [SpotAnnotation]
+    let catchEntries: [CatchEntry]
+    let showsHeatmap: Bool
     @Binding var style: SpotMapStyle
     let onSelect: (SpotAnnotation) -> Void
 
@@ -91,11 +93,15 @@ struct SpotsOverviewMap: View {
     init(
         center: CLLocationCoordinate2D,
         annotations: [SpotAnnotation],
+        catchEntries: [CatchEntry] = [],
+        showsHeatmap: Bool = false,
         style: Binding<SpotMapStyle>,
         onSelect: @escaping (SpotAnnotation) -> Void
     ) {
         self.center = center
         self.annotations = annotations
+        self.catchEntries = catchEntries
+        self.showsHeatmap = showsHeatmap
         self._style = style
         self.onSelect = onSelect
         self._camera = State(initialValue: Self.region(for: center))
@@ -104,6 +110,11 @@ struct SpotsOverviewMap: View {
     var body: some View {
         Map(position: $camera, selection: $selection) {
             UserAnnotation()
+            
+            if showsHeatmap {
+                CatchHeatmapLayer(entries: catchEntries)
+            }
+            
             ForEach(annotations) { annotation in
                 Marker(annotation.title, systemImage: annotation.symbol,
                        coordinate: annotation.coordinate)

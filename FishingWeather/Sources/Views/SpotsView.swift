@@ -13,8 +13,10 @@ struct SpotsView: View {
     @Environment(CuratedSpotCatalog.self) private var catalog
     @Environment(OpenStreetMapClient.self) private var osm
 
+    @Environment(CatchLog.self) private var log
     @State private var showsAddSheet = false
     @State private var routedSpot: FishingSpot?
+    @AppStorage("showsHeatmap") private var showsHeatmap = true
     @AppStorage("spotMapStyle") private var mapStyleRaw = SpotMapStyle.standard.rawValue
 
     private var here: CLLocation? {
@@ -87,12 +89,29 @@ struct SpotsView: View {
     @ViewBuilder
     private var overviewMapSection: some View {
         if let here {
-            SpotsOverviewMap(
-                center: here.coordinate,
-                annotations: mapAnnotations,
-                style: SpotMapStyle.stored($mapStyleRaw),
-                onSelect: handleMapSelection
-            )
+            ZStack(alignment: .topTrailing) {
+                SpotsOverviewMap(
+                    center: here.coordinate,
+                    annotations: mapAnnotations,
+                    catchEntries: log.entries,
+                    showsHeatmap: showsHeatmap,
+                    style: SpotMapStyle.stored($mapStyleRaw),
+                    onSelect: handleMapSelection
+                )
+                
+                if !log.entries.filter({ $0.latitude != nil }).isEmpty {
+                    Button {
+                        showsHeatmap.toggle()
+                    } label: {
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 20))
+                            .foregroundStyle(showsHeatmap ? Ink.bite : .white)
+                            .padding(8)
+                            .background(.ultraThinMaterial, in: .circle)
+                    }
+                    .padding(8)
+                }
+            }
         }
     }
 
