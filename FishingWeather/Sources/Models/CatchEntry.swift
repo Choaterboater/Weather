@@ -19,6 +19,7 @@ struct CatchEntry: Identifiable, Codable, Equatable {
     var pressureTendency: String?
     var moonPhase: String?
     var airTempF: Double?
+    var dewPointF: Double?
     /// Wind speed (mph) when the catch was logged. Optional — older logs and
     /// catches saved without live weather have none. Feeds wind personalization.
     var windMph: Double?
@@ -43,6 +44,7 @@ struct CatchEntry: Identifiable, Codable, Equatable {
         pressureTendency: String? = nil,
         moonPhase: String? = nil,
         airTempF: Double? = nil,
+        dewPointF: Double? = nil,
         windMph: Double? = nil,
         tidePhase: String? = nil,
         photoFilename: String? = nil
@@ -60,6 +62,7 @@ struct CatchEntry: Identifiable, Codable, Equatable {
         self.pressureTendency = pressureTendency
         self.moonPhase = moonPhase
         self.airTempF = airTempF
+        self.dewPointF = dewPointF
         self.windMph = windMph
         self.tidePhase = tidePhase
         self.photoFilename = photoFilename
