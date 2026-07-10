@@ -23,7 +23,8 @@ struct SpotCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .firstTextBaseline) {
                         Text(spot.name)
-                            .font(.headline)
+                            .font(.system(size: 16, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Ink.chart)
                             .lineLimit(2)
                         Spacer()
                         if isActive {
@@ -46,8 +47,8 @@ struct SpotCard: View {
                         }
                         if let distanceMiles {
                             Text("· \(Int(distanceMiles)) mi")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundStyle(Ink.chartDim)
                         }
                     }
 
@@ -66,13 +67,13 @@ struct SpotCard: View {
         }
     }
 
-    private func chip(_ text: String, color: Color = .secondary) -> some View {
+    private func chip(_ text: String, color: Color = Ink.chartDim) -> some View {
         Text(text)
-            .font(.caption2.weight(.medium))
+            .font(.system(size: 10, weight: .bold, design: .monospaced))
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background(color.opacity(0.15), in: .capsule)
-            .foregroundStyle(color == .secondary ? Color.secondary : color)
+            .foregroundStyle(color == Ink.chartDim ? Ink.chartDim : color)
     }
 
     private func speciesChip(_ species: Species) -> some View {
@@ -81,7 +82,8 @@ struct SpotCard: View {
                 .fill(species.tint)
                 .frame(width: 6, height: 6)
             Text(species.displayName)
-                .font(.caption2.weight(.medium))
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(Ink.chart)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 3)

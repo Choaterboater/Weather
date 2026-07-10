@@ -40,20 +40,24 @@ struct PressureTrendChart: View {
         .chartYScale(domain: range)
         .chartYAxis {
             AxisMarks(position: .leading) { value in
-                AxisGridLine().foregroundStyle(.secondary.opacity(0.15))
+                AxisGridLine().foregroundStyle(Ink.hullLine.opacity(0.3))
                 AxisValueLabel {
                     if let v = value.as(Double.self) {
-                        Text("\(Int(v))").font(.caption2).foregroundStyle(.secondary)
+                        Text("\(Int(v))")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     }
                 }
             }
         }
         .chartXAxis {
             AxisMarks(values: .stride(by: .hour, count: 6)) { value in
-                AxisGridLine().foregroundStyle(.secondary.opacity(0.12))
+                AxisGridLine().foregroundStyle(Ink.hullLine.opacity(0.3))
                 AxisValueLabel {
                     if let d = value.as(Date.self) {
-                        Text(d, format: .dateTime.hour()).font(.caption2).foregroundStyle(.secondary)
+                        Text(d, format: .dateTime.hour())
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     }
                 }
             }
@@ -86,10 +90,12 @@ struct TemperatureChart: View {
         }
         .chartYAxis {
             AxisMarks { value in
-                AxisGridLine().foregroundStyle(.secondary.opacity(0.12))
+                AxisGridLine().foregroundStyle(Ink.hullLine.opacity(0.3))
                 AxisValueLabel {
                     if let v = value.as(Double.self) {
-                        Text("\(Int(v))°").foregroundStyle(.secondary)
+                        Text("\(Int(v))°")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     }
                 }
             }
@@ -98,7 +104,9 @@ struct TemperatureChart: View {
             AxisMarks(values: .stride(by: .hour, count: 6)) { value in
                 AxisValueLabel {
                     if let d = value.as(Date.self) {
-                        Text(d, format: .dateTime.hour()).foregroundStyle(.secondary)
+                        Text(d, format: .dateTime.hour())
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     }
                 }
             }
@@ -167,20 +175,24 @@ struct WindForecastChart: View {
         .chartYScale(domain: 0...domainMax)
         .chartYAxis {
             AxisMarks(position: .leading) { value in
-                AxisGridLine().foregroundStyle(.secondary.opacity(0.15))
+                AxisGridLine().foregroundStyle(Ink.hullLine.opacity(0.3))
                 AxisValueLabel {
                     if let v = value.as(Double.self) {
-                        Text("\(Int(v))").font(.caption2).foregroundStyle(.secondary)
+                        Text("\(Int(v))")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     }
                 }
             }
         }
         .chartXAxis {
             AxisMarks(values: .stride(by: .hour, count: 6)) { value in
-                AxisGridLine().foregroundStyle(.secondary.opacity(0.12))
+                AxisGridLine().foregroundStyle(Ink.hullLine.opacity(0.3))
                 AxisValueLabel {
                     if let d = value.as(Date.self) {
-                        Text(d, format: .dateTime.hour()).font(.caption2).foregroundStyle(.secondary)
+                        Text(d, format: .dateTime.hour())
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     }
                 }
             }
@@ -223,16 +235,18 @@ struct BiteWindowsTimeline: View {
 
             RuleMark(x: .value("Now", now))
                 .lineStyle(.init(lineWidth: 2))
-                .foregroundStyle(.primary.opacity(0.6))
+                .foregroundStyle(Ink.chartDim)
         }
         .chartXScale(domain: dayBounds.start...dayBounds.end)
         .chartYAxis(.hidden)
         .chartXAxis {
             AxisMarks(values: .stride(by: .hour, count: 4)) { value in
-                AxisGridLine().foregroundStyle(.secondary.opacity(0.12))
+                AxisGridLine().foregroundStyle(Ink.hullLine.opacity(0.3))
                 AxisValueLabel {
                     if let d = value.as(Date.self) {
-                        Text(d, format: .dateTime.hour()).foregroundStyle(.secondary)
+                        Text(d, format: .dateTime.hour())
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     }
                 }
             }

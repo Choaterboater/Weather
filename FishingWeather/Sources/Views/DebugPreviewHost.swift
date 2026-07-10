@@ -187,8 +187,8 @@ private struct DebugScoreCard: View {
                                 Spacer()
                             }
                             Text("A dropping barometer ahead of a front is the textbook trigger.")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Ink.chartDim)
                             PressureTrendChart(samples: samples,
                                                now: start.addingTimeInterval(3 * 3600))
                         }

@@ -97,10 +97,10 @@ struct SpeciesGuideView: View {
             HStack(spacing: 6) {
                 if let systemImage {
                     Image(systemName: systemImage)
-                        .font(.caption)
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
                 }
                 Text(title)
-                    .font(.subheadline.weight(.medium))
+                    .font(.system(size: 14, weight: .bold, design: .monospaced))
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
@@ -127,18 +127,20 @@ private struct SpeciesCard: View {
                     .clipShape(.rect(cornerRadius: 16))
 
                 Text(species.displayName)
-                    .font(.headline)
+                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Ink.chart)
                     .lineLimit(1)
                 if let scientific = species.scientificName {
                     Text(scientific)
-                        .font(.caption2.italic())
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 10, design: .monospaced))
+                        .italic()
+                        .foregroundStyle(Ink.chartDim)
                         .lineLimit(1)
                 }
                 if let waterType = species.waterType {
                     Label(waterType.displayName, systemImage: waterType.symbolName)
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
                 }
             }
         }

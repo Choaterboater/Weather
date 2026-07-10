@@ -71,8 +71,8 @@ struct BaitArtView: View {
                 artImage(image)
                 if let caption = image.caption {
                     Text(caption)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
                         .lineLimit(1)
                 }
                 shopRow(for: image)
@@ -96,7 +96,7 @@ struct BaitArtView: View {
                         exactMatch != nil ? "Buy on \(preferred.displayName)" : "Find on \(preferred.displayName)",
                         systemImage: "bag"
                     )
-                    .font(.caption.weight(.medium))
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
                 }
             }
             Spacer()
@@ -108,7 +108,8 @@ struct BaitArtView: View {
                 }
             } label: {
                 Label("Store", systemImage: "cart")
-                    .font(.caption)
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Ink.chartDim)
                     .accessibilityHint("Change preferred store")
             }
         }

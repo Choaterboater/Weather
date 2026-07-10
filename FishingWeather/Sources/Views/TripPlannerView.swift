@@ -154,12 +154,12 @@ private struct ScoredWindowRow: View {
                     }
                     Text(timeRange)
                         .font(.system(size: 12, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Ink.chartDim)
                     scoreBar
                     if !window.factors.isEmpty {
                         Text(window.factors.joined(separator: " · "))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     }
                 }
 

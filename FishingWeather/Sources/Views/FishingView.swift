@@ -263,10 +263,11 @@ private struct SpeciesFocusCard: View {
                     .foregroundStyle(species.tint)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(species == .all ? "All species" : species.displayName)
-                        .font(.headline)
+                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Ink.chart)
                     Text(species.focusNote)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
                 }
                 Spacer(minLength: 0)
             }
@@ -292,8 +293,8 @@ private struct BiteWindowsCard: View {
                         headline(at: context.date)
                         if conditions.windows.isEmpty {
                             Text("No solunar windows for today (moonrise/moonset unavailable).")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Ink.chartDim)
                         } else {
                             BiteWindowsTimeline(windows: conditions.windows, now: context.date)
                             ForEach(conditions.windows) { window in
@@ -323,19 +324,19 @@ private struct BiteWindowsCard: View {
                         }
                     } label: {
                         Label("Remind me 30 min before", systemImage: "bell")
-                            .font(.subheadline)
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
                     }
                     .buttonStyle(.bordered)
                 case .scheduled:
                     Label("Reminder set", systemImage: "bell.fill")
-                        .font(.subheadline)
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
                         .foregroundStyle(Ink.bite)
                         .symbolEffect(.bounce, value: reminderState == .scheduled)
                         .transition(.scale.combined(with: .opacity))
                 case .tooLate:
                     Label("That window is too soon to remind", systemImage: "bell.slash")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
                 }
             }
             .animation(.snappy, value: reminderState)
@@ -413,7 +414,7 @@ private struct BiteWindowRow: View {
 
             if isActive {
                 Image(systemName: "circle.fill")
-                    .font(.caption2)
+                    .font(.system(size: 8))
                     .foregroundStyle(Ink.bite)
             }
         }
@@ -515,7 +516,7 @@ private struct TimeFact: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: systemImage)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Ink.chartDim)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 1) {
                 Text(label)

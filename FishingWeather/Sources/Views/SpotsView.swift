@@ -160,11 +160,12 @@ struct SpotsView: View {
                                 .background(Circle().fill(Color.orange.opacity(0.15)))
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Current Location")
-                                    .font(.headline)
+                                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(Ink.chart)
                                 if let placeName = location.placeName {
                                     Text(placeName)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                        .foregroundStyle(Ink.chartDim)
                                 }
                             }
                             Spacer()
@@ -218,8 +219,8 @@ struct SpotsView: View {
                     HStack {
                         ProgressView()
                         Text("Loading nearby ramps & piers…")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 14, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 } else if osm.ramps.isEmpty, osm.lastError != nil {
@@ -227,19 +228,19 @@ struct SpotsView: View {
                     // a network error as an authoritative empty area.
                     HStack {
                         Label("Couldn't load nearby ramps", systemImage: "wifi.slash")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 14, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                         Spacer()
                         Button("Retry") {
                             guard let here else { return }
                             Task { await osm.loadRamps(near: here) }
                         }
-                        .font(.subheadline.weight(.medium))
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
                     }
                 } else if osm.ramps.isEmpty {
                     Text("No public ramps or fishing sites tagged within 25 mi.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     VStack(alignment: .leading, spacing: 10) {
@@ -256,11 +257,11 @@ struct SpotsView: View {
     private var attribution: some View {
         HStack(spacing: 4) {
             Image(systemName: "info.circle")
-                .font(.caption2)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
             Text("Community-tagged — quality varies. Data © OpenStreetMap.")
-                .font(.caption2)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
         }
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Ink.chartDim)
         .padding(.top, 2)
     }
 
@@ -322,21 +323,22 @@ private struct RampRow: View {
                     .frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(pin.name ?? pin.kind.displayName)
-                        .font(.subheadline.weight(.medium))
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Ink.chart)
                         .lineLimit(1)
                     Text(pin.kind.displayName)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
                 }
                 Spacer()
                 if let distanceMiles {
                     Text("\(Int(distanceMiles)) mi")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
                 }
                 Image(systemName: "arrow.up.right.circle")
                     .font(.subheadline)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Ink.hullLine)
             }
         }
         .buttonStyle(.plain)
@@ -415,7 +417,7 @@ private struct AddSpotSheet: View {
             if coordinate == nil {
                 Section {
                     Label("Waiting on location…", systemImage: "location.slash")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Ink.chartDim)
                 }
             }
         }

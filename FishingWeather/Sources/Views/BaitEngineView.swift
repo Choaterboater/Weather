@@ -32,8 +32,8 @@ struct BaitEngineView: View {
                 GlassCard {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Get an on-device bait recommendation tuned to right now's conditions.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 14, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                         Button("Get recommendation", systemImage: "wand.and.stars") {
                             Task {
                                 await engine.generate(
@@ -52,23 +52,25 @@ struct BaitEngineView: View {
                     HStack(spacing: 12) {
                         ProgressView()
                         Text("Reading the water…")
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 14, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     }
                 }
             case .unavailable(let message):
                 GlassCard {
                     Label(message, systemImage: "exclamationmark.bubble")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
                 }
             case .failed(let message):
                 GlassCard {
                     VStack(alignment: .leading, spacing: 10) {
                         Label("Couldn't generate advice", systemImage: "exclamationmark.triangle")
-                            .font(.subheadline.weight(.medium))
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Ink.chart)
                         Text(message)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                         Button("Try again") {
                             Task {
                                 await engine.generate(
@@ -102,10 +104,11 @@ struct BaitEngineView: View {
                 ForEach(engine.answers) { qa in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(qa.question)
-                            .font(.subheadline.weight(.semibold))
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Ink.chart)
                         Text(qa.answer)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 14, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     }
                 }
                 HStack {
@@ -144,10 +147,11 @@ private struct BaitCard: View {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(recommendation.topBait)
-                            .font(.title2.weight(.bold))
+                            .font(.system(size: 20, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Ink.chart)
                         Text(recommendation.color)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 14, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     }
                     Spacer()
                     ConfidenceBadge(value: recommendation.confidence)
@@ -159,8 +163,8 @@ private struct BaitCard: View {
                 }
 
                 Text(recommendation.whyReason)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Ink.chartDim)
             }
         }
         .accessibilityElement(children: .combine)
@@ -183,12 +187,14 @@ private struct ConfidenceBadge: View {
     var body: some View {
         VStack(spacing: 2) {
             Text("\(value)%")
-                .font(.headline)
+                .font(.system(size: 16, weight: .bold, design: .monospaced))
                 .foregroundStyle(tint)
                 .contentTransition(.numericText())
             Text("confidence")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .textCase(.uppercase)
+                .tracking(1)
+                .foregroundStyle(Ink.chartDim)
         }
     }
 }
@@ -201,10 +207,13 @@ private struct DetailItem: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Label(label, systemImage: systemImage)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .textCase(.uppercase)
+                .tracking(1)
+                .foregroundStyle(Ink.chartDim)
             Text(value)
-                .font(.subheadline.weight(.medium))
+                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                .foregroundStyle(Ink.chart)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

@@ -90,15 +90,19 @@ struct SpotDetailView: View {
                         .font(.title)
                         .foregroundStyle(spot.waterType.flatMap { $0.tint } ?? .teal)
                     VStack(alignment: .leading) {
-                        Text(spot.name).font(.title3.weight(.semibold))
-                        Text(headerSubtitle).font(.caption).foregroundStyle(.secondary)
+                        Text(spot.name)
+                            .font(.system(size: 20, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Ink.chart)
+                        Text(headerSubtitle)
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     }
                     Spacer()
                 }
                 if let distanceMiles {
                     Label("\(Int(distanceMiles)) miles from you", systemImage: "location")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
                 }
             }
         }
@@ -120,7 +124,9 @@ struct SpotDetailView: View {
                     ForEach(species) { species in
                         HStack(spacing: 6) {
                             Circle().fill(species.tint).frame(width: 8, height: 8)
-                            Text(species.displayName).font(.subheadline.weight(.medium))
+                            Text(species.displayName)
+                                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                .foregroundStyle(Ink.chart)
                             Spacer(minLength: 0)
                         }
                         .padding(.horizontal, 10)
@@ -137,8 +143,8 @@ struct SpotDetailView: View {
             SectionHeader(title: "Notes", systemImage: "text.book.closed")
             GlassCard {
                 Text(notes)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Ink.chartDim)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -169,14 +175,14 @@ struct SpotDetailView: View {
             Divider()
             HStack(spacing: 4) {
                 Image(systemName: "info.circle")
-                    .font(.caption2)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
                 Text("Verified \(info.lastVerifiedDate). Always confirm at the agency before keeping fish.")
-                    .font(.caption2)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Ink.chartDim)
             Link(destination: info.sourceURL) {
                 Label(info.stateName + " agency", systemImage: "arrow.up.right.square")
-                    .font(.caption.weight(.medium))
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
             }
         }
     }
@@ -229,12 +235,14 @@ private struct RegulationRow: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Circle().fill(species.tint).frame(width: 8, height: 8)
-                Text(species.displayName).font(.subheadline.weight(.semibold))
+                Text(species.displayName)
+                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Ink.chart)
                 Spacer()
                 if regulation.isClosed(on: .now) {
                     Label("Closed", systemImage: "exclamationmark.octagon.fill")
                         .labelStyle(.titleAndIcon)
-                        .font(.caption.weight(.bold))
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
                         .foregroundStyle(.red)
                 }
             }
@@ -245,14 +253,14 @@ private struct RegulationRow: View {
             if !regulation.seasonClosures.isEmpty {
                 ForEach(Array(regulation.seasonClosures.enumerated()), id: \.offset) { _, closure in
                     Label(closure.label, systemImage: "calendar")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
                 }
             }
             if let notes = regulation.notes {
                 Text(notes)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Ink.chartDim)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -262,10 +270,13 @@ private struct RegulationRow: View {
     private func fact(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(label)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .textCase(.uppercase)
+                .tracking(1)
+                .foregroundStyle(Ink.chartDim)
             Text(value)
-                .font(.caption.weight(.semibold))
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundStyle(Ink.chart)
         }
     }
 }

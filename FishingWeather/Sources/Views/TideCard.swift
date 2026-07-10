@@ -20,18 +20,18 @@ struct TideCard: View {
                     HStack {
                         ProgressView()
                         Text("Loading tide predictions…")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 14, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 } else if let lastError {
                     Label(lastError, systemImage: "wifi.slash")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
                 } else if events.isEmpty && samples.isEmpty {
                     Text("No tide station in range.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
                 } else {
                     VStack(alignment: .leading, spacing: 14) {
                         chart
@@ -80,13 +80,13 @@ struct TideCard: View {
                         .foregroundStyle(event.kind == .high ? Ink.brass : Ink.tide)
                         .annotation(position: .top, alignment: .center, spacing: 2) {
                             Text(event.kind.label.first.map(String.init) ?? "")
-                                .font(.caption2.weight(.bold))
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
                                 .foregroundStyle(event.kind == .high ? Ink.brass : Ink.tide)
                         }
                     }
                 }
                 RuleMark(x: .value("Now", Date.now))
-                    .foregroundStyle(.secondary.opacity(0.7))
+                    .foregroundStyle(Ink.hullLine.opacity(0.7))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
             }
             .chartXAxis {
@@ -115,14 +115,15 @@ struct TideCard: View {
                         .font(.headline)
                         .frame(width: 22)
                     Text(event.kind.label)
-                        .font(.subheadline.weight(.medium))
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Ink.chart)
                     Spacer()
                     Text(event.time.formatted(date: .omitted, time: .shortened))
-                        .font(.subheadline)
-                        .monospacedDigit()
+                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Ink.chart)
                     Text(event.heightFeet.map { String(format: "%.1f ft", $0) } ?? "—")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
                         .frame(width: 56, alignment: .trailing)
                 }
             }
@@ -132,17 +133,17 @@ struct TideCard: View {
     private func stationFootnote(_ name: String) -> some View {
         HStack(spacing: 4) {
             Image(systemName: "mappin.and.ellipse")
-                .font(.caption2)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
             Text(name)
-                .font(.caption2)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
             if let distanceMiles {
                 Text("· \(Int(distanceMiles)) mi")
-                    .font(.caption2)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
             }
             Spacer()
             Text("NOAA")
-                .font(.caption2.weight(.medium))
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
         }
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Ink.chartDim)
     }
 }
