@@ -22,7 +22,8 @@ struct CurrentConditionsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(temperature)
-                        .font(.system(.largeTitle, design: .rounded).weight(.thin))
+                        .font(.system(size: 64, weight: .light, design: .monospaced))
+                        .foregroundStyle(Ink.chart)
                         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
                         .minimumScaleFactor(0.7)
                         .lineLimit(1)
@@ -38,10 +39,11 @@ struct CurrentConditionsView: View {
 
                 Text(current.condition.description)
                     .font(.title3.weight(.medium))
+                    .foregroundStyle(Ink.chart)
 
                 Text("Feels like \(feelsLike)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Ink.chartDim)
 
                 Divider()
 
@@ -68,14 +70,17 @@ private struct Metric: View {
     var body: some View {
         VStack(spacing: 4) {
             Image(systemName: systemImage)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Ink.chartDim)
             Text(value)
-                .font(.headline)
+                .font(.system(size: 16, weight: .bold, design: .monospaced))
+                .foregroundStyle(Ink.chart)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .textCase(.uppercase)
+                .tracking(1)
+                .foregroundStyle(Ink.chartDim)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }

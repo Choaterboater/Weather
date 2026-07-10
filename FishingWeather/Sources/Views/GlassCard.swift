@@ -9,7 +9,14 @@ struct GlassCard<Content: View>: View {
         content
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .glassEffect(.regular, in: .rect(cornerRadius: 24))
+            .background(
+                LinearGradient(colors: [Ink.hull, Ink.abyss],
+                               startPoint: .top, endPoint: .bottom),
+                in: .rect(cornerRadius: 20)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20).stroke(Ink.hullLine, lineWidth: 1)
+            )
             .scrollTransition { view, phase in
                 view
                     .opacity(phase.isIdentity ? 1 : 0.5)

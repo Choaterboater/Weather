@@ -42,17 +42,18 @@ private struct HourCell: View {
     var body: some View {
         VStack(spacing: 8) {
             Text(time)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundStyle(Ink.chartDim)
             Image(systemName: hour.symbolName)
                 .symbolRenderingMode(.multicolor)
                 .font(.title3)
             Text(hour.temperature.formatted(.measurement(width: .narrow, usage: .weather)))
-                .font(.subheadline.weight(.medium))
+                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                .foregroundStyle(Ink.chart)
             if hour.precipitationChance > 0 {
                 Text(hour.precipitationChance.formatted(.percent.precision(.fractionLength(0))))
-                    .font(.caption2)
-                    .foregroundStyle(.cyan)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Ink.tide)
             }
         }
     }

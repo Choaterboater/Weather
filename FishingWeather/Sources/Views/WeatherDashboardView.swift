@@ -61,9 +61,7 @@ struct WeatherDashboardView: View {
             .padding(.horizontal)
             .padding(.bottom, 24)
         }
-        .background {
-            WeatherTheme.skyBackdrop(for: hasLiveWeather ? weather.current?.condition : nil)
-        }
+        .background(Ink.backdrop)
     }
 }
 

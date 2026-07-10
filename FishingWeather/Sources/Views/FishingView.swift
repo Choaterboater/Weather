@@ -167,15 +167,16 @@ struct FishingView: View {
                         .frame(width: 32)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Plan the Week")
-                            .font(.headline)
+                            .font(.system(size: 16, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Ink.chart)
                         Text("Best days & times to fish")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     }
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Ink.chartDim)
                 }
             }
         }
@@ -225,20 +226,21 @@ private struct CachedPressureCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     Text(reading.pressure.formatted(.measurement(width: .abbreviated, usage: .barometric)))
-                        .font(.title.weight(.semibold))
+                        .font(.system(size: 24, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Ink.chart)
                         .contentTransition(.numericText())
                     Label(reading.tendency.label, systemImage: reading.tendency.symbolName)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(reading.tendency == .falling ? Ink.bite : .secondary)
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                        .foregroundStyle(reading.tendency == .falling ? Ink.bite : Ink.chartDim)
                     if let perHour = reading.changePerHour, abs(perHour) >= 0.1 {
                         Text(String(format: "%+.1f hPa/hr", perHour))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
                     }
                 }
                 Text(reading.tendency.fishingNote)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Ink.chartDim)
                 if !samples.isEmpty {
                     PressureTrendChart(samples: samples, now: .now)
                         .padding(.top, 4)
@@ -352,7 +354,8 @@ private struct BiteWindowsCard: View {
         if let active = conditions.activeWindow(at: date) {
             Label {
                 Text("\(active.period.rawValue) window now — until \(active.end.formatted(date: .omitted, time: .shortened))")
-                    .font(.headline)
+                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Ink.chart)
             } icon: {
                 Image(systemName: "dot.radiowaves.left.and.right")
                     .foregroundStyle(Ink.bite)
@@ -361,14 +364,16 @@ private struct BiteWindowsCard: View {
         } else if let next = conditions.nextWindow(after: date) {
             Label {
                 Text("Next: \(next.period.rawValue) at \(next.peak.formatted(date: .omitted, time: .shortened))")
-                    .font(.headline)
+                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Ink.chart)
             } icon: {
                 Image(systemName: "clock.badge")
                     .foregroundStyle(Ink.brass)
             }
         } else {
             Text("Today's feeding windows")
-                .font(.headline)
+                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                .foregroundStyle(Ink.chart)
         }
     }
 }
@@ -388,7 +393,8 @@ private struct BiteWindowRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Text(window.period.rawValue)
-                .font(.caption.weight(.bold))
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundStyle(window.period == .major ? Ink.bite : Ink.brass)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(window.period == .major ? Ink.bite.opacity(0.25) : Ink.brass.opacity(0.2))
@@ -396,10 +402,11 @@ private struct BiteWindowRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(timeRange)
-                    .font(.subheadline.weight(.medium))
+                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Ink.chart)
                 Text(window.cause)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Ink.chartDim)
             }
 
             Spacer()
@@ -435,20 +442,21 @@ private struct PressureCard: View {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text(pressureText)
-                            .font(.title.weight(.semibold))
+                            .font(.system(size: 24, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Ink.chart)
                             .contentTransition(.numericText())
                         Label(reading.tendency.label, systemImage: reading.tendency.symbolName)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(reading.tendency == .falling ? Ink.bite : .secondary)
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .foregroundStyle(reading.tendency == .falling ? Ink.bite : Ink.chartDim)
                         if let changeText {
                             Text(changeText)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundStyle(Ink.chartDim)
                         }
                     }
                     Text(reading.tendency.fishingNote)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
                     if samples.count > 1 {
                         PressureTrendChart(samples: samples, now: .now)
                             .padding(.top, 4)
@@ -473,10 +481,11 @@ private struct SolunarDetailsCard: View {
                         MoonArc(phase: conditions.moonPhase)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(conditions.moonPhase.displayName)
-                                .font(.headline)
+                                .font(.system(size: 16, weight: .bold, design: .monospaced))
+                                .foregroundStyle(Ink.chart)
                             Text("\(conditions.moonPhase.biteRating) solunar influence")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Ink.chartDim)
                         }
                         Spacer()
                     }
@@ -510,10 +519,13 @@ private struct TimeFact: View {
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 1) {
                 Text(label)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Ink.chartDim)
+                    .textCase(.uppercase)
+                    .tracking(1)
                 Text(date?.formatted(date: .omitted, time: .shortened) ?? "—")
-                    .font(.subheadline.weight(.medium))
+                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Ink.chart)
             }
             Spacer()
         }

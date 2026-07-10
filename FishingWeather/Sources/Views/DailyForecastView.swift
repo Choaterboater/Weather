@@ -40,7 +40,8 @@ private struct DayRow: View {
     var body: some View {
         HStack {
             Text(weekday)
-                .font(.body.weight(.medium))
+                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                .foregroundStyle(Ink.chart)
                 .lineLimit(1)
                 .frame(width: dayColumnWidth, alignment: .leading)
 
@@ -50,8 +51,8 @@ private struct DayRow: View {
 
             if day.precipitationChance > 0 {
                 Text(day.precipitationChance.formatted(.percent.precision(.fractionLength(0))))
-                    .font(.caption)
-                    .foregroundStyle(.cyan)
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Ink.tide)
                     .frame(width: precipColumnWidth, alignment: .leading)
             } else {
                 Color.clear.frame(width: precipColumnWidth)
@@ -60,8 +61,11 @@ private struct DayRow: View {
             Spacer()
 
             Text(day.lowTemperature.formatted(.measurement(width: .narrow, usage: .weather)))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                .foregroundStyle(Ink.chartDim)
             Text(day.highTemperature.formatted(.measurement(width: .narrow, usage: .weather)))
+                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                .foregroundStyle(Ink.chart)
         }
         .padding(.vertical, 10)
     }
