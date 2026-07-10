@@ -11,6 +11,14 @@ struct WaterConditionsCard: View {
     private var isSaltwater: Bool {
         spots.selectedSpot?.waterType == .saltwater
     }
+
+    /// Re-keys the USGS fetch when the location moves meaningfully (~0.7 mi),
+    /// so GPS jitter doesn't hammer the Water Services API on every fix.
+    private var locationKey: String {
+        let lat = (location.coordinate.latitude * 100).rounded() / 100
+        let lon = (location.coordinate.longitude * 100).rounded() / 100
+        return "\(lat),\(lon)"
+    }
     
     var body: some View {
         // Only show water/river conditions if we aren't explicitly at a saltwater spot
@@ -67,7 +75,7 @@ struct WaterConditionsCard: View {
                     }
                 }
             }
-            .task(id: location.coordinate.latitude) {
+            .task(id: locationKey) {
                 await client.loadSites(near: location)
             }
         }

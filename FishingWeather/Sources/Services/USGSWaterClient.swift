@@ -101,9 +101,11 @@ final class USGSWaterClient {
                 )
             }
             
-            // Extract the latest value
-            guard let latestValueStr = timeSeries.values.first?.value.first?.value,
-                  let latestValue = Double(latestValueStr) else { continue }
+            // Extract the most recent value. USGS uses -999999 as a "no data"
+            // sentinel for offline sensors — never treat it as a real reading.
+            guard let latestValueStr = timeSeries.values.last?.value.last?.value,
+                  let latestValue = Double(latestValueStr),
+                  latestValue > -999998 else { continue }
             
             let paramCode = timeSeries.variable.variableCode.first?.value
             
@@ -112,6 +114,8 @@ final class USGSWaterClient {
             } else if paramCode == "00065" { // Gage Height
                 siteMap[siteCode]?.gageHeightFeet = latestValue
             } else if paramCode == "00010" { // Celsius Water Temp
+                // Guard against physically impossible water temps (bad sensors).
+                guard latestValue > -5, latestValue < 45 else { continue }
                 let tempF = (latestValue * 9.0/5.0) + 32.0
                 siteMap[siteCode]?.temperatureF = tempF
             }

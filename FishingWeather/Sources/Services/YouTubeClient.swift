@@ -41,8 +41,18 @@ final class YouTubeClient {
             return
         }
 
-        guard let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "https://www.googleapis.com/youtube/v3/search?part=snippet&q=\(encodedQuery)&type=video&maxResults=5&key=\(apiKey)") else {
+        guard var components = URLComponents(string: "https://www.googleapis.com/youtube/v3/search") else {
+            self.status = .failed("Invalid search query.")
+            return
+        }
+        components.queryItems = [
+            URLQueryItem(name: "part", value: "snippet"),
+            URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "type", value: "video"),
+            URLQueryItem(name: "maxResults", value: "5"),
+            URLQueryItem(name: "key", value: apiKey)
+        ]
+        guard let url = components.url else {
             self.status = .failed("Invalid search query.")
             return
         }
