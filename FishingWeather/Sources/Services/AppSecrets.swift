@@ -32,6 +32,10 @@ enum AppSecrets {
         value(plistKey: "EbayCampaignID", env: "EBAY_CAMPAIGN_ID")
     }
 
+    static var youtubeAPIKey: String? {
+        value(plistKey: "YouTubeAPIKey", env: "YOUTUBE_API_KEY")
+    }
+
     /// Affiliate-network deep-link template (with a `{url}` placeholder) for the
     /// tackle shops that have no live product API. Amazon/eBay carry affiliate
     /// info in their own product links, so they return nil here.
