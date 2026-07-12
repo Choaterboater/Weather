@@ -8,6 +8,7 @@ final class GlassPassUITests: XCTestCase {
     @MainActor
     func testWalkTabsAndDetailScreens() throws {
         let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting"]
         app.launch()
 
         let tabBar = app.tabBars.firstMatch
