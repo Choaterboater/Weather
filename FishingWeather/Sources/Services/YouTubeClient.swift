@@ -64,19 +64,22 @@ final class YouTubeClient {
                 return
             }
 
-            let searchResponse = try JSONDecoder().decode(SearchResponse.self, from: data)
-            let videos = searchResponse.items.compactMap { item -> YouTubeVideo? in
-                guard let id = item.id.videoId else { return nil }
-                return YouTubeVideo(
-                    id: id,
-                    title: item.snippet.title.stringByDecodingHTMLEntities,
-                    thumbnailURL: URL(string: item.snippet.thumbnails.high.url ?? item.snippet.thumbnails.default.url),
-                    channelTitle: item.snippet.channelTitle.stringByDecodingHTMLEntities
-                )
-            }
-            self.status = .ready(videos)
+            self.status = .ready(try Self.videos(from: data))
         } catch {
             self.status = .failed(error.localizedDescription)
+        }
+    }
+
+    nonisolated static func videos(from data: Data) throws -> [YouTubeVideo] {
+        let searchResponse = try JSONDecoder().decode(SearchResponse.self, from: data)
+        return searchResponse.items.compactMap { item -> YouTubeVideo? in
+            guard let id = item.id.videoId else { return nil }
+            return YouTubeVideo(
+                id: id,
+                title: item.snippet.title.stringByDecodingHTMLEntities,
+                thumbnailURL: item.snippet.thumbnails.thumbnailURL,
+                channelTitle: item.snippet.channelTitle.stringByDecodingHTMLEntities
+            )
         }
     }
 
@@ -97,8 +100,16 @@ final class YouTubeClient {
                 let thumbnails: Thumbnails
 
                 struct Thumbnails: Decodable {
-                    let `default`: Thumbnail
-                    let high: Thumbnail
+                    let `default`: Thumbnail?
+                    let medium: Thumbnail?
+                    let high: Thumbnail?
+
+                    var thumbnailURL: URL? {
+                        [high, medium, `default`]
+                            .compactMap(\.?.url)
+                            .compactMap(URL.init(string:))
+                            .first
+                    }
 
                     struct Thumbnail: Decodable {
                         let url: String

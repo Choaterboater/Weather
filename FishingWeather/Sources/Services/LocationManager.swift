@@ -20,23 +20,43 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     var lastError: String?
 
     override init() {
+        #if DEBUG
+        if Self.usesUITestingFixture {
+            authorizationStatus = .authorizedWhenInUse
+            location = Self.uiTestingLocation
+            placeName = "St. Petersburg"
+            administrativeArea = "FL"
+        } else {
+            authorizationStatus = manager.authorizationStatus
+        }
+        #else
         authorizationStatus = manager.authorizationStatus
+        #endif
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyKilometer
     }
 
     func requestPermission() {
+        #if DEBUG
+        guard !Self.usesUITestingFixture else { return }
+        #endif
         manager.requestWhenInUseAuthorization()
     }
 
     func refresh() {
         guard authorizationStatus == .authorizedWhenInUse
             || authorizationStatus == .authorizedAlways else { return }
+        #if DEBUG
+        guard !Self.usesUITestingFixture else { return }
+        #endif
         manager.requestLocation()
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        #if DEBUG
+        guard !Self.usesUITestingFixture else { return }
+        #endif
         let status = manager.authorizationStatus
         Task { @MainActor in
             self.authorizationStatus = status
@@ -50,6 +70,9 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         _ manager: CLLocationManager,
         didUpdateLocations locations: [CLLocation]
     ) {
+        #if DEBUG
+        guard !Self.usesUITestingFixture else { return }
+        #endif
         guard let latest = locations.last else { return }
         // Extract Sendable scalars; CLLocation itself must not cross the hop.
         let coordinate = latest.coordinate
@@ -73,6 +96,9 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     }
 
     private func reverseGeocode(_ location: CLLocation) async {
+        #if DEBUG
+        guard !Self.usesUITestingFixture else { return }
+        #endif
         guard let request = MKReverseGeocodingRequest(location: location) else { return }
         let items = try? await request.mapItems
         guard let item = items?.first else { return }
@@ -99,4 +125,14 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         else { return nil }
         return token.uppercased()
     }
+
+    #if DEBUG
+    nonisolated private static var usesUITestingFixture: Bool {
+        CommandLine.arguments.contains("-uiTesting")
+    }
+
+    nonisolated private static var uiTestingLocation: CLLocation {
+        CLLocation(latitude: 27.7634, longitude: -82.6403)
+    }
+    #endif
 }
