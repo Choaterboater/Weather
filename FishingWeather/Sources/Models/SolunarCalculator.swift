@@ -10,7 +10,12 @@ enum SolunarCalculator {
     /// Half a lunar day (~24h50m) — the spacing between successive moon transits.
     private static let halfLunarDay: TimeInterval = 12 * 3600 + 25 * 60
 
-    static func windows(moonrise: Date?, moonset: Date?, on day: Date) -> [BiteWindow] {
+    static func windows(
+        moonrise: Date?,
+        moonset: Date?,
+        on day: Date,
+        calendar: Calendar = .current
+    ) -> [BiteWindow] {
         var windows: [BiteWindow] = []
 
         if let moonrise {
@@ -28,7 +33,6 @@ enum SolunarCalculator {
             // (overhead near noon can push both off "today").
             let earlier = overhead.addingTimeInterval(-halfLunarDay)
             let later = overhead.addingTimeInterval(halfLunarDay)
-            let calendar = Calendar.current
             if calendar.isDate(earlier, inSameDayAs: day) {
                 windows.append(BiteWindow(period: .major, peak: earlier, cause: "Moon underfoot"))
             } else if calendar.isDate(later, inSameDayAs: day) {

@@ -94,61 +94,6 @@ struct PressureTrendChart: View {
     }
 }
 
-/// 24-hour temperature curve.
-struct TemperatureChart: View {
-    let samples: [HourSample]
-
-    var body: some View {
-        Chart(samples) { sample in
-            AreaMark(
-                x: .value("Time", sample.date),
-                y: .value("Temp", sample.temperatureCelsius)
-            )
-                .interpolationMethod(.monotone)
-                .foregroundStyle(.linearGradient(
-                    colors: [Ink.brass.opacity(0.28), .clear],
-                    startPoint: .top, endPoint: .bottom
-                ))
-
-            LineMark(
-                x: .value("Time", sample.date),
-                y: .value("Temp", sample.temperatureCelsius)
-            )
-                .interpolationMethod(.monotone)
-                .lineStyle(.init(lineWidth: 3, lineCap: .round))
-                .foregroundStyle(.linearGradient(
-                    colors: [Ink.bite, Ink.brass, Ink.slack],
-                    startPoint: .leading, endPoint: .trailing
-                ))
-        }
-        .chartYAxis {
-            AxisMarks { value in
-                AxisGridLine().foregroundStyle(Ink.hullLine.opacity(0.3))
-                AxisValueLabel {
-                    if let v = value.as(Double.self) {
-                        Text(WeatherUnits.wholeTemperature(celsius: v))
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundStyle(Ink.chartDim)
-                    }
-                }
-            }
-        }
-        .chartXAxis {
-            AxisMarks(values: .stride(by: .hour, count: 6)) { value in
-                AxisValueLabel {
-                    if let d = value.as(Date.self) {
-                        Text(d, format: .dateTime.hour())
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundStyle(Ink.chartDim)
-                    }
-                }
-            }
-        }
-        .frame(height: 120)
-        .accessibilityLabel("Temperature chart for the next 24 hours")
-    }
-}
-
 /// Wind speed over the next 24 hours as a shaded area, with a dashed gust line
 /// and a "now" marker — the shape (building vs. laying down) is what an angler
 /// plans around.

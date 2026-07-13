@@ -1,8 +1,8 @@
 import Foundation
 
 /// A high or low tide prediction for a specific station and time.
-struct TideEvent: Identifiable, Equatable {
-    enum Kind: String, Codable {
+struct TideEvent: Identifiable, Equatable, Sendable {
+    enum Kind: String, Codable, Sendable {
         case high
         case low
 
@@ -28,7 +28,7 @@ struct TideEvent: Identifiable, Equatable {
 }
 
 /// One sample on the continuous tide curve, used by the chart.
-struct TideSample: Identifiable, Equatable {
+struct TideSample: Identifiable, Equatable, Sendable {
     var id: Date { time }
     let time: Date
     let heightFeet: Double
