@@ -24,6 +24,11 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
 
     private let manager = CLLocationManager()
     private let reverseGeocoder: ReverseGeocoder
+    /// An injected geocoder denotes a deterministic/manual location source.
+    /// It must not be overwritten by asynchronous callbacks from the process's
+    /// real CLLocationManager (notably while unit tests run in an authorized
+    /// simulator).
+    nonisolated private let usesLiveLocationManager: Bool
 
     var location: CLLocation?
     var placeName: String?
@@ -41,6 +46,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     private var geocodeTask: Task<Void, Never>?
 
     init(reverseGeocoder: ReverseGeocoder? = nil) {
+        usesLiveLocationManager = reverseGeocoder == nil
         self.reverseGeocoder = reverseGeocoder ?? Self.liveReverseGeocode
         #if DEBUG
         if Self.usesUITestingFixture {
@@ -65,6 +71,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     }
 
     func requestPermission() {
+        guard usesLiveLocationManager else { return }
         #if DEBUG
         guard !Self.usesUITestingFixture else { return }
         #endif
@@ -72,6 +79,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     }
 
     func refresh() {
+        guard usesLiveLocationManager else { return }
         guard authorizationStatus == .authorizedWhenInUse
             || authorizationStatus == .authorizedAlways else { return }
         #if DEBUG
@@ -81,6 +89,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        guard usesLiveLocationManager else { return }
         #if DEBUG
         guard !Self.usesUITestingFixture else { return }
         #endif
@@ -97,6 +106,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         _ manager: CLLocationManager,
         didUpdateLocations locations: [CLLocation]
     ) {
+        guard usesLiveLocationManager else { return }
         #if DEBUG
         guard !Self.usesUITestingFixture else { return }
         #endif
@@ -112,6 +122,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         _ manager: CLLocationManager,
         didFailWithError error: Error
     ) {
+        guard usesLiveLocationManager else { return }
         let message = error.localizedDescription
         Task { @MainActor in
             // A failure here keeps the last known location; only surface the message.

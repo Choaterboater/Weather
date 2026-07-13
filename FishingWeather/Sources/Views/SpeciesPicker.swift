@@ -15,7 +15,7 @@ struct SpeciesPicker: View {
             HStack(spacing: 10) {
                 ForEach(choices) { species in
                     SpeciesChip(species: species, isSelected: species == selection) {
-                        withAnimation(.snappy) { selection = species }
+                        selection = species
                     }
                 }
             }
@@ -35,6 +35,8 @@ private struct SpeciesChip: View {
     let isSelected: Bool
     let action: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         Button(action: action) {
             Label {
@@ -42,10 +44,18 @@ private struct SpeciesChip: View {
             } icon: {
                 Image(systemName: "fish.fill")
             }
-            .font(.system(size: 14, weight: .bold, design: .monospaced))
+            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+            .scaleEffect(reduceMotion ? 1 : (isSelected ? 1 : 0.96))
+            .animation(
+                reduceMotion
+                    ? nil
+                    : .snappy(duration: 0.25, extraBounce: 0.1),
+                value: isSelected
+            )
             .padding(.horizontal, 14)
-            .padding(.vertical, 9)
+            .frame(minHeight: 44)
             .foregroundStyle(isSelected ? .white : Ink.chartDim)
+            .contentShape(.capsule)
         }
         // Glass must wrap the label directly: a glassEffect on a .background
         // shape gets hoisted into the enclosing GlassEffectContainer's layer
@@ -58,8 +68,6 @@ private struct SpeciesChip: View {
             in: .capsule
         )
         .buttonStyle(.plain)
-        .scaleEffect(isSelected ? 1.0 : 0.96)
-        .animation(.snappy(duration: 0.25, extraBounce: 0.1), value: isSelected)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(species.displayName)
         .accessibilityAddTraits(isSelected ? .isSelected : [])

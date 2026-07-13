@@ -12,8 +12,14 @@ final class WeatherStore {
 
     private(set) var snapshot: WeatherSnapshot?
     var isLoading = false
-    var errorMessage: String?
+    private(set) var lastProviderError: WeatherProviderError?
     private(set) var loadedKey: String?
+
+    /// Compatibility projection for existing views while new composition uses
+    /// the typed provider error to choose an appropriate recovery state.
+    var errorMessage: String? {
+        lastProviderError?.localizedDescription
+    }
 
     var provenance: WeatherProvenance? {
         snapshot?.provenance
@@ -71,7 +77,7 @@ final class WeatherStore {
             let age = requestDate.timeIntervalSince(snapshot.provenance.fetchedAt)
             if age >= 0, age < cacheTTL {
                 isLoading = false
-                errorMessage = nil
+                lastProviderError = nil
                 return
             }
         }
@@ -81,7 +87,7 @@ final class WeatherStore {
             loadedKey = nil
         }
         isLoading = true
-        errorMessage = nil
+        lastProviderError = nil
 
         do {
             let result = try await worker(location, requestDate)
@@ -97,6 +103,7 @@ final class WeatherStore {
             snapshot = result
             loadedKey = key
             isLoading = false
+            lastProviderError = nil
 
             if result.provenance.source != .cache,
                let cacheWriter {
@@ -110,7 +117,7 @@ final class WeatherStore {
             }
 
             isLoading = false
-            errorMessage = error.localizedDescription
+            lastProviderError = Self.providerError(for: error)
         }
     }
 
@@ -123,5 +130,12 @@ final class WeatherStore {
     private static func isCancellation(_ error: any Error) -> Bool {
         if error is CancellationError { return true }
         return (error as? URLError)?.code == .cancelled
+    }
+
+    private static func providerError(for error: any Error) -> WeatherProviderError {
+        if let providerError = error as? WeatherProviderError {
+            return providerError
+        }
+        return .network(String(describing: error))
     }
 }

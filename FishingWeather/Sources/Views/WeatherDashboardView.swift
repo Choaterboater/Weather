@@ -29,12 +29,16 @@ struct WeatherDashboardView: View {
                 } else if weather.isLoading && !hasLiveWeather {
                     ProgressView("Loading weather…")
                         .padding(.top, 80)
-                } else if weather.errorMessage != nil, !hasLiveWeather {
-                    ErrorStateView()
+                } else if let error = weather.lastProviderError, !hasLiveWeather {
+                    ErrorStateView(error: error)
                         .padding(.top, 80)
                 } else if hasLiveWeather, let snapshot = weather.snapshot {
                     if !snapshot.alerts.isEmpty {
                         WeatherAlertsView(alerts: snapshot.alerts)
+                    }
+                    weatherStatus(snapshot)
+                    if let error = weather.lastProviderError {
+                        refreshNotice(error)
                     }
                     CurrentConditionsView(current: snapshot.current)
                     WindCard(
@@ -62,16 +66,71 @@ struct WeatherDashboardView: View {
             .padding(.horizontal)
             .padding(.bottom, 24)
         }
-        .background(Ink.backdrop)
+        .background(
+            WeatherTheme.skyBackdrop(
+                conditionText: weather.snapshot?.current.conditionText,
+                symbolName: weather.snapshot?.current.symbolName
+            )
+        )
+    }
+
+    private func weatherStatus(_ snapshot: WeatherSnapshot) -> some View {
+        let source = BiteTimeSourcePresentation.make(
+            provenance: snapshot.provenance,
+            now: .now,
+            timeZone: TimeZone(identifier: snapshot.timeZoneIdentifier) ?? .gmt,
+            locale: .current
+        )
+        return HStack(alignment: .top, spacing: 10) {
+            Image(systemName: source.symbolName)
+                .foregroundStyle(snapshot.provenance.source == .cache ? Ink.brass : Ink.tide)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(source.title)
+                    .font(.system(.callout, design: .rounded, weight: .semibold))
+                    .foregroundStyle(Ink.chart)
+                Text(weather.isLoading ? "Updating…" : source.freshness)
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .foregroundStyle(Ink.chartDim)
+                if let detail = source.detail {
+                    Text(detail)
+                        .font(.system(.caption, design: .rounded, weight: .medium))
+                        .foregroundStyle(Ink.chartDim)
+                }
+            }
+            Spacer()
+            if weather.isLoading { ProgressView().controlSize(.small) }
+        }
+        .padding(.horizontal, 4)
+    }
+
+    private func refreshNotice(_ error: WeatherProviderError) -> some View {
+        let presentation = BiteTimeErrorPresentation.make(for: error)
+        return Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Update failed — showing the previous forecast")
+                    .font(.system(.callout, design: .rounded, weight: .semibold))
+                Text(presentation.message)
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+            }
+        } icon: {
+            Image(systemName: presentation.symbolName)
+        }
+        .foregroundStyle(Ink.chart)
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Ink.brass.opacity(0.12), in: .rect(cornerRadius: 16))
     }
 }
 
 private struct ErrorStateView: View {
+    let error: WeatherProviderError
+
     var body: some View {
+        let presentation = BiteTimeErrorPresentation.make(for: error)
         ContentUnavailableView {
-            Label("Weather unavailable", systemImage: "cloud.bolt.rain")
+            Label(presentation.title, systemImage: presentation.symbolName)
         } description: {
-            Text("BiteCast couldn't reach the weather service. Pull down to refresh, or try again once you're back online.")
+            Text(presentation.message)
         }
     }
 }

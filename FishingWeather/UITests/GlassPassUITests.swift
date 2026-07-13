@@ -5,6 +5,133 @@ import XCTest
 final class GlassPassUITests: XCTestCase {
 
     @MainActor
+    func testBiteTimeNWSFallbackSharesForecastSelection() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-uiPreview", "biteTimeNWS",
+            "-uiTesting",
+            "-resetBiteTimePreviewPreferences",
+        ]
+        app.launch()
+
+        let hero = app.descendants(matching: .any)["bitetime.hero"]
+        let source = app.descendants(matching: .any)["bitetime.source"]
+        XCTAssertTrue(hero.waitForExistence(timeout: 15), "BiteTime hero did not load")
+        XCTAssertTrue(source.waitForExistence(timeout: 5), "Forecast provenance is missing")
+        XCTAssertEqual(source.label, "National Weather Service fallback")
+        XCTAssertEqual(source.value as? String, "Updated 8 min ago")
+        let heroSummary = hero.value as? String ?? ""
+        XCTAssertTrue(
+            heroSummary.contains("81"),
+            "Hero omitted the rounded fixture temperature: \(heroSummary)"
+        )
+        XCTAssertFalse(
+            heroSummary.contains("27.2") || heroSummary.contains("81.0"),
+            "Hero temperature must be rounded to a whole degree: \(heroSummary)"
+        )
+
+        let location = app.descendants(matching: .any)["bitetime.location"]
+        XCTAssertTrue(location.waitForExistence(timeout: 3))
+        XCTAssertTrue(location.label.contains("St. Petersburg"))
+        XCTAssertFalse(location.label.contains("27.7634"), "Coordinates leaked into the location title")
+        snap(name: "task-11-bite-time-nws-normal-top")
+
+        let bait = app.descendants(matching: .any)["bitetime.bestBait"]
+        XCTAssertTrue(bait.waitForExistence(timeout: 5), "Best Bait Today is missing")
+        let timelineSwitch = app.buttons["bitetime.timeline"]
+        let proSwitch = app.buttons["bitetime.proForecast"]
+        XCTAssertTrue(timelineSwitch.waitForExistence(timeout: 5))
+        XCTAssertTrue(proSwitch.waitForExistence(timeout: 5))
+
+        let nextHour = app.buttons["timeline.hour.1800003600"]
+        XCTAssertTrue(nextHour.waitForExistence(timeout: 5), "Second Timeline hour is missing")
+        nextHour.tap()
+        XCTAssertTrue(
+            (nextHour.value as? String)?.hasPrefix("Selected, ") == true,
+            "Timeline did not expose the shared selected hour"
+        )
+
+        proSwitch.tap()
+        let proHour = app.buttons["proForecast.hour.1800003600"]
+        XCTAssertTrue(proHour.waitForExistence(timeout: 8), "Selected hour is missing from Pro Forecast")
+        XCTAssertEqual(proHour.value as? String, "Selected")
+
+        let tides = app.staticTexts["Tides"].firstMatch
+        reveal(tides, in: app)
+        XCTAssertTrue(tides.exists, "Tide detail is missing from BiteTime")
+        let tideChart = app.descendants(matching: .any)["bitetime.tideChart"]
+        reveal(tideChart, in: app)
+        XCTAssertTrue(tideChart.exists, "Tide chart is missing from BiteTime")
+        snap(name: "task-11-bite-time-nws-tides")
+
+        let plan = app.descendants(matching: .any)["bitetime.planWeek"]
+        reveal(plan, in: app)
+        XCTAssertTrue(plan.exists, "Plan the Week is missing from the BiteTime hierarchy")
+        snap(name: "task-11-bite-time-nws-normal")
+    }
+
+    @MainActor
+    func testBiteTimeLiveAtAccessibilityDynamicType() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-uiPreview", "biteTimeLive",
+            "-uiTesting",
+            "-resetBiteTimePreviewPreferences",
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL",
+        ]
+        app.launch()
+
+        let hero = app.descendants(matching: .any)["bitetime.hero"]
+        let source = app.descendants(matching: .any)["bitetime.source"]
+        XCTAssertTrue(hero.waitForExistence(timeout: 15), "Accessibility preview did not load")
+        XCTAssertTrue(source.waitForExistence(timeout: 5))
+        XCTAssertEqual(source.label, "Apple Weather")
+
+        let screen = app.windows.firstMatch.frame
+        assertContainedHorizontally(hero, in: screen)
+        assertContainedHorizontally(source, in: screen)
+        snap(name: "task-11-bite-time-live-accessibility-top")
+
+        let timelineSwitch = app.buttons["bitetime.timeline"]
+        let proSwitch = app.buttons["bitetime.proForecast"]
+        reveal(timelineSwitch, in: app)
+        XCTAssertTrue(timelineSwitch.exists)
+        XCTAssertTrue(proSwitch.exists)
+        assertContainedHorizontally(timelineSwitch, in: screen)
+        assertContainedHorizontally(proSwitch, in: screen)
+
+        let tides = app.staticTexts["Tides"].firstMatch
+        reveal(tides, in: app)
+        XCTAssertTrue(tides.exists, "Tides are not reachable at accessibility sizes")
+        assertContainedHorizontally(tides, in: screen)
+        let tideChart = app.descendants(matching: .any)["bitetime.tideChart"]
+        reveal(tideChart, in: app)
+        XCTAssertTrue(tideChart.exists, "Tide chart is not reachable at accessibility sizes")
+        assertContainedHorizontally(tideChart, in: screen)
+        snap(name: "task-11-bite-time-live-tides-accessibility")
+
+        let plan = app.descendants(matching: .any)["bitetime.planWeek"]
+        reveal(plan, in: app)
+        XCTAssertTrue(plan.exists, "Plan the Week is not reachable at accessibility sizes")
+        assertContainedHorizontally(plan, in: screen)
+
+        let weatherDetails = app.buttons["bitetime.weatherDetails"]
+        let fishingDetails = app.buttons["bitetime.fishingDetails"]
+        reveal(fishingDetails, in: app)
+        XCTAssertTrue(weatherDetails.exists, "Weather details are not reachable at accessibility sizes")
+        XCTAssertTrue(fishingDetails.exists, "Fishing details are not reachable at accessibility sizes")
+        assertContainedHorizontally(weatherDetails, in: screen)
+        assertContainedHorizontally(fishingDetails, in: screen)
+        XCTAssertLessThan(
+            weatherDetails.frame.maxY,
+            fishingDetails.frame.minY,
+            "Accessibility detail links should stack instead of clipping in a row"
+        )
+        snap(name: "task-11-bite-time-live-accessibility")
+    }
+
+    @MainActor
     func testProForecastMatrixAtLargeDynamicType() throws {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -243,6 +370,34 @@ final class GlassPassUITests: XCTestCase {
     private func backOut(_ app: XCUIApplication) {
         let back = app.navigationBars.buttons.firstMatch
         if back.exists { back.tap() }
+    }
+
+    @MainActor
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
+        let scrollView = app.scrollViews.firstMatch
+        let visibleFrame = app.windows.firstMatch.frame
+        for _ in 0..<12 {
+            if element.exists {
+                let frame = element.frame
+                if frame.width > 0,
+                   frame.height > 0,
+                   frame.intersects(visibleFrame) {
+                    return
+                }
+            }
+            scrollView.swipeUp()
+        }
+    }
+
+    @MainActor
+    private func assertContainedHorizontally(
+        _ element: XCUIElement,
+        in screen: CGRect,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertGreaterThanOrEqual(element.frame.minX, screen.minX, file: file, line: line)
+        XCTAssertLessThanOrEqual(element.frame.maxX, screen.maxX, file: file, line: line)
     }
 
     @MainActor
