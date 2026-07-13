@@ -10,7 +10,7 @@ struct MainTabView: View {
     @State private var showSettings = false
 
     private var locationTitle: String {
-        spots.selectedSpot?.name ?? location.placeName ?? "Weather"
+        spots.selectedSpot?.name ?? location.descriptor.displayName
     }
 
     /// Pull-to-refresh must bypass the stores' caches — a location nudge alone

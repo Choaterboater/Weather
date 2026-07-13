@@ -222,9 +222,8 @@ struct LogCatchView: View {
         if let dewPointF = weather.current?.dewPoint.converted(to: .fahrenheit).value {
             items.append(("Dew Point", "\(Int(dewPointF.rounded()))°F"))
         }
-        if let spotName = spots.selectedSpot?.name ?? location.placeName {
-            items.append(("Where", spotName))
-        }
+        let spotName = spots.selectedSpot?.name ?? location.descriptor.displayName
+        items.append(("Where", spotName))
         return items
     }
 
@@ -246,7 +245,7 @@ struct LogCatchView: View {
             notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
             latitude: activeLocation?.latitude,
             longitude: activeLocation?.longitude,
-            spotName: spots.selectedSpot?.name ?? location.placeName,
+            spotName: spots.selectedSpot?.name ?? location.descriptor.displayName,
             pressureTendency: conditions?.pressure.tendency.label,
             moonPhase: conditions?.moonPhase.displayName,
             airTempF: airTempF,
