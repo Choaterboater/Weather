@@ -11,4 +11,13 @@ struct CuratedSpotIDTests {
         #expect(a == b)
         #expect(a != c)
     }
+
+    @MainActor
+    @Test("The bundled curated catalog loads every shipped spot")
+    func bundledCatalogLoads() {
+        let catalog = CuratedSpotCatalog()
+
+        #expect(catalog.spots.count == 12)
+        #expect(catalog.spots.contains { $0.name == "Grayton Beach Surf" })
+    }
 }

@@ -5,7 +5,10 @@ import UIKit
 @MainActor
 @Observable
 final class FishRecognizer {
+    typealias Worker = @Sendable (Data) async throws -> FishIdentification
+
     private var task: Task<Void, Never>?
+    private let worker: Worker?
 
     enum Status: Equatable {
         case idle
@@ -18,6 +21,10 @@ final class FishRecognizer {
     var status: Status = .idle
     var result: FishIdentification?
 
+    init(worker: Worker? = nil) {
+        self.worker = worker
+    }
+
     func identify(image: UIImage) async {
         task?.cancel()
         status = .working
@@ -25,9 +32,30 @@ final class FishRecognizer {
 
         let prompt = Self.prompt
         let currentSelf = self
-        task = Task.detached(priority: .userInitiated) {
+        let worker = self.worker
+        let activeTask = Task.detached(priority: .userInitiated) {
             let scaled = Self.downscaled(image)
             let data = scaled.jpegData(compressionQuality: 0.8) ?? Data()
+            guard !Task.isCancelled else { return }
+
+            if let worker {
+                do {
+                    let made = try await worker(data)
+                    guard !Task.isCancelled else { return }
+                    await MainActor.run {
+                        guard !Task.isCancelled else { return }
+                        currentSelf.result = made
+                        currentSelf.status = .ready
+                    }
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    await MainActor.run {
+                        guard !Task.isCancelled else { return }
+                        currentSelf.status = .failed(error.localizedDescription)
+                    }
+                }
+                return
+            }
 
             // 1) On-device Core ML model
             if let classifier = CoreMLFishClassifier(),
@@ -70,6 +98,8 @@ final class FishRecognizer {
                 }
             }
         }
+        task = activeTask
+        await activeTask.value
     }
 
     func reset() {

@@ -2,8 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>AmazonAccessKey</key>
+	<string>$(AMAZON_ACCESS_KEY)</string>
 	<key>AmazonPartnerTag</key>
 	<string>$(AMAZON_PARTNER_TAG)</string>
+	<key>AmazonSecretKey</key>
+	<string>$(AMAZON_SECRET_KEY)</string>
 	<key>BassProAffiliateTemplate</key>
 	<string>$(BASSPRO_AFFILIATE_TEMPLATE)</string>
 	<key>CFBundleDisplayName</key>
@@ -24,6 +28,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>EbayCampaignID</key>
 	<string>$(EBAY_CAMPAIGN_ID)</string>
+	<key>EbayClientID</key>
+	<string>$(EBAY_CLIENT_ID)</string>
+	<key>EbayClientSecret</key>
+	<string>$(EBAY_CLIENT_SECRET)</string>
 	<key>FishUSAAffiliateTemplate</key>
 	<string>$(FISHUSA_AFFILIATE_TEMPLATE)</string>
 	<key>NSCameraUsageDescription</key>
@@ -32,6 +40,8 @@
 	<string>BiteCast uses your location to show local conditions, forecasts, and fishing windows.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Choose a photo of the water so the AI can suggest where to cast.</string>
+	<key>ReplicateAPIToken</key>
+	<string>$(REPLICATE_API_TOKEN)</string>
 	<key>TackleWarehouseAffiliateTemplate</key>
 	<string>$(TACKLEWAREHOUSE_AFFILIATE_TEMPLATE)</string>
 	<key>YouTubeAPIKey</key>

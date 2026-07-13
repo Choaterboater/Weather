@@ -56,7 +56,7 @@ final class TideService {
     private var loadID = 0
 
     func load(near location: CLLocation, on date: Date = .now, force: Bool = false) async {
-        let key = Self.locationKey(location, date: date)
+        let key = Self.dataKey(location, date: date)
         loadID += 1
         let id = loadID
 
@@ -142,6 +142,10 @@ final class TideService {
         } catch {
             return [:]
         }
+    }
+
+    func hasData(for location: CLLocation, on date: Date = .now) -> Bool {
+        lastKey == Self.dataKey(location, date: date) && station != nil
     }
 
     /// A successful load that found no station in range — a real answer, not an error.
@@ -283,7 +287,7 @@ final class TideService {
         }
     }
 
-    private static func locationKey(_ location: CLLocation, date: Date) -> String {
+    nonisolated static func dataKey(_ location: CLLocation, date: Date) -> String {
         let fmt = DateFormatter()
         fmt.dateFormat = "yyyyMMdd"
         let lat = (location.coordinate.latitude * 100).rounded() / 100

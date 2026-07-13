@@ -1,0 +1,7 @@
+// Copy to PublicConfig.xcconfig or inject these build settings in CI.
+// These values are embedded in the distributed app, so restrict the YouTube key
+// to the BiteCast bundle identifier and YouTube Data API in Google Cloud.
+
+AMAZON_PARTNER_TAG = yourtag-20
+EBAY_CAMPAIGN_ID = your_epn_campaign_id
+YOUTUBE_API_KEY = your_bundle_restricted_youtube_key

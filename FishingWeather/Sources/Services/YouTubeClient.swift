@@ -16,28 +16,13 @@ final class YouTubeClient {
         status = .working
 
         guard let apiKey = AppSecrets.youtubeAPIKey, !apiKey.isEmpty, apiKey != "your_youtube_api_key_here" else {
-            // Mock data for previewing when no API key is provided
+            #if DEBUG
+            // Preview fixtures are intentionally Debug-only.
             try? await Task.sleep(for: .seconds(1))
-            self.status = .ready([
-                YouTubeVideo(
-                    id: "dQw4w9WgXcQ",
-                    title: "Best setup for \(query)?",
-                    thumbnailURL: nil,
-                    channelTitle: "BiteCast Fishing"
-                ),
-                YouTubeVideo(
-                    id: "jNQXAC9IVRw",
-                    title: "Watch me land a monster! | \(query)",
-                    thumbnailURL: nil,
-                    channelTitle: "Angler's Digest"
-                ),
-                YouTubeVideo(
-                    id: "V-_O7nl0Ii0",
-                    title: "Secret \(query) spot REVEALED",
-                    thumbnailURL: nil,
-                    channelTitle: "Local Legends"
-                )
-            ])
+            self.status = Self.fallbackStatus(query: query, allowsMocks: true)
+            #else
+            self.status = Self.fallbackStatus(query: query, allowsMocks: false)
+            #endif
             return
         }
 
@@ -68,6 +53,36 @@ final class YouTubeClient {
         } catch {
             self.status = .failed(error.localizedDescription)
         }
+    }
+
+    nonisolated static func fallbackStatus(query: String, allowsMocks: Bool) -> Status {
+        guard allowsMocks else {
+            return .failed("YouTube videos aren't configured for this build.")
+        }
+        #if DEBUG
+        return .ready([
+            YouTubeVideo(
+                id: "dQw4w9WgXcQ",
+                title: "Best setup for \(query)?",
+                thumbnailURL: nil,
+                channelTitle: "BiteCast Fishing"
+            ),
+            YouTubeVideo(
+                id: "jNQXAC9IVRw",
+                title: "Watch me land a monster! | \(query)",
+                thumbnailURL: nil,
+                channelTitle: "Angler's Digest"
+            ),
+            YouTubeVideo(
+                id: "V-_O7nl0Ii0",
+                title: "Secret \(query) spot REVEALED",
+                thumbnailURL: nil,
+                channelTitle: "Local Legends"
+            )
+        ])
+        #else
+        return .failed("YouTube videos aren't configured for this build.")
+        #endif
     }
 
     nonisolated static func videos(from data: Data) throws -> [YouTubeVideo] {

@@ -91,15 +91,15 @@ struct LogCatchView: View {
             .onAppear {
                 if defaultSpecies != .all { species = defaultSpecies }
             }
-            .onChange(of: pickerItem) { _, newItem in
-                guard let newItem else { return }
-                Task {
-                    if let data = try? await newItem.loadTransferable(type: Data.self),
-                       let image = UIImage(data: data) {
-                        photo = image
-                        recognizer.reset()
-                    }
-                }
+            .task(id: pickerItem) {
+                guard let selectedItem = pickerItem,
+                      let data = try? await selectedItem.loadTransferable(type: Data.self),
+                      !Task.isCancelled,
+                      pickerItem == selectedItem,
+                      let image = UIImage(data: data)
+                else { return }
+                photo = image
+                recognizer.reset()
             }
         }
     }
@@ -186,10 +186,23 @@ struct LogCatchView: View {
     /// coastal spot whose tide data is already loaded (no fetch is forced when
     /// opening the form). Nil inland or when tides haven't been viewed.
     private var tidePhase: String? {
-        guard tides.station != nil else { return nil }
-        let now = Date.now
-        guard let next = tides.allEvents.first(where: { $0.time > now }),
-              let prev = tides.allEvents.last(where: { $0.time <= now }) else { return nil }
+        guard let activeCLLocation else { return nil }
+        return Self.tidePhase(
+            events: tides.allEvents,
+            hasMatchingData: tides.hasData(for: activeCLLocation),
+            now: .now
+        )
+    }
+
+    nonisolated static func tidePhase(
+        events: [TideEvent],
+        hasMatchingData: Bool,
+        now: Date
+    ) -> String? {
+        guard hasMatchingData,
+              let next = events.first(where: { $0.time > now }),
+              let prev = events.last(where: { $0.time <= now })
+        else { return nil }
         let slackWindow: TimeInterval = 45 * 60
         if next.time.timeIntervalSince(now) < slackWindow
             || now.timeIntervalSince(prev.time) < slackWindow {

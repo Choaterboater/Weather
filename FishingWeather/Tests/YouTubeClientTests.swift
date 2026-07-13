@@ -36,4 +36,14 @@ struct YouTubeClientTests {
             )
         ])
     }
+
+    @Test("Release behavior never presents preview fixtures as live videos")
+    func missingProductionKeyDoesNotReturnMocks() {
+        let status = YouTubeClient.fallbackStatus(query: "bass fishing", allowsMocks: false)
+
+        guard case .failed = status else {
+            Issue.record("Expected a missing production key to be unavailable, got \(status)")
+            return
+        }
+    }
 }
