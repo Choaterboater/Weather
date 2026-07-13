@@ -517,25 +517,66 @@ struct ForecastSelectionTests {
     }
 
     @Test func biteBandsUseOneExactFiveThresholdContract() {
-        #expect(ForecastBiteBand.band(for: 100) == .excellent)
-        #expect(ForecastBiteBand.band(for: 85) == .excellent)
-        #expect(ForecastBiteBand.band(for: 84) == .strong)
-        #expect(ForecastBiteBand.band(for: 70) == .strong)
-        #expect(ForecastBiteBand.band(for: 69) == .fair)
-        #expect(ForecastBiteBand.band(for: 50) == .fair)
-        #expect(ForecastBiteBand.band(for: 49) == .tough)
-        #expect(ForecastBiteBand.band(for: 30) == .tough)
-        #expect(ForecastBiteBand.band(for: 29) == .poor)
-        #expect(ForecastBiteBand.band(for: 0) == .poor)
-        #expect(ForecastBiteBand.band(for: -1) == nil)
-        #expect(ForecastBiteBand.band(for: 101) == nil)
-        #expect(ForecastBiteBand.allCases.map(\.rangeLabel) == [
+        #expect(BiteScoreBand.band(for: 100) == .excellent)
+        #expect(BiteScoreBand.band(for: 85) == .excellent)
+        #expect(BiteScoreBand.band(for: 84) == .strong)
+        #expect(BiteScoreBand.band(for: 70) == .strong)
+        #expect(BiteScoreBand.band(for: 69) == .fair)
+        #expect(BiteScoreBand.band(for: 50) == .fair)
+        #expect(BiteScoreBand.band(for: 49) == .tough)
+        #expect(BiteScoreBand.band(for: 30) == .tough)
+        #expect(BiteScoreBand.band(for: 29) == .poor)
+        #expect(BiteScoreBand.band(for: 0) == .poor)
+        #expect(BiteScoreBand.band(for: -1) == nil)
+        #expect(BiteScoreBand.band(for: 101) == nil)
+        #expect(BiteScoreBand.allCases.map(\.rangeLabel) == [
             "85–100",
             "70–84",
             "50–69",
             "30–49",
             "0–29",
         ])
+    }
+
+    @Test func scoreSummaryAndForecastRowsShareTheDomainBandContract() throws {
+        let score = FishingScore(factors: [
+            ScoreFactor(
+                kind: .solunar,
+                label: "Solunar",
+                weight: 1,
+                raw: 0.69,
+                detail: "Fixture"
+            ),
+        ])
+        let point = ForecastPoint.fixture(biteScore: score.overall)
+        let row = try #require(
+            ForecastFactorRow.rows(for: [point]).first { $0.id == .biteScore }
+        )
+
+        #expect(score.band == .fair)
+        #expect(score.summary == BiteScoreBand.fair.title)
+        #expect(Ink.scoreBand(for: score.overall) == score.band)
+        #expect(row.formattedValue(
+            for: point,
+            locale: Locale(identifier: "en_US"),
+            timeZone: .gmt
+        ) == "69 · Fair")
+    }
+
+    @Test func selectedDetailRejectsTheSameInvalidValuesAsMatrixRows() {
+        let invalid = ForecastPoint.fixture(
+            temperatureCelsius: .nan,
+            biteScore: 101
+        )
+        let content = ForecastSelectedDetailContent(
+            point: invalid,
+            locale: Locale(identifier: "en_US"),
+            timeZone: .gmt
+        )
+
+        #expect(content.temperature == nil)
+        #expect(content.biteScore == nil)
+        #expect(content.biteBand == nil)
     }
 
     @Test func nonFiniteAndOutOfDomainFactorsAreOmitted() {
@@ -659,6 +700,57 @@ struct ForecastSelectionTests {
         #expect(preferences.collapsedGroups == [.weather])
         #expect(Set(preferences.orderedGroups) == Set(ForecastFactorGroup.allCases))
     }
+
+    @Test func preferencesReorderVisibleGroupsWithoutMovingHiddenSlots() {
+        var preferences = ForecastFactorPreferences(
+            storedOrder: "fishing,weather,wind,waterAndSky"
+        )
+        let visible: Set<ForecastFactorGroup> = [.fishing, .wind, .waterAndSky]
+
+        #expect(!preferences.canMove(
+            .fishing,
+            direction: .earlier,
+            among: visible
+        ))
+        #expect(preferences.canMove(
+            .fishing,
+            direction: .later,
+            among: visible
+        ))
+        preferences.move(.fishing, direction: .later, among: visible)
+
+        #expect(preferences.orderedGroups == [
+            .wind,
+            .weather,
+            .fishing,
+            .waterAndSky,
+        ])
+        #expect(preferences.orderedGroups[1] == .weather)
+    }
+
+#if DEBUG
+    @Test @MainActor func proForecastPreviewUsesGMTMidnightAndIsolatedPreferences() {
+        let start = ProForecastPreviewFixture.start
+        let midnight = ProForecastPreviewFixture.dayStart(for: start)
+
+        #expect(ProForecastPreviewFixture.locale.identifier == "en_US_POSIX")
+        #expect(ProForecastPreviewFixture.timeZone == .gmt)
+        #expect(midnight <= start)
+        #expect(start.timeIntervalSince(midnight) < 86_400)
+        #expect(
+            ProForecastPreviewFixture.preferenceSuiteName
+                == "app.choatelabs.bitecast.debug.proForecast.v1"
+        )
+
+        let key = "proForecast.fixturePersistenceProbe"
+        ProForecastPreviewFixture.preferenceStore.set("kept", forKey: key)
+        #expect(
+            ProForecastPreviewFixture.preferenceStore.string(forKey: key)
+                == "kept"
+        )
+        ProForecastPreviewFixture.preferenceStore.removeObject(forKey: key)
+    }
+#endif
 
     @Test func weekRequiresSevenContiguousDaysOfHourlyPoints() {
         let start = Date(timeIntervalSince1970: 1_800_000_000)

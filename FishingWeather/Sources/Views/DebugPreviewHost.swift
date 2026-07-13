@@ -60,8 +60,30 @@ struct DebugPreviewHost: View {
     }
 }
 
+enum ProForecastPreviewFixture {
+    static let start = Date(timeIntervalSince1970: 1_800_000_000)
+    static let locale = Locale(identifier: "en_US_POSIX")
+    static let timeZone = TimeZone.gmt
+    static let preferenceSuiteName = "app.choatelabs.bitecast.debug.proForecast.v1"
+
+    static func dayStart(for date: Date) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = locale
+        calendar.timeZone = timeZone
+        return calendar.startOfDay(for: date)
+    }
+
+    @MainActor static let preferenceStore: UserDefaults = {
+        guard let store = UserDefaults(suiteName: preferenceSuiteName) else {
+            preconditionFailure("Unable to create isolated Pro Forecast preview defaults")
+        }
+        store.removePersistentDomain(forName: preferenceSuiteName)
+        return store
+    }()
+}
+
 private struct DebugProForecast: View {
-    private let start = Date(timeIntervalSince1970: 1_800_000_000)
+    private let start = ProForecastPreviewFixture.start
     @State private var selectedDate: Date? = Date(
         timeIntervalSince1970: 1_800_000_000
     )
@@ -74,7 +96,7 @@ private struct DebugProForecast: View {
         )
         return (0..<48).map { hour in
             let date = start.addingTimeInterval(Double(hour) * 3_600)
-            let dayStart = start.addingTimeInterval(Double(hour / 24) * 86_400)
+            let dayStart = ProForecastPreviewFixture.dayStart(for: date)
             let temperature = 21 + 4 * sin(Double(hour) / 5)
             let tideRate = 0.7 * cos(Double(hour) / 2.4)
             return ForecastPoint(
@@ -123,12 +145,15 @@ private struct DebugProForecast: View {
             ProForecastMatrix(
                 points: points,
                 selectedDate: $selectedDate,
-                timeZone: .gmt,
-                now: start
+                timeZone: ProForecastPreviewFixture.timeZone,
+                now: start,
+                preferencesStore: ProForecastPreviewFixture.preferenceStore
             )
             .padding(16)
         }
         .background(Ink.backdrop)
+        .environment(\.locale, ProForecastPreviewFixture.locale)
+        .environment(\.timeZone, ProForecastPreviewFixture.timeZone)
     }
 }
 

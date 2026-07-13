@@ -15,13 +15,13 @@ enum Ink {
     static let tide     = Color(red: 0.302, green: 0.678, blue: 0.784) // #4DADC8 water
     static let card     = Color(red: 0.078, green: 0.153, blue: 0.216) // calm surface base
 
-    /// Score-band color on the marine palette (bite → brass → slack).
+    static func scoreBand(for score: Int) -> BiteScoreBand? {
+        BiteScoreBand.band(for: score)
+    }
+
+    /// Score-band color on the marine palette.
     static func band(for score: Int) -> Color {
-        switch score {
-        case 65...: bite
-        case 40..<65: brass
-        default: slack
-        }
+        scoreBand(for: score)?.color ?? chartDim
     }
 
     /// The app's dark instrument background gradient.
@@ -32,6 +32,18 @@ enum Ink {
                            center: .top, startRadius: 0, endRadius: 620)
         }
         .ignoresSafeArea()
+    }
+}
+
+extension BiteScoreBand {
+    var color: Color {
+        switch self {
+        case .excellent: Ink.bite
+        case .strong: Ink.tide
+        case .fair: Ink.brass
+        case .tough: .orange
+        case .poor: Ink.slack
+        }
     }
 }
 

@@ -11,8 +11,6 @@ final class GlassPassUITests: XCTestCase {
             "-uiPreview", "proForecast",
             "-UIPreferredContentSizeCategoryName",
             "UICTContentSizeCategoryAccessibilityXXXL",
-            "-proForecast.groupOrder", "",
-            "-proForecast.collapsedGroups", "",
         ]
         app.launch()
 
@@ -36,6 +34,18 @@ final class GlassPassUITests: XCTestCase {
         XCTAssertTrue(currentHour.waitForExistence(timeout: 3))
         XCTAssertEqual(currentHour.value as? String, "Now, selected")
         XCTAssertLessThanOrEqual(currentHour.frame.maxX, screen.maxX)
+        let nowStatus = app.staticTexts[
+            "proForecast.hour.1800000000.status.now"
+        ]
+        let selectedStatus = app.staticTexts[
+            "proForecast.hour.1800000000.status.selected"
+        ]
+        XCTAssertTrue(nowStatus.waitForExistence(timeout: 3))
+        XCTAssertTrue(selectedStatus.waitForExistence(timeout: 3))
+        XCTAssertGreaterThanOrEqual(nowStatus.frame.minX, currentHour.frame.minX)
+        XCTAssertLessThanOrEqual(nowStatus.frame.maxX, currentHour.frame.maxX)
+        XCTAssertGreaterThanOrEqual(selectedStatus.frame.minX, currentHour.frame.minX)
+        XCTAssertLessThanOrEqual(selectedStatus.frame.maxX, currentHour.frame.maxX)
 
         let nextHour = app.buttons["proForecast.hour.1800003600"]
         XCTAssertTrue(
@@ -48,8 +58,34 @@ final class GlassPassUITests: XCTestCase {
         XCTAssertTrue(nextHour.isHittable)
         nextHour.tap()
         XCTAssertEqual(nextHour.value as? String, "Selected")
+        let selectedDetail = app.staticTexts["proForecast.selectedDetail"]
+        XCTAssertTrue(selectedDetail.waitForExistence(timeout: 3))
+        let detailBeforeScroll = selectedDetail.label
+        let hourlyColumns = app.scrollViews["proForecast.columns"]
+        XCTAssertTrue(hourlyColumns.waitForExistence(timeout: 3))
+        hourlyColumns.swipeLeft()
+        XCTAssertEqual(
+            selectedDetail.label,
+            detailBeforeScroll,
+            "Scrolling the matrix must not mutate the shared selected hour"
+        )
 
-        let fishingToggle = app.buttons["proForecast.group.fishing.toggle"]
+        let fishingGroup = app.buttons["Collapse Fishing group"]
+        let weatherGroup = app.buttons["Collapse Weather group"]
+        let fishingMenu = app.buttons["Reorder Fishing group"]
+        XCTAssertTrue(fishingMenu.waitForExistence(timeout: 5))
+        XCTAssertTrue(weatherGroup.exists)
+        fishingMenu.tap()
+        let moveFishingLater = app.buttons["Move Fishing later"]
+        XCTAssertTrue(moveFishingLater.waitForExistence(timeout: 3))
+        moveFishingLater.tap()
+        XCTAssertGreaterThan(
+            fishingGroup.frame.minY,
+            weatherGroup.frame.minY,
+            "Visible-group reorder should take effect even when provider groups are omitted"
+        )
+
+        let fishingToggle = app.buttons["Collapse Fishing group"]
         XCTAssertTrue(fishingToggle.waitForExistence(timeout: 5))
         XCTAssertTrue(
             app.descendants(matching: .any)["proForecast.row.biteScore"].exists
@@ -59,7 +95,9 @@ final class GlassPassUITests: XCTestCase {
             app.descendants(matching: .any)["proForecast.row.biteScore"]
                 .waitForNonExistence(timeout: 3)
         )
-        fishingToggle.tap()
+        let fishingExpand = app.buttons["Expand Fishing group"]
+        XCTAssertTrue(fishingExpand.waitForExistence(timeout: 3))
+        fishingExpand.tap()
         XCTAssertTrue(
             app.descendants(matching: .any)["proForecast.row.biteScore"].waitForExistence(timeout: 3)
         )
