@@ -108,9 +108,9 @@ struct NWSWeatherProvider: WeatherProvider {
         } catch let error as DecodingError {
             throw WeatherProviderError.decoding(error.localizedDescription)
         } catch let error as URLError {
-            throw WeatherProviderError.network(error.localizedDescription)
+            throw WeatherProviderError.from(error)
         } catch {
-            throw WeatherProviderError.network(String(describing: error))
+            throw WeatherProviderError.from(error)
         }
     }
 

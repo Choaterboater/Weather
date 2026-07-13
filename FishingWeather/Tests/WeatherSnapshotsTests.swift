@@ -222,7 +222,10 @@ struct WeatherSnapshotsTests {
         let original = makeSnapshot(source: .nws)
         try await cache.save(original)
 
-        let cached = try await CachedWeatherProvider(cache: cache).forecast(
+        let cached = try await CachedWeatherProvider(
+            cache: cache,
+            now: { original.provenance.fetchedAt.addingTimeInterval(60) }
+        ).forecast(
             for: CLLocation(latitude: 30.2938, longitude: -86.0049)
         )
 
@@ -238,6 +241,42 @@ struct WeatherSnapshotsTests {
             isFallback: true,
             attribution: "Cached from National Weather Service"
         ))
+    }
+
+    @Test("Cached provider rejects a forecast older than its maximum age")
+    func cachedProviderRejectsExpiredSnapshot() async throws {
+        let cache = WeatherSnapshots(directory: tempDirectory())
+        let fetchedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        try await cache.save(makeSnapshot(source: .nws, fetchedAt: fetchedAt))
+        let provider = CachedWeatherProvider(
+            cache: cache,
+            maxAge: 24 * 3_600,
+            now: { fetchedAt.addingTimeInterval(24 * 3_600 + 1) }
+        )
+
+        await #expect(throws: WeatherProviderError.serviceUnavailable) {
+            _ = try await provider.forecast(
+                for: CLLocation(latitude: 30.2938, longitude: -86.0049)
+            )
+        }
+    }
+
+    @Test("Cached provider rejects a forecast timestamp from the future")
+    func cachedProviderRejectsFutureSnapshot() async throws {
+        let cache = WeatherSnapshots(directory: tempDirectory())
+        let fetchedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        try await cache.save(makeSnapshot(source: .nws, fetchedAt: fetchedAt))
+        let provider = CachedWeatherProvider(
+            cache: cache,
+            maxAge: 24 * 3_600,
+            now: { fetchedAt.addingTimeInterval(-1) }
+        )
+
+        await #expect(throws: WeatherProviderError.serviceUnavailable) {
+            _ = try await provider.forecast(
+                for: CLLocation(latitude: 30.2938, longitude: -86.0049)
+            )
+        }
     }
 
     @Test func cachedProviderReportsServiceUnavailableWhenTileIsMissing() async {

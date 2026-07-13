@@ -106,6 +106,43 @@ struct BiteTimeSourcePresentation: Equatable, Sendable {
     }
 }
 
+/// Determines whether the selected provider hour can truthfully be described
+/// as current. A cached point must be both in the captured clock hour and
+/// recently fetched; an old cache may still be useful, but it is never "now."
+enum BiteTimeCurrentDecision {
+    static let maximumCurrentCacheAge: TimeInterval = 15 * 60
+
+    static func isCurrent(
+        pointDate: Date,
+        capturedNow: Date,
+        provenance: WeatherProvenance,
+        calendar: Calendar
+    ) -> Bool {
+        guard calendar.isDate(
+            pointDate,
+            equalTo: capturedNow,
+            toGranularity: .hour
+        ) else { return false }
+
+        guard provenance.source == .cache else { return true }
+        let age = capturedNow.timeIntervalSince(provenance.fetchedAt)
+        return age >= 0 && age <= maximumCurrentCacheAge
+    }
+}
+
+struct BiteTimeLocationAccessibility: Equatable, Sendable {
+    let label: String
+    let value: String?
+
+    static func make(title: String, subtitle: String?) -> Self {
+        Self(
+            label: "Fishing location, \(title)",
+            value: subtitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+                .nonEmpty
+        )
+    }
+}
+
 struct BiteTimeErrorPresentation: Equatable, Sendable {
     let title: String
     let message: String
@@ -183,6 +220,7 @@ struct BiteTimeView: View {
     @State private var selection = BiteTimeSelectionState()
     @State private var presentation = BiteTimeForecastPresentation.timeline
     @State private var speciesFeedbackGeneration = 0
+    @State private var capturedNow: Date
 
     private let fixedNow: Date?
     private let allowsAutomaticTideLoad: Bool
@@ -201,6 +239,7 @@ struct BiteTimeView: View {
         self.allowsAutomaticTideLoad = allowsAutomaticTideLoad
         self.tideOverride = tideOverride
         self.preferencesStore = preferencesStore
+        _capturedNow = State(initialValue: fixedNow ?? .now)
         _species = AppStorage(
             wrappedValue: initialSpecies,
             "selectedSpecies",
@@ -209,7 +248,7 @@ struct BiteTimeView: View {
         _engine = State(initialValue: engine ?? BaitEngine())
     }
 
-    private var now: Date { fixedNow ?? .now }
+    private var now: Date { capturedNow }
 
     private var activeLocation: CLLocation? {
         spots.selectedSpot?.location ?? location.location
@@ -249,8 +288,8 @@ struct BiteTimeView: View {
 
     private var hasCommittedTides: Bool {
         if tideOverride != nil { return true }
-        guard let activeLocation, let snapshot = matchingSnapshot else { return false }
-        return tides.hasData(for: activeLocation, on: snapshot.current.date)
+        guard let activeLocation, matchingSnapshot != nil else { return false }
+        return tides.hasData(for: activeLocation, on: now)
     }
 
     private var committedTideSamples: [TideSample] {
@@ -263,19 +302,32 @@ struct BiteTimeView: View {
 
     private var forecastPoints: [ForecastPoint] {
         guard let snapshot = matchingSnapshot else { return [] }
+        let forecastStart = forecastCalendar.dateInterval(
+            of: .hour,
+            for: now
+        )?.start ?? now
         return ForecastSeriesBuilder.build(
             weather: snapshot,
             tideSamples: committedTideSamples,
             species: species,
             weights: personalWeights,
-            now: snapshot.current.date
+            now: forecastStart
         )
+    }
+
+    private var preferredForecastDate: Date {
+        forecastPoints.first {
+            forecastCalendar.isDate(
+                $0.date,
+                equalTo: now,
+                toGranularity: .hour
+            )
+        }?.date ?? now
     }
 
     private var selectedPoint: ForecastPoint? {
         let preferred = selection.selectedDate
-            ?? matchingSnapshot?.current.date
-            ?? now
+            ?? preferredForecastDate
         return ForecastSelection.nearest(to: preferred, in: forecastPoints)
     }
 
@@ -298,10 +350,12 @@ struct BiteTimeView: View {
     }
 
     private var conditions: FishingConditions? {
-        guard let snapshot = matchingSnapshot else { return nil }
+        guard let snapshot = matchingSnapshot,
+              let selectedPoint else { return nil }
         return FishingConditions.make(
             snapshot: snapshot,
-            now: selectedPoint?.date ?? snapshot.current.date
+            forecastPoint: selectedPoint,
+            calendar: forecastCalendar
         )
     }
 
@@ -367,7 +421,7 @@ struct BiteTimeView: View {
     }
 
     private var tideTaskKey: String {
-        let date = matchingSnapshot?.current.date ?? now
+        let date = now
         return "\(activeLocationKey)|\(Int(date.timeIntervalSince1970 / 86_400))"
     }
 
@@ -398,12 +452,12 @@ struct BiteTimeView: View {
                   let activeLocation else { return }
             await tides.load(
                 near: activeLocation,
-                on: matchingSnapshot?.current.date ?? now
+                on: now
             )
         }
         .onAppear(perform: reconcileSelection)
         .onChange(of: forecastRevision) {
-            let preferred = matchingSnapshot?.current.date ?? now
+            let preferred = preferredForecastDate
             selection.reset(around: preferred, in: forecastPoints.map(\.date))
         }
         .onChange(of: forecastPoints.map(\.date)) {
@@ -415,6 +469,8 @@ struct BiteTimeView: View {
 
     @ViewBuilder
     private func loadedContent(_ snapshot: WeatherSnapshot) -> some View {
+        let capturedNow = now
+
         if !snapshot.alerts.isEmpty {
             WeatherAlertsView(alerts: snapshot.alerts)
         }
@@ -424,19 +480,14 @@ struct BiteTimeView: View {
                 point: selectedPoint,
                 species: species,
                 timeZone: forecastTimeZone,
-                isCurrentHour: forecastCalendar.isDate(
-                    selectedPoint.date,
-                    equalTo: snapshot.current.date,
-                    toGranularity: .hour
+                isCurrentHour: BiteTimeCurrentDecision.isCurrent(
+                    pointDate: selectedPoint.date,
+                    capturedNow: capturedNow,
+                    provenance: snapshot.provenance,
+                    calendar: forecastCalendar
                 ),
                 window: selectedWindow
             )
-        }
-
-        sourceStatus(snapshot.provenance)
-
-        if let error = weather.lastProviderError {
-            refreshFailure(error)
         }
 
         BestBaitTodayView(
@@ -444,6 +495,12 @@ struct BiteTimeView: View {
             species: species,
             engine: engine
         )
+
+        sourceStatus(snapshot.provenance)
+
+        if let error = weather.lastProviderError {
+            refreshFailure(error)
+        }
 
         forecastPresentation
         selectedSpeciesSection
@@ -453,7 +510,7 @@ struct BiteTimeView: View {
             DailyForecastView(
                 daily: snapshot.daily,
                 timeZoneIdentifier: snapshot.timeZoneIdentifier,
-                now: snapshot.current.date
+                now: capturedNow
             )
         }
 
@@ -463,7 +520,11 @@ struct BiteTimeView: View {
     }
 
     private var locationHeader: some View {
-        HStack(alignment: .top, spacing: 12) {
+        let accessibility = BiteTimeLocationAccessibility.make(
+            title: descriptorTitle,
+            subtitle: descriptorSubtitle
+        )
+        return HStack(alignment: .top, spacing: 12) {
             Image(systemName: spots.selectedSpot == nil ? "location.fill" : "mappin.and.ellipse")
                 .font(.system(.title3, design: .rounded, weight: .semibold))
                 .foregroundStyle(Ink.brass)
@@ -483,14 +544,29 @@ struct BiteTimeView: View {
             Spacer(minLength: 0)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Fishing location, \(descriptorTitle)")
+        .accessibilityLabel(accessibility.label)
+        .accessibilityValue(accessibility.value ?? "")
         .accessibilityIdentifier("bitetime.location")
     }
 
+    @ViewBuilder
     private func sourceStatus(_ provenance: WeatherProvenance) -> some View {
+        if let fixedNow {
+            sourceStatusContent(provenance, at: fixedNow)
+        } else {
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                sourceStatusContent(provenance, at: context.date)
+            }
+        }
+    }
+
+    private func sourceStatusContent(
+        _ provenance: WeatherProvenance,
+        at referenceDate: Date
+    ) -> some View {
         let source = BiteTimeSourcePresentation.make(
             provenance: provenance,
-            now: now,
+            now: referenceDate,
             timeZone: forecastTimeZone,
             locale: .current
         )
@@ -598,7 +674,7 @@ struct BiteTimeView: View {
                         points: forecastPoints,
                         selectedDate: forecastSelection,
                         timeZone: forecastTimeZone,
-                        now: matchingSnapshot?.current.date ?? now,
+                        now: now,
                         preferencesStore: preferencesStore
                     )
                 }
@@ -724,8 +800,9 @@ struct BiteTimeView: View {
                 distanceMiles: tideState.distanceMiles,
                 isLoading: tideState.isLoading,
                 lastError: tideState.lastError,
-                now: now
+                referenceDate: selectedPoint?.date ?? now
             )
+            .environment(\.timeZone, forecastTimeZone)
         } else if let activeLocation {
             WaterConditionsCard(location: activeLocation)
         }
@@ -813,7 +890,7 @@ struct BiteTimeView: View {
 
     private var weatherDetailLink: some View {
         NavigationLink {
-            WeatherDashboardView()
+            WeatherDashboardView(fixedNow: fixedNow)
                 .navigationTitle("Weather Details")
                 .navigationBarTitleDisplayMode(.inline)
         } label: {
@@ -839,8 +916,10 @@ struct BiteTimeView: View {
                     tide: showsTides ? tideState : nil,
                     activeLocation: activeLocation,
                     hourlySamples: matchingSnapshot?.hourly.samples(
-                        now: matchingSnapshot?.current.date ?? now
-                    ) ?? []
+                        now: selectedPoint.date
+                    ) ?? [],
+                    referenceDate: selectedPoint.date,
+                    forecastTimeZone: forecastTimeZone
                 )
                 .navigationTitle("Fishing Details")
                 .navigationBarTitleDisplayMode(.inline)
@@ -910,13 +989,13 @@ struct BiteTimeView: View {
                 from: catchLog.entries,
                 species: option
             ),
-            now: snapshot.current.date
+            now: now
         )
         return ForecastSelection.nearest(to: selectedPoint.date, in: points)?.biteScore
     }
 
     private func reconcileSelection() {
-        let preferred = matchingSnapshot?.current.date ?? now
+        let preferred = preferredForecastDate
         selection.reconcile(
             with: forecastPoints.map(\.date),
             around: preferred
@@ -930,8 +1009,12 @@ struct BiteTimeView: View {
         guard allowsAutomaticTideLoad else { return }
         await tides.load(
             near: activeLocation,
-            on: matchingSnapshot?.current.date ?? now,
+            on: now,
             force: true
         )
     }
+}
+
+private extension String {
+    var nonEmpty: String? { isEmpty ? nil : self }
 }

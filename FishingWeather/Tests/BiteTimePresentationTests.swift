@@ -114,6 +114,74 @@ struct BiteTimePresentationTests {
         )
     }
 
+    @Test("Current decision uses the captured clock and never calls stale cache current")
+    func currentDecisionUsesCapturedNowAndFreshness() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .gmt
+        let sameHour = now.addingTimeInterval(20 * 60)
+
+        let live = WeatherProvenance(
+            source: .nws,
+            fetchedAt: now.addingTimeInterval(-8 * 60),
+            isFallback: true,
+            attribution: "National Weather Service"
+        )
+        #expect(
+            BiteTimeCurrentDecision.isCurrent(
+                pointDate: sameHour,
+                capturedNow: now,
+                provenance: live,
+                calendar: calendar
+            )
+        )
+
+        #expect(
+            !BiteTimeCurrentDecision.isCurrent(
+                pointDate: now.addingTimeInterval(-3 * 3_600),
+                capturedNow: now,
+                provenance: live,
+                calendar: calendar
+            )
+        )
+
+        let staleCache = WeatherProvenance(
+            source: .cache,
+            fetchedAt: now.addingTimeInterval(-2 * 3_600),
+            isFallback: true,
+            attribution: "Cached from National Weather Service"
+        )
+        #expect(
+            !BiteTimeCurrentDecision.isCurrent(
+                pointDate: sameHour,
+                capturedNow: now,
+                provenance: staleCache,
+                calendar: calendar
+            )
+        )
+    }
+
+    @Test("Saved location accessibility retains its descriptive subtitle")
+    func savedLocationAccessibilityRetainsSubtitle() {
+        let value = BiteTimeLocationAccessibility.make(
+            title: "St. Petersburg Pier",
+            subtitle: "Pier · FL"
+        )
+
+        #expect(value.label == "Fishing location, St. Petersburg Pier")
+        #expect(value.value == "Pier · FL")
+    }
+
+    @Test("NWS debug fixture traverses authentication fallback chain")
+    func nwsDebugFixtureUsesProviderChain() async throws {
+        let result = try await BiteTimePreviewProviderChainFixture.run()
+        let snapshot = result.snapshot
+
+        #expect(result.attempts == ["WeatherKit", "NWS"])
+        #expect(snapshot.provenance.source == .nws)
+        #expect(snapshot.provenance.isFallback)
+        #expect(snapshot.provenance.attribution == "National Weather Service")
+    }
+
     @Test("Programmatic reset does not fire selection feedback")
     func resetHasNoHapticIdentity() {
         let dates = [0, 1, 2].map {

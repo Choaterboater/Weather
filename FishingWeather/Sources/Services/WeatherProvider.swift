@@ -30,6 +30,34 @@ enum WeatherErrorPresentationKind: Equatable, Sendable {
 }
 
 extension WeatherProviderError {
+    /// Normalizes an untyped provider failure without guessing about
+    /// connectivity from prose. Only Foundation's explicit
+    /// `notConnectedToInternet` code becomes the canonical offline error.
+    static func from(_ error: any Error) -> Self {
+        if let providerError = error as? Self {
+            return providerError
+        }
+        if let urlError = error as? URLError,
+           urlError.code == .notConnectedToInternet {
+            return .network(Self.offlineMessage)
+        }
+        return .serviceUnavailable
+    }
+
+    /// Positive connectivity classification. Generic `.network` values from
+    /// older provider adapters remain service failures unless they carry the
+    /// canonical marker created by `from(_:)`.
+    var isOffline: Bool {
+        switch self {
+        case let .network(message):
+            return message == Self.offlineMessage
+        case let .allProvidersFailed(failures):
+            return failures.contains { $0.error.isOffline }
+        default:
+            return false
+        }
+    }
+
     /// A provider-neutral presentation category. Aggregate failures recurse
     /// through nested chains, preferring authentication because it is the one
     /// failure a developer must fix rather than asking the user to retry.
@@ -38,7 +66,9 @@ extension WeatherProviderError {
         case .authentication:
             return .authentication
         case let .network(message):
-            return .network(message: message)
+            return message == Self.offlineMessage
+                ? .network(message: message)
+                : .serviceUnavailable
         case let .rateLimited(retryAfter):
             return .rateLimited(retryAfter: retryAfter)
         case .serviceUnavailable:
@@ -54,6 +84,8 @@ extension WeatherProviderError {
                 ?? .serviceUnavailable
         }
     }
+
+    private static let offlineMessage = "offline"
 }
 
 extension WeatherProviderError: LocalizedError {
@@ -119,7 +151,7 @@ struct WeatherProviderChain: WeatherProvider {
             } catch {
                 failures.append(WeatherProviderFailure(
                     provider: String(describing: type(of: provider)),
-                    error: .network(String(describing: error))
+                    error: WeatherProviderError.from(error)
                 ))
             }
         }

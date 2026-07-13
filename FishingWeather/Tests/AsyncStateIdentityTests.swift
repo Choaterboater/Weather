@@ -269,7 +269,7 @@ struct AsyncStateIdentityTests {
     }
 
     @MainActor
-    @Test("An untyped worker failure is normalized into a typed network error")
+    @Test("An untyped worker failure is normalized into a service outage")
     func untypedFailureIsNormalized() async {
         let store = WeatherStore(worker: { _, _ in
             throw AsyncWeatherError.offline
@@ -277,8 +277,58 @@ struct AsyncStateIdentityTests {
 
         await store.load(for: CLLocation(latitude: 30, longitude: -86))
 
+        #expect(store.lastProviderError == .serviceUnavailable)
+        #expect(store.errorMessage == "Weather is temporarily unavailable.")
+    }
+
+    @MainActor
+    @Test("A positively identified connectivity failure is normalized as offline")
+    func positiveOfflineFailureIsNormalized() async {
+        let store = WeatherStore(worker: { _, _ in
+            throw URLError(.notConnectedToInternet)
+        })
+
+        await store.load(for: CLLocation(latitude: 30, longitude: -86))
+
         #expect(store.lastProviderError == .network("offline"))
-        #expect(store.errorMessage == "offline")
+        #expect(store.lastProviderError?.isOffline == true)
+    }
+
+    @MainActor
+    @Test("A timeout is normalized into a service outage")
+    func timeoutFailureIsNotOffline() async {
+        let store = WeatherStore(worker: { _, _ in
+            throw URLError(.timedOut)
+        })
+
+        await store.load(for: CLLocation(latitude: 30, longitude: -86))
+
+        #expect(store.lastProviderError == .serviceUnavailable)
+        #expect(store.lastProviderError?.isOffline == false)
+    }
+
+    @Test("Weather Details freshness changes when its minute clock advances")
+    func weatherDetailsFreshnessAges() {
+        let fetchedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let snapshot = Self.snapshot(
+            latitude: 30,
+            longitude: -86,
+            fetchedAt: fetchedAt
+        )
+
+        let initial = WeatherDashboardView.sourcePresentation(
+            for: snapshot,
+            now: fetchedAt,
+            locale: Locale(identifier: "en_US_POSIX")
+        )
+        let advanced = WeatherDashboardView.sourcePresentation(
+            for: snapshot,
+            now: fetchedAt.addingTimeInterval(120),
+            locale: Locale(identifier: "en_US_POSIX")
+        )
+
+        #expect(initial.freshness == "Updated just now")
+        #expect(advanced.freshness == "Updated 2 min ago")
     }
 
     @Test("Every provider failure has a distinct presentation category")

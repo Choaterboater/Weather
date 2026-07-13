@@ -133,9 +133,6 @@ final class WeatherStore {
     }
 
     private static func providerError(for error: any Error) -> WeatherProviderError {
-        if let providerError = error as? WeatherProviderError {
-            return providerError
-        }
-        return .network(String(describing: error))
+        WeatherProviderError.from(error)
     }
 }

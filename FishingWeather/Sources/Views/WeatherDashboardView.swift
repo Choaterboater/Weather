@@ -7,6 +7,12 @@ struct WeatherDashboardView: View {
     @Environment(SpotStore.self) private var spots
     @Environment(LocationManager.self) private var location
 
+    private let fixedNow: Date?
+
+    init(fixedNow: Date? = nil) {
+        self.fixedNow = fixedNow
+    }
+
     private var activeLocation: CLLocation? {
         spots.selectedSpot?.location ?? location.location
     }
@@ -74,11 +80,37 @@ struct WeatherDashboardView: View {
         )
     }
 
+    @ViewBuilder
     private func weatherStatus(_ snapshot: WeatherSnapshot) -> some View {
-        let source = BiteTimeSourcePresentation.make(
+        if let fixedNow {
+            weatherStatusContent(snapshot, now: fixedNow)
+        } else {
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                weatherStatusContent(snapshot, now: context.date)
+            }
+        }
+    }
+
+    static func sourcePresentation(
+        for snapshot: WeatherSnapshot,
+        now: Date,
+        locale: Locale
+    ) -> BiteTimeSourcePresentation {
+        BiteTimeSourcePresentation.make(
             provenance: snapshot.provenance,
-            now: .now,
+            now: now,
             timeZone: TimeZone(identifier: snapshot.timeZoneIdentifier) ?? .gmt,
+            locale: locale
+        )
+    }
+
+    private func weatherStatusContent(
+        _ snapshot: WeatherSnapshot,
+        now: Date
+    ) -> some View {
+        let source = Self.sourcePresentation(
+            for: snapshot,
+            now: now,
             locale: .current
         )
         return HStack(alignment: .top, spacing: 10) {

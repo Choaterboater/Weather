@@ -22,7 +22,11 @@ struct TideCardPresentationTests {
         }
 
         let domain = try #require(
-            TideCard.visibleChartDomain(events: events, samples: samples, now: now)
+            TideCard.visibleChartDomain(
+                events: events,
+                samples: samples,
+                referenceDate: now
+            )
         )
 
         #expect(domain.lowerBound == now.addingTimeInterval(-3 * 3_600))
@@ -43,13 +47,13 @@ struct TideCardPresentationTests {
         #expect(ticks[3].timeIntervalSince(ticks[2]) == 6 * 3_600)
     }
 
-    @Test("Now marker only appears inside the focused domain")
-    func nowMarkerHonorsFocusedDomain() {
+    @Test("Selected-time marker only appears inside the focused domain")
+    func selectedTimeMarkerHonorsFocusedDomain() {
         let domain = now...now.addingTimeInterval(24 * 3_600)
 
-        #expect(TideCard.shouldShowNow(now, in: domain))
-        #expect(!TideCard.shouldShowNow(now.addingTimeInterval(-1), in: domain))
-        #expect(!TideCard.shouldShowNow(now.addingTimeInterval(25 * 3_600), in: domain))
+        #expect(TideCard.shouldShowReferenceDate(now, in: domain))
+        #expect(!TideCard.shouldShowReferenceDate(now.addingTimeInterval(-1), in: domain))
+        #expect(!TideCard.shouldShowReferenceDate(now.addingTimeInterval(25 * 3_600), in: domain))
     }
 
     @Test("Axis labels use compact localized hours without minutes")
@@ -62,5 +66,33 @@ struct TideCardPresentationTests {
 
         #expect(!label.contains(":"))
         #expect(label.contains("AM") || label.contains("PM"))
+    }
+
+    @Test("Event rows use the same injected timezone as the chart")
+    func eventRowsUseForecastTimeZone() {
+        let locale = Locale(identifier: "en_US_POSIX")
+        let eastern = TimeZone(identifier: "America/New_York")!
+        let central = TimeZone(identifier: "America/Chicago")!
+
+        let easternLabel = TideCard.eventTimeLabel(
+            now,
+            locale: locale,
+            timeZone: eastern
+        )
+        let centralLabel = TideCard.eventTimeLabel(
+            now,
+            locale: locale,
+            timeZone: central
+        )
+
+        #expect(easternLabel != centralLabel)
+        #expect(
+            easternLabel.replacingOccurrences(of: "\u{202F}", with: " ")
+                == "3:00 AM"
+        )
+        #expect(
+            centralLabel.replacingOccurrences(of: "\u{202F}", with: " ")
+                == "2:00 AM"
+        )
     }
 }
