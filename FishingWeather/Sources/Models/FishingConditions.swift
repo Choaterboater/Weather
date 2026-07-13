@@ -66,7 +66,11 @@ struct FishingConditions {
                 now: forecastPoint.date,
                 fallback: .steady
             ),
-            windows: SolunarCalculator.windows(
+            // The timeline scorer includes neighboring forecast days so a
+            // window crossing midnight (or the next nearby window) affects
+            // both its score and its explanation. Preserve that exact set in
+            // details instead of rebuilding only the selected calendar day.
+            windows: forecastPoint.solunarWindows ?? SolunarCalculator.windows(
                 moonrise: astronomy.moonrise,
                 moonset: astronomy.moonset,
                 on: forecastPoint.date,

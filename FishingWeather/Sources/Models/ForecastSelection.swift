@@ -21,6 +21,10 @@ struct ForecastPoint: Identifiable, Equatable, Sendable {
     let tideHeightFeet: Double?
     let tidePhase: String?
     let solunarWindow: BiteWindow?
+    /// Exact neighboring-day window set used by the scorer. `nil` is reserved
+    /// for hand-built legacy/debug points that did not capture score context;
+    /// an empty array is a real forecast result with no available windows.
+    let solunarWindows: [BiteWindow]?
     let pressureTendency: PressureTendency?
     let moonPhase: LunarPhase?
     let sunrise: Date?
@@ -37,6 +41,7 @@ struct ForecastPoint: Identifiable, Equatable, Sendable {
         tideHeightFeet: Double?,
         tidePhase: String?,
         solunarWindow: BiteWindow?,
+        solunarWindows: [BiteWindow]? = nil,
         pressureTendency: PressureTendency? = nil,
         moonPhase: LunarPhase? = nil,
         sunrise: Date? = nil,
@@ -50,6 +55,7 @@ struct ForecastPoint: Identifiable, Equatable, Sendable {
         self.tideHeightFeet = tideHeightFeet
         self.tidePhase = tidePhase
         self.solunarWindow = solunarWindow
+        self.solunarWindows = solunarWindows
         self.pressureTendency = pressureTendency
         self.moonPhase = moonPhase
         self.sunrise = sunrise
@@ -174,6 +180,7 @@ enum ForecastSeriesBuilder {
                 tideHeightFeet: tide?.height,
                 tidePhase: tide?.phase,
                 solunarWindow: activeWindow,
+                solunarWindows: windows,
                 pressureTendency: pressureTendency,
                 moonPhase: context.moonPhase,
                 sunrise: context.sunrise,

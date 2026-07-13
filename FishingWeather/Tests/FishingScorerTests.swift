@@ -496,6 +496,50 @@ struct FishingScorerTests {
     }
 
     @Test
+    func activeWindowDetailUsesForecastCalendarTimeZone() throws {
+        let timeZone = try #require(TimeZone(identifier: "Pacific/Kiritimati"))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let locale = Locale(identifier: "en_US_POSIX")
+        let peak = try #require(Calendar(identifier: .gregorian).date(
+            from: DateComponents(
+                timeZone: .gmt,
+                year: 2030,
+                month: 1,
+                day: 2,
+                hour: 0,
+                minute: 30
+            )
+        ))
+        let window = BiteWindow(
+            period: .major,
+            peak: peak,
+            cause: "Moon overhead"
+        )
+
+        let factor = try #require(FishingScorer.score(
+            moonPhase: .full,
+            activeWindow: window,
+            nextWindow: nil,
+            pressureTendency: .steady,
+            pressureChangePerHour: 0,
+            windMph: 8,
+            species: .bass,
+            now: peak,
+            calendar: calendar,
+            locale: locale
+        ).factors.first { $0.kind == .solunar })
+
+        let normalizedDetail = factor.detail
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+        #expect(
+            normalizedDetail.contains("3:30 PM"),
+            "Detail was: \(factor.detail)"
+        )
+    }
+
+    @Test
     func windIsSmoothAcross13And19Thresholds() {
         let a = FishingScorer.score(
             moonPhase: .firstQuarter,

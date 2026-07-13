@@ -240,6 +240,25 @@ struct ForecastSelectionTests {
         #expect(honoluluBounds.start != tokyoBounds.start)
         #expect(honoluluBounds.range.contains(instant))
         #expect(tokyoBounds.range.contains(instant))
+
+        let crossingMidnight = BiteWindow(
+            period: .major,
+            peak: honoluluBounds.start.addingTimeInterval(-30 * 60),
+            cause: "Prior-day moonrise"
+        )
+        let priorOnly = BiteWindow(
+            period: .major,
+            peak: honoluluBounds.start.addingTimeInterval(-2 * 3_600),
+            cause: "Prior day"
+        )
+        let startsAtNextMidnight = BiteWindow(
+            period: .major,
+            peak: honoluluBounds.end.addingTimeInterval(3_600),
+            cause: "Next day"
+        )
+        #expect(honoluluBounds.intersects(crossingMidnight))
+        #expect(!honoluluBounds.intersects(priorOnly))
+        #expect(!honoluluBounds.intersects(startsAtNextMidnight))
     }
 
     @Test("Forecast scoring uses the remote location month")
@@ -500,6 +519,14 @@ struct ForecastSelectionTests {
 
         #expect(point.solunarWindow?.peak == peak)
         #expect(point.solunarWindow?.cause == "Moonrise")
+
+        let details = FishingConditions.make(
+            snapshot: snapshot,
+            forecastPoint: point,
+            calendar: calendar
+        )
+        #expect(details.activeWindow(at: selectedHour)?.peak == peak)
+        #expect(details.activeWindow(at: selectedHour)?.cause == "Moonrise")
     }
 
     @Test func nextDayWindowChangesLateDayScore() throws {
