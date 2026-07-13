@@ -1,7 +1,7 @@
 import UIKit
 
-/// Identifies a fish species from a photo via a Replicate vision model, mapping
-/// the result onto the app's tracked species when possible.
+/// Identifies a fish species using only a bundled on-device Core ML model.
+/// User photo bytes never leave the device.
 @MainActor
 @Observable
 final class FishRecognizer {
@@ -21,7 +21,15 @@ final class FishRecognizer {
     var status: Status = .idle
     var result: FishIdentification?
 
-    init(worker: Worker? = nil) {
+    /// Production initializer. If no licensed model is bundled, recognition is
+    /// honestly unavailable instead of uploading the user's photo elsewhere.
+    init() {
+        worker = Self.bundledWorker()
+    }
+
+    /// Test seam and explicit on-device worker injection. Passing nil disables
+    /// recognition deterministically and proves there is no network fallback.
+    init(worker: Worker?) {
         self.worker = worker
     }
 
@@ -30,64 +38,22 @@ final class FishRecognizer {
         status = .working
         result = nil
 
-        let prompt = Self.prompt
         let currentSelf = self
-        let worker = self.worker
+        guard let worker else {
+            status = .unavailable(Self.unavailableMessage)
+            return
+        }
         let activeTask = Task.detached(priority: .userInitiated) {
             let scaled = Self.downscaled(image)
             let data = scaled.jpegData(compressionQuality: 0.8) ?? Data()
             guard !Task.isCancelled else { return }
 
-            if let worker {
-                do {
-                    let made = try await worker(data)
-                    guard !Task.isCancelled else { return }
-                    await MainActor.run {
-                        guard !Task.isCancelled else { return }
-                        currentSelf.result = made
-                        currentSelf.status = .ready
-                    }
-                } catch {
-                    guard !Task.isCancelled else { return }
-                    await MainActor.run {
-                        guard !Task.isCancelled else { return }
-                        currentSelf.status = .failed(error.localizedDescription)
-                    }
-                }
-                return
-            }
-
-            // 1) On-device Core ML model
-            if let classifier = CoreMLFishClassifier(),
-               let hit = await classifier.classify(imageData: data) {
+            do {
+                let made = try await worker(data)
                 guard !Task.isCancelled else { return }
-                let made = Self.make(label: hit.label, confidence: hit.confidence)
                 await MainActor.run {
                     guard !Task.isCancelled else { return }
                     currentSelf.result = made
-                    currentSelf.status = .ready
-                }
-                return
-            }
-
-            guard !Task.isCancelled else { return }
-
-            // 2) Cloud vision model via Replicate, if a token is set
-            guard let client = ReplicateVisionClient() else {
-                await MainActor.run {
-                    guard !Task.isCancelled else { return }
-                    currentSelf.status = .unavailable("For fish ID, bundle a Core ML model (FishClassifier) for on-device use, or add a Replicate API token.")
-                }
-                return
-            }
-
-            do {
-                let text = try await client.identify(imageData: data, prompt: prompt)
-                guard !Task.isCancelled else { return }
-                let parsed = Self.parse(text)
-                await MainActor.run {
-                    guard !Task.isCancelled else { return }
-                    currentSelf.result = parsed
                     currentSelf.status = .ready
                 }
             } catch {
@@ -109,11 +75,18 @@ final class FishRecognizer {
         result = nil
     }
 
-    private static let prompt = """
-    Identify the fish species in this photo (freshwater or saltwater). Reply with \
-    the common name only, for example "Largemouth Bass", "Redfish", or "Speckled Trout". \
-    If it is not a fish or you are unsure, say "Unknown".
-    """
+    nonisolated static let unavailableMessage =
+        "Fish identification is unavailable because no licensed on-device model is installed. You can still choose the species yourself; this photo stays on your device."
+
+    private nonisolated static func bundledWorker() -> Worker? {
+        guard let classifier = CoreMLFishClassifier() else { return nil }
+        return { data in
+            guard let hit = await classifier.classify(imageData: data) else {
+                throw FishRecognitionError.noResult
+            }
+            return Self.make(label: hit.label, confidence: hit.confidence)
+        }
+    }
 
     /// Builds a result from a Core ML classification label + confidence.
     nonisolated static func make(label: String, confidence: Float) -> FishIdentification {
@@ -123,18 +96,6 @@ final class FishRecognizer {
             commonName: label,
             matchedSpecies: matched,
             note: "On-device · \(percent)% confidence"
-        )
-    }
-
-    nonisolated static func parse(_ text: String) -> FishIdentification {
-        let name = text
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "\n", with: " ")
-        let matched = matchSpecies(in: name)
-        return FishIdentification(
-            commonName: name.isEmpty ? "Unknown" : name,
-            matchedSpecies: matched,
-            note: matched == nil ? "Not one of the tracked species." : ""
         )
     }
 
@@ -174,5 +135,13 @@ final class FishRecognizer {
         let newSize = CGSize(width: size.width * scale, height: size.height * scale)
         let renderer = UIGraphicsImageRenderer(size: newSize)
         return renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: newSize)) }
+    }
+}
+
+private enum FishRecognitionError: LocalizedError {
+    case noResult
+
+    var errorDescription: String? {
+        "The on-device fish model couldn't identify this photo."
     }
 }
