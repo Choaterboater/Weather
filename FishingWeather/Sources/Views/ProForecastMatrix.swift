@@ -28,48 +28,6 @@ enum ForecastFactorGroup: String, CaseIterable, Codable, Hashable, Identifiable,
     }
 }
 
-enum ForecastBiteBand: String, CaseIterable, Identifiable, Sendable {
-    case excellent
-    case strong
-    case fair
-    case tough
-    case poor
-
-    var id: String { rawValue }
-    var title: String { rawValue.capitalized }
-
-    var rangeLabel: String {
-        switch self {
-        case .excellent: "85–100"
-        case .strong: "70–84"
-        case .fair: "50–69"
-        case .tough: "30–49"
-        case .poor: "0–29"
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .excellent: Ink.bite
-        case .strong: Ink.tide
-        case .fair: Ink.brass
-        case .tough: .orange
-        case .poor: Ink.slack
-        }
-    }
-
-    static func band(for score: Int) -> ForecastBiteBand? {
-        guard (0...100).contains(score) else { return nil }
-        return switch score {
-        case 85...: .excellent
-        case 70..<85: .strong
-        case 50..<70: .fair
-        case 30..<50: .tough
-        default: .poor
-        }
-    }
-}
-
 /// One provider-backed matrix row. The catalog has no closures so row identity,
 /// ordering, and availability remain deterministic and easy to test.
 struct ForecastFactorRow: Identifiable, Equatable, Sendable {
@@ -118,7 +76,7 @@ struct ForecastFactorRow: Identifiable, Equatable, Sendable {
         switch id {
         case .biteScore:
             guard let score = point.biteScore,
-                  let band = ForecastBiteBand.band(for: score) else {
+                  let band = BiteScoreBand.band(for: score) else {
                 return nil
             }
             return "\(score) · \(band.title)"
@@ -230,7 +188,7 @@ struct ForecastFactorRow: Identifiable, Equatable, Sendable {
     private func hasValue(_ point: ForecastPoint) -> Bool {
         switch id {
         case .biteScore:
-            point.biteScore.flatMap(ForecastBiteBand.band(for:)) != nil
+            point.biteScore.flatMap(BiteScoreBand.band(for:)) != nil
         case .solunarWindow:
             point.solunarWindow != nil
         case .condition:
@@ -478,12 +436,19 @@ struct ForecastFactorPreferences: Equatable, Sendable {
         _ group: ForecastFactorGroup,
         direction: MoveDirection
     ) -> Bool {
-        guard let index = orderedGroups.firstIndex(of: group) else {
-            return false
-        }
+        canMove(group, direction: direction, among: Set(orderedGroups))
+    }
+
+    func canMove(
+        _ group: ForecastFactorGroup,
+        direction: MoveDirection,
+        among availableGroups: Set<ForecastFactorGroup>
+    ) -> Bool {
+        let visible = orderedGroups.filter(availableGroups.contains)
+        guard let index = visible.firstIndex(of: group) else { return false }
         return switch direction {
-        case .earlier: index > orderedGroups.startIndex
-        case .later: index < orderedGroups.index(before: orderedGroups.endIndex)
+        case .earlier: index > visible.startIndex
+        case .later: index < visible.index(before: visible.endIndex)
         }
     }
 
@@ -491,13 +456,60 @@ struct ForecastFactorPreferences: Equatable, Sendable {
         _ group: ForecastFactorGroup,
         direction: MoveDirection
     ) {
+        move(group, direction: direction, among: Set(orderedGroups))
+    }
+
+    mutating func move(
+        _ group: ForecastFactorGroup,
+        direction: MoveDirection,
+        among availableGroups: Set<ForecastFactorGroup>
+    ) {
+        let visible = orderedGroups.filter(availableGroups.contains)
+        guard let visibleIndex = visible.firstIndex(of: group),
+              canMove(group, direction: direction, among: availableGroups) else {
+            return
+        }
+        let targetVisibleIndex = switch direction {
+        case .earlier: visible.index(before: visibleIndex)
+        case .later: visible.index(after: visibleIndex)
+        }
         guard let index = orderedGroups.firstIndex(of: group),
-              canMove(group, direction: direction) else { return }
-        let target = switch direction {
-        case .earlier: orderedGroups.index(before: index)
-        case .later: orderedGroups.index(after: index)
+              let target = orderedGroups.firstIndex(of: visible[targetVisibleIndex]) else {
+            return
         }
         orderedGroups.swapAt(index, target)
+    }
+}
+
+/// A validated presentation model shared by the selected-hour detail and the
+/// matrix row formatters. Invalid provider values stay unavailable everywhere.
+struct ForecastSelectedDetailContent: Equatable, Sendable {
+    let condition: String?
+    let temperature: String?
+    let biteScore: Int?
+    let biteBand: BiteScoreBand?
+
+    init(point: ForecastPoint, locale: Locale, timeZone: TimeZone) {
+        let rows = ForecastFactorRow.rows(for: [point])
+        func formatted(_ id: ForecastFactorRow.ID) -> String? {
+            rows.first { $0.id == id }?.formattedValue(
+                for: point,
+                locale: locale,
+                timeZone: timeZone
+            )
+        }
+
+        condition = formatted(.condition)
+        temperature = formatted(.temperature)
+        if let score = point.biteScore,
+           formatted(.biteScore) != nil,
+           let band = BiteScoreBand.band(for: score) {
+            biteScore = score
+            biteBand = band
+        } else {
+            biteScore = nil
+            biteBand = nil
+        }
     }
 }
 
@@ -543,8 +555,8 @@ struct ProForecastMatrix: View {
 
     @Environment(\.locale) private var locale
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @AppStorage("proForecast.groupOrder") private var storedGroupOrder = ""
-    @AppStorage("proForecast.collapsedGroups") private var storedCollapsedGroups = ""
+    @AppStorage private var storedGroupOrder: String
+    @AppStorage private var storedCollapsedGroups: String
     @State private var horizon: ProForecastHorizon = .day
     @State private var horizontalAnchor: Date?
 
@@ -558,12 +570,23 @@ struct ProForecastMatrix: View {
         points: [ForecastPoint],
         selectedDate: Binding<Date?>,
         timeZone: TimeZone = .current,
-        now: Date = .now
+        now: Date = .now,
+        preferencesStore: UserDefaults? = nil
     ) {
         self.points = points
         _selectedDate = selectedDate
         self.timeZone = timeZone
         self.now = now
+        _storedGroupOrder = AppStorage(
+            wrappedValue: "",
+            "proForecast.groupOrder",
+            store: preferencesStore
+        )
+        _storedCollapsedGroups = AppStorage(
+            wrappedValue: "",
+            "proForecast.collapsedGroups",
+            store: preferencesStore
+        )
         _horizontalAnchor = State(
             initialValue: selectedDate.wrappedValue ?? points.first?.date
         )
@@ -630,6 +653,10 @@ struct ProForecastMatrix: View {
             }
             return result
         }
+    }
+
+    private var availableGroups: Set<ForecastFactorGroup> {
+        Set(ForecastFactorRow.rows(for: points).map(\.group))
     }
 
     private var lazyGridRows: [GridItem] {
@@ -818,6 +845,7 @@ struct ProForecastMatrix: View {
             }
             .scrollPosition(id: $horizontalAnchor, anchor: .center)
             .accessibilityLabel("Hourly Pro Forecast columns")
+            .accessibilityIdentifier("proForecast.columns")
         }
         .background(Ink.card.opacity(0.98), in: .rect(cornerRadius: 18))
         .clipShape(.rect(cornerRadius: 18))
@@ -825,6 +853,7 @@ struct ProForecastMatrix: View {
             RoundedRectangle(cornerRadius: 18)
                 .stroke(Ink.hullLine, lineWidth: 1)
         )
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("proForecast.matrix")
     }
 
@@ -859,7 +888,9 @@ struct ProForecastMatrix: View {
                         )
                         .background(Ink.card)
                         .overlay(alignment: .bottom) {
-                            Divider().overlay(Ink.hullLine.opacity(0.6))
+                            Rectangle()
+                                .fill(Ink.hullLine.opacity(0.6))
+                                .frame(height: 1)
                         }
                         .accessibilityIdentifier("proForecast.row.\(row.id.rawValue)")
                 }
@@ -895,14 +926,26 @@ struct ProForecastMatrix: View {
 
             Menu {
                 Button("Move \(group.title) earlier", systemImage: "arrow.up") {
-                    updatePreferences { $0.move(group, direction: .earlier) }
+                    updatePreferences {
+                        $0.move(group, direction: .earlier, among: availableGroups)
+                    }
                 }
-                .disabled(!preferences.canMove(group, direction: .earlier))
+                .disabled(!preferences.canMove(
+                    group,
+                    direction: .earlier,
+                    among: availableGroups
+                ))
 
                 Button("Move \(group.title) later", systemImage: "arrow.down") {
-                    updatePreferences { $0.move(group, direction: .later) }
+                    updatePreferences {
+                        $0.move(group, direction: .later, among: availableGroups)
+                    }
                 }
-                .disabled(!preferences.canMove(group, direction: .later))
+                .disabled(!preferences.canMove(
+                    group,
+                    direction: .later,
+                    among: availableGroups
+                ))
             } label: {
                 Image(systemName: "ellipsis")
                     .frame(minWidth: 44, minHeight: 44)
@@ -920,7 +963,9 @@ struct ProForecastMatrix: View {
         )
         .background(Ink.hull)
         .overlay(alignment: .bottom) {
-            Divider().overlay(Ink.hullLine)
+            Rectangle()
+                .fill(Ink.hullLine)
+                .frame(height: 1)
         }
     }
 
@@ -939,7 +984,7 @@ struct ProForecastMatrix: View {
 
     @ViewBuilder
     private var biteLegendItems: some View {
-        ForEach(ForecastBiteBand.allCases) { band in
+        ForEach(BiteScoreBand.allCases) { band in
             ProForecastLegendItem(
                 color: band.color,
                 text: "\(band.title) \(band.rangeLabel)"
@@ -1065,7 +1110,9 @@ private struct ProForecastHourHeader: View {
             .frame(width: width, height: height)
             .background(background)
             .overlay(alignment: .bottom) {
-                Divider().overlay(Ink.hullLine)
+                Rectangle()
+                    .fill(Ink.hullLine)
+                    .frame(height: 1)
             }
             .contentShape(.rect)
         }
@@ -1095,10 +1142,10 @@ private struct ProForecastHourHeader: View {
             } else {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 3) {
-                        statusLabel("Now")
+                        statusLabel("Now", kind: "now")
                         Text("·")
                             .accessibilityHidden(true)
-                        statusLabel("Selected")
+                        statusLabel("Selected", kind: "selected")
                     }
                     .fixedSize(horizontal: true, vertical: false)
 
@@ -1106,25 +1153,28 @@ private struct ProForecastHourHeader: View {
                 }
             }
         } else if isSelected {
-            statusLabel("Selected")
+            statusLabel("Selected", kind: "selected")
         } else if isCurrent {
-            statusLabel("Now")
+            statusLabel("Now", kind: "now")
         } else {
             Text("Forecast")
         }
     }
 
-    private func statusLabel(_ title: String) -> some View {
+    private func statusLabel(_ title: String, kind: String) -> some View {
         Text(title)
             .lineLimit(1)
             .minimumScaleFactor(0.55)
             .allowsTightening(true)
+            .accessibilityIdentifier(
+                "proForecast.hour.\(Int(point.date.timeIntervalSince1970)).status.\(kind)"
+            )
     }
 
     private var stackedStatus: some View {
         VStack(spacing: 0) {
-            statusLabel("Now")
-            statusLabel("Selected")
+            statusLabel("Now", kind: "now")
+            statusLabel("Selected", kind: "selected")
         }
     }
 
@@ -1161,7 +1211,9 @@ private struct ProForecastGroupBand: View {
                 }
             }
             .overlay(alignment: .bottom) {
-                Divider().overlay(Ink.hullLine)
+                Rectangle()
+                    .fill(Ink.hullLine)
+                    .frame(height: 1)
             }
             .accessibilityHidden(true)
     }
@@ -1185,9 +1237,9 @@ private struct ProForecastValueCell: View {
 
     var body: some View {
         Button(action: select) {
-            Text(value ?? "—")
+            valueLabel
                 .font(.system(.caption, design: .rounded, weight: .semibold))
-                .foregroundStyle(value == nil ? Ink.chartDim : foreground)
+                .foregroundStyle(value == nil ? Ink.chartDim : Ink.chart)
                 .multilineTextAlignment(.center)
                 .lineLimit(3)
                 .padding(.horizontal, 7)
@@ -1208,7 +1260,9 @@ private struct ProForecastValueCell: View {
                     }
                 }
                 .overlay(alignment: .bottom) {
-                    Divider().overlay(Ink.hullLine.opacity(0.6))
+                    Rectangle()
+                        .fill(Ink.hullLine.opacity(0.6))
+                        .frame(height: 1)
                 }
                 .contentShape(.rect)
         }
@@ -1222,11 +1276,22 @@ private struct ProForecastValueCell: View {
         )
     }
 
-    private var foreground: Color {
-        guard row.id == .biteScore, let score = point.biteScore else {
-            return Ink.chart
+    @ViewBuilder
+    private var valueLabel: some View {
+        if row.id == .biteScore,
+           let score = point.biteScore,
+           let band = BiteScoreBand.band(for: score),
+           let value {
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(band.color)
+                    .frame(width: 8, height: 8)
+                    .accessibilityHidden(true)
+                Text(value)
+            }
+        } else {
+            Text(value ?? "—")
         }
-        return ForecastBiteBand.band(for: score)?.color ?? Ink.chartDim
     }
 
     private var background: Color {
@@ -1251,6 +1316,14 @@ private struct ProForecastSelectedDetail: View {
 
     @Environment(\.locale) private var locale
 
+    private var content: ForecastSelectedDetailContent {
+        ForecastSelectedDetailContent(
+            point: point,
+            locale: locale,
+            timeZone: timeZone
+        )
+    }
+
     var body: some View {
         ViewThatFits(in: .horizontal) {
             HStack(alignment: .center, spacing: 12) {
@@ -1273,6 +1346,7 @@ private struct ProForecastSelectedDetail: View {
                 .stroke(Ink.hullLine, lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("proForecast.selectedDetail")
     }
 
     private var selectedContext: some View {
@@ -1286,7 +1360,7 @@ private struct ProForecastSelectedDetail: View {
                 .font(.system(.subheadline, design: .rounded, weight: .bold))
                 .foregroundStyle(Ink.chart)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(point.weather.conditionText)
+            Text(content.condition ?? "Condition unavailable")
                 .font(.system(.caption, design: .rounded, weight: .medium))
                 .foregroundStyle(Ink.chartDim)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1295,25 +1369,34 @@ private struct ProForecastSelectedDetail: View {
 
     private var selectedMetrics: some View {
         HStack(alignment: .center, spacing: 18) {
-            Text(WeatherUnits.wholeTemperature(
-                celsius: point.weather.temperatureCelsius,
-                locale: locale
-            ))
-                .font(.system(.title3, design: .monospaced, weight: .semibold))
-                .foregroundStyle(Ink.brass)
+            if let temperature = content.temperature {
+                Text(temperature)
+                    .font(.system(.title3, design: .monospaced, weight: .semibold))
+                    .foregroundStyle(Ink.chart)
+            }
 
-            if let biteScore = point.biteScore {
+            if let biteScore = content.biteScore,
+               let biteBand = content.biteBand {
                 VStack(alignment: .trailing, spacing: 1) {
-                    Text("\(biteScore)")
-                        .font(.system(.headline, design: .rounded, weight: .bold))
-                        .foregroundStyle(
-                            ForecastBiteBand.band(for: biteScore)?.color
-                                ?? Ink.chartDim
-                        )
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(biteBand.color)
+                            .frame(width: 9, height: 9)
+                            .accessibilityHidden(true)
+                        Text("\(biteScore)")
+                            .font(.system(.headline, design: .rounded, weight: .bold))
+                            .foregroundStyle(Ink.chart)
+                    }
                     Text("Bite")
                         .font(.system(.caption2, design: .rounded, weight: .medium))
                         .foregroundStyle(Ink.chartDim)
                 }
+            }
+
+            if content.temperature == nil, content.biteScore == nil {
+                Text("Measurements unavailable")
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .foregroundStyle(Ink.chartDim)
             }
         }
     }

@@ -1,5 +1,40 @@
 import SwiftUI
 
+/// The single 0–100 bite-score vocabulary used by every score surface.
+/// Keep threshold decisions here so cards, charts, planners, and forecast
+/// details cannot drift into contradictory labels or colors.
+enum BiteScoreBand: String, CaseIterable, Identifiable, Sendable {
+    case excellent
+    case strong
+    case fair
+    case tough
+    case poor
+
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+
+    var rangeLabel: String {
+        switch self {
+        case .excellent: "85–100"
+        case .strong: "70–84"
+        case .fair: "50–69"
+        case .tough: "30–49"
+        case .poor: "0–29"
+        }
+    }
+
+    static func band(for score: Int) -> BiteScoreBand? {
+        guard (0...100).contains(score) else { return nil }
+        return switch score {
+        case 85...: .excellent
+        case 70..<85: .strong
+        case 50..<70: .fair
+        case 30..<50: .tough
+        default: .poor
+        }
+    }
+}
+
 /// A deterministic, glanceable 0–100 rating of how fishable today is right now,
 /// for the active species and conditions. Each factor carries its own weight,
 /// raw value, and human-readable reason so we can show a breakdown.
@@ -11,25 +46,17 @@ struct FishingScore: Equatable {
         max(0, min(100, factors.map(\.contribution).reduce(0, +)))
     }
 
+    var band: BiteScoreBand {
+        BiteScoreBand.band(for: overall) ?? .poor
+    }
+
     /// A short label that matches the score band.
     var summary: String {
-        switch overall {
-        case 85...: "Excellent"
-        case 70..<85: "Strong"
-        case 50..<70: "Fair"
-        case 30..<50: "Tough"
-        default: "Poor"
-        }
+        band.title
     }
 
     var tint: Color {
-        switch overall {
-        case 85...: .green
-        case 70..<85: .mint
-        case 50..<70: .teal
-        case 30..<50: .orange
-        default: .red
-        }
+        band.color
     }
 }
 
@@ -90,4 +117,3 @@ struct ScoreFactor: Identifiable, Equatable {
 
     var symbolName: String { kind.symbolName }
 }
-
