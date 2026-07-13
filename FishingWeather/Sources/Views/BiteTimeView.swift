@@ -110,7 +110,7 @@ struct BiteTimeSourcePresentation: Equatable, Sendable {
 /// as current. A cached point must be both in the captured clock hour and
 /// recently fetched; an old cache may still be useful, but it is never "now."
 enum BiteTimeCurrentDecision {
-    static let maximumCurrentCacheAge: TimeInterval = 15 * 60
+    static let maximumCurrentCacheAge = WeatherFreshnessPolicy.currentCacheMaxAge
 
     static func isCurrent(
         pointDate: Date,
@@ -118,15 +118,17 @@ enum BiteTimeCurrentDecision {
         provenance: WeatherProvenance,
         calendar: Calendar
     ) -> Bool {
-        guard calendar.isDate(
-            pointDate,
-            equalTo: capturedNow,
-            toGranularity: .hour
-        ) else { return false }
+        guard let currentHour = calendar.dateInterval(
+            of: .hour,
+            for: capturedNow
+        ), pointDate >= currentHour.start,
+           pointDate < currentHour.end else { return false }
 
         guard provenance.source == .cache else { return true }
-        let age = capturedNow.timeIntervalSince(provenance.fetchedAt)
-        return age >= 0 && age <= maximumCurrentCacheAge
+        return WeatherFreshnessPolicy.isCurrentCache(
+            fetchedAt: provenance.fetchedAt,
+            now: capturedNow
+        )
     }
 }
 
@@ -198,10 +200,35 @@ struct BiteTimeTideSnapshot {
     let events: [TideEvent]
     let allEvents: [TideEvent]
     let samples: [TideSample]
+    let allSamples: [TideSample]
     let stationName: String?
     let distanceMiles: Double?
     var isLoading = false
     var lastError: String?
+
+    func selecting(
+        _ date: Date,
+        calendar: Calendar
+    ) -> Self {
+        Self(
+            events: TideService.events(
+                in: allEvents,
+                on: date,
+                calendar: calendar
+            ),
+            allEvents: allEvents,
+            samples: TideService.samples(
+                in: allSamples,
+                on: date,
+                calendar: calendar
+            ),
+            allSamples: allSamples,
+            stationName: stationName,
+            distanceMiles: distanceMiles,
+            isLoading: isLoading,
+            lastError: lastError
+        )
+    }
 }
 
 /// One decision-first composition over the neutral weather snapshot. This is
@@ -214,13 +241,14 @@ struct BiteTimeView: View {
     @Environment(TideService.self) private var tides
     @Environment(CatchLog.self) private var catchLog
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.scenePhase) private var scenePhase
 
     @AppStorage private var species: Species
     @State private var engine: BaitEngine
     @State private var selection = BiteTimeSelectionState()
     @State private var presentation = BiteTimeForecastPresentation.timeline
     @State private var speciesFeedbackGeneration = 0
-    @State private var capturedNow: Date
+    @State private var liveNow: Date
 
     private let fixedNow: Date?
     private let allowsAutomaticTideLoad: Bool
@@ -239,7 +267,7 @@ struct BiteTimeView: View {
         self.allowsAutomaticTideLoad = allowsAutomaticTideLoad
         self.tideOverride = tideOverride
         self.preferencesStore = preferencesStore
-        _capturedNow = State(initialValue: fixedNow ?? .now)
+        _liveNow = State(initialValue: fixedNow ?? .now)
         _species = AppStorage(
             wrappedValue: initialSpecies,
             "selectedSpecies",
@@ -248,7 +276,7 @@ struct BiteTimeView: View {
         _engine = State(initialValue: engine ?? BaitEngine())
     }
 
-    private var now: Date { capturedNow }
+    private var now: Date { fixedNow ?? liveNow }
 
     private var activeLocation: CLLocation? {
         spots.selectedSpot?.location ?? location.location
@@ -279,6 +307,7 @@ struct BiteTimeView: View {
             events: tides.events,
             allEvents: tides.allEvents,
             samples: tides.samples,
+            allSamples: tides.allSamples,
             stationName: tides.station?.name,
             distanceMiles: tides.distanceMiles,
             isLoading: tides.isLoading,
@@ -286,14 +315,39 @@ struct BiteTimeView: View {
         )
     }
 
+    /// Uses the explicit user choice before the derived selected point so tide
+    /// availability never recursively depends on the tide-scored series.
+    private var requestedTideDate: Date {
+        selection.selectedDate ?? now
+    }
+
+    private var tideReferenceDate: Date {
+        selectedPoint?.date ?? requestedTideDate
+    }
+
     private var hasCommittedTides: Bool {
-        if tideOverride != nil { return true }
+        if tideOverride != nil {
+            return TideService.hasPredictions(
+                events: tideState.allEvents,
+                samples: tideState.allSamples,
+                on: requestedTideDate,
+                calendar: forecastCalendar
+            )
+        }
         guard let activeLocation, matchingSnapshot != nil else { return false }
-        return tides.hasData(for: activeLocation, on: now)
+        return tides.hasData(
+            for: activeLocation,
+            on: requestedTideDate,
+            calendar: forecastCalendar
+        )
     }
 
     private var committedTideSamples: [TideSample] {
-        hasCommittedTides ? tideState.samples : []
+        hasCommittedTides ? tideState.allSamples : []
+    }
+
+    private var selectedTideState: BiteTimeTideSnapshot {
+        tideState.selecting(tideReferenceDate, calendar: forecastCalendar)
     }
 
     private var personalWeights: FactorWeights {
@@ -368,8 +422,8 @@ struct BiteTimeView: View {
             coordinate: activeLocation.coordinate,
             weatherFetchedAt: snapshot.provenance.fetchedAt,
             tideFingerprint: BaitContextKey.tideFingerprint(
-                events: hasCommittedTides ? tideState.allEvents : [],
-                samples: committedTideSamples
+                events: hasCommittedTides ? selectedTideState.events : [],
+                samples: hasCommittedTides ? selectedTideState.samples : []
             ),
             forecastPoint: selectedPoint
         )
@@ -421,8 +475,14 @@ struct BiteTimeView: View {
     }
 
     private var tideTaskKey: String {
-        let date = now
-        return "\(activeLocationKey)|\(Int(date.timeIntervalSince1970 / 86_400))"
+        guard let activeLocation else {
+            return "none|\(forecastCalendar.timeZone.identifier)"
+        }
+        return TideService.dataKey(
+            activeLocation,
+            date: requestedTideDate,
+            calendar: forecastCalendar
+        )
     }
 
     var body: some View {
@@ -452,10 +512,30 @@ struct BiteTimeView: View {
                   let activeLocation else { return }
             await tides.load(
                 near: activeLocation,
-                on: now
+                on: requestedTideDate,
+                calendar: forecastCalendar
             )
         }
-        .onAppear(perform: reconcileSelection)
+        .task(id: scenePhase) {
+            guard fixedNow == nil, scenePhase == .active else { return }
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(60))
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled else { return }
+                liveNow = .now
+            }
+        }
+        .onAppear {
+            synchronizeLiveClock()
+            reconcileSelection()
+        }
+        .onChange(of: scenePhase) {
+            guard scenePhase == .active else { return }
+            synchronizeLiveClock()
+        }
         .onChange(of: forecastRevision) {
             let preferred = preferredForecastDate
             selection.reset(around: preferred, in: forecastPoints.map(\.date))
@@ -526,7 +606,10 @@ struct BiteTimeView: View {
         )
         return HStack(alignment: .top, spacing: 12) {
             Image(systemName: spots.selectedSpot == nil ? "location.fill" : "mappin.and.ellipse")
-                .font(.system(.title3, design: .rounded, weight: .semibold))
+                // Decorative map glyph stays inside its fixed column at the
+                // largest accessibility sizes; the adjacent label carries the
+                // scalable location content.
+                .font(.system(size: 22, weight: .semibold, design: .rounded))
                 .foregroundStyle(Ink.brass)
                 .frame(width: 28, height: 32)
                 .accessibilityHidden(true)
@@ -551,13 +634,7 @@ struct BiteTimeView: View {
 
     @ViewBuilder
     private func sourceStatus(_ provenance: WeatherProvenance) -> some View {
-        if let fixedNow {
-            sourceStatusContent(provenance, at: fixedNow)
-        } else {
-            TimelineView(.periodic(from: .now, by: 60)) { context in
-                sourceStatusContent(provenance, at: context.date)
-            }
-        }
+        sourceStatusContent(provenance, at: now)
     }
 
     private func sourceStatusContent(
@@ -794,13 +871,13 @@ struct BiteTimeView: View {
     private var waterSection: some View {
         if showsTides {
             TideCard(
-                events: tideState.events,
-                samples: tideState.samples,
-                stationName: tideState.stationName,
-                distanceMiles: tideState.distanceMiles,
-                isLoading: tideState.isLoading,
-                lastError: tideState.lastError,
-                referenceDate: selectedPoint?.date ?? now
+                events: selectedTideState.events,
+                samples: selectedTideState.samples,
+                stationName: selectedTideState.stationName,
+                distanceMiles: selectedTideState.distanceMiles,
+                isLoading: selectedTideState.isLoading,
+                lastError: selectedTideState.lastError,
+                referenceDate: tideReferenceDate
             )
             .environment(\.timeZone, forecastTimeZone)
         } else if let activeLocation {
@@ -901,25 +978,22 @@ struct BiteTimeView: View {
 
     @ViewBuilder
     private var fishingDetailLink: some View {
-        if let conditions, let selectedPoint {
+        if let conditions,
+           let selectedPoint,
+           let reference = FishingDetailReference(
+               forecastPoint: selectedPoint,
+               forecastTimeZone: forecastTimeZone
+           ) {
             NavigationLink {
                 FishingView(
                     species: species,
-                    score: FishingScorer.score(
-                        conditions: conditions,
-                        species: species,
-                        tideEvents: hasCommittedTides ? tideState.allEvents : [],
-                        weights: personalWeights,
-                        now: selectedPoint.date
-                    ),
+                    reference: reference,
                     conditions: conditions,
-                    tide: showsTides ? tideState : nil,
+                    tide: showsTides ? selectedTideState : nil,
                     activeLocation: activeLocation,
                     hourlySamples: matchingSnapshot?.hourly.samples(
                         now: selectedPoint.date
-                    ) ?? [],
-                    referenceDate: selectedPoint.date,
-                    forecastTimeZone: forecastTimeZone
+                    ) ?? []
                 )
                 .navigationTitle("Fishing Details")
                 .navigationBarTitleDisplayMode(.inline)
@@ -1002,14 +1076,21 @@ struct BiteTimeView: View {
         )
     }
 
+    private func synchronizeLiveClock() {
+        guard fixedNow == nil else { return }
+        liveNow = .now
+    }
+
     private func refresh() async {
+        synchronizeLiveClock()
         location.refresh()
         guard let activeLocation else { return }
         await weather.load(for: activeLocation, force: true)
         guard allowsAutomaticTideLoad else { return }
         await tides.load(
             near: activeLocation,
-            on: now,
+            on: requestedTideDate,
+            calendar: forecastCalendar,
             force: true
         )
     }

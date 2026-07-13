@@ -1,11 +1,12 @@
 import Charts
 import SwiftUI
 
-/// Barometric pressure over the next hours, with a "now" marker. Pressure trend
-/// matters more to the bite than the absolute value, so the shape is the point.
+/// Barometric pressure over the selected hours, with a selected-time marker.
+/// Pressure trend matters more than the absolute value, so the shape is the point.
 struct PressureTrendChart: View {
     let samples: [HourSample]
-    let now: Date
+    let referenceDate: Date
+    var timeZone: TimeZone = .current
 
     private var pressureSamples: [HourSample] {
         samples.filter { $0.pressureHPa != nil }
@@ -45,7 +46,7 @@ struct PressureTrendChart: View {
                         }
                     }
 
-                    RuleMark(x: .value("Now", now))
+                    RuleMark(x: .value("Selected time", referenceDate))
                         .lineStyle(.init(lineWidth: 1, dash: [4, 4]))
                         .foregroundStyle(.secondary.opacity(0.7))
                 }
@@ -67,7 +68,10 @@ struct PressureTrendChart: View {
                         AxisGridLine().foregroundStyle(Ink.hullLine.opacity(0.3))
                         AxisValueLabel {
                             if let d = value.as(Date.self) {
-                                Text(d, format: .dateTime.hour())
+                                Text(FishingDetailDateFormatting.time(
+                                    d,
+                                    timeZone: timeZone
+                                ))
                                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                                     .foregroundStyle(Ink.chartDim)
                             }
@@ -180,15 +184,18 @@ struct WindForecastChart: View {
     }
 }
 
-/// Today's solunar bite windows as bands across the day, with a "now" marker.
+/// Selected-day solunar bite windows with a selected-time marker.
 struct BiteWindowsTimeline: View {
     let windows: [BiteWindow]
-    let now: Date
+    let referenceDate: Date
+    let timeZone: TimeZone
 
     private var dayBounds: (start: Date, end: Date) {
-        let calendar = Calendar.current
-        let start = calendar.startOfDay(for: now)
-        return (start, calendar.date(byAdding: .day, value: 1, to: start) ?? start.addingTimeInterval(86_400))
+        let bounds = FishingDetailDateFormatting.dayBounds(
+            containing: referenceDate,
+            timeZone: timeZone
+        )
+        return (bounds.start, bounds.end)
     }
 
     var body: some View {
@@ -202,7 +209,7 @@ struct BiteWindowsTimeline: View {
                 .cornerRadius(6)
                 .foregroundStyle(
                     (window.period == .major ? Ink.bite : Ink.brass)
-                        .opacity(window.isActive(at: now) ? 0.9 : 0.45)
+                        .opacity(window.isActive(at: referenceDate) ? 0.9 : 0.45)
                 )
                 .annotation(position: .top, alignment: .center, spacing: 2) {
                     Text(window.period.rawValue)
@@ -211,7 +218,7 @@ struct BiteWindowsTimeline: View {
                 }
             }
 
-            RuleMark(x: .value("Now", now))
+            RuleMark(x: .value("Selected time", referenceDate))
                 .lineStyle(.init(lineWidth: 2))
                 .foregroundStyle(Ink.chartDim)
         }
@@ -222,7 +229,10 @@ struct BiteWindowsTimeline: View {
                 AxisGridLine().foregroundStyle(Ink.hullLine.opacity(0.3))
                 AxisValueLabel {
                     if let d = value.as(Date.self) {
-                        Text(d, format: .dateTime.hour())
+                        Text(FishingDetailDateFormatting.time(
+                            d,
+                            timeZone: timeZone
+                        ))
                             .font(.system(size: 10, weight: .bold, design: .monospaced))
                             .foregroundStyle(Ink.chartDim)
                     }
@@ -230,7 +240,7 @@ struct BiteWindowsTimeline: View {
             }
         }
         .frame(height: 92)
-        .accessibilityLabel("Timeline of today's major and minor bite windows")
+        .accessibilityLabel("Timeline of the selected forecast day's major and minor bite windows")
     }
 }
 

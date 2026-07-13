@@ -38,7 +38,7 @@ enum BiteScoreBand: String, CaseIterable, Identifiable, Sendable {
 /// A deterministic, glanceable 0–100 rating of how fishable today is right now,
 /// for the active species and conditions. Each factor carries its own weight,
 /// raw value, and human-readable reason so we can show a breakdown.
-struct FishingScore: Equatable {
+struct FishingScore: Equatable, Sendable {
     let factors: [ScoreFactor]
 
     /// Sum of each factor's contribution, clamped to 0–100.
@@ -63,7 +63,7 @@ struct FishingScore: Equatable {
 /// The relative weight of each scoring factor. Defaults to the fixed studio
 /// weights; the "learns your catches" personalization produces tuned instances
 /// (renormalized to sum to 1) from a user's catch history.
-struct FactorWeights: Equatable {
+struct FactorWeights: Equatable, Sendable {
     var solunar: Double
     var pressure: Double
     var wind: Double
@@ -85,8 +85,8 @@ struct FactorWeights: Equatable {
     }
 }
 
-struct ScoreFactor: Identifiable, Equatable {
-    enum Kind: String {
+struct ScoreFactor: Identifiable, Equatable, Sendable {
+    enum Kind: String, Sendable {
         case solunar, pressure, wind, tide, season
 
         var symbolName: String {

@@ -132,22 +132,151 @@ struct ForecastSelectionTests {
         #expect(value.windows.isEmpty)
     }
 
-    @Test("Fishing detail cards share the selected forecast reference")
-    func fishingDetailCardsShareSelectedReference() throws {
+    @Test("Top-level astronomy belongs to the provider fetch day")
+    func topLevelAstronomyUsesProviderFetchDay() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .gmt
+        let fetchDate = try #require(calendar.date(
+            from: DateComponents(year: 2030, month: 7, day: 13, hour: 23)
+        ))
+        let selectedDate = try #require(calendar.date(
+            from: DateComponents(year: 2030, month: 7, day: 14, hour: 0)
+        ))
+        let priorDayAstronomy = AstronomySnapshot(
+            sunrise: fetchDate.addingTimeInterval(-17 * 3_600),
+            sunset: fetchDate.addingTimeInterval(-5 * 3_600),
+            moonrise: fetchDate.addingTimeInterval(-2 * 3_600),
+            moonset: fetchDate.addingTimeInterval(-14 * 3_600),
+            moonTransit: nil,
+            moonPhaseFraction: 0.5
+        )
+        let selectedPoint = ForecastPoint.fixture(date: selectedDate)
+        let snapshot = WeatherSnapshot.fixture(
+            now: selectedDate,
+            hourly: [selectedPoint.weather],
+            astronomy: priorDayAstronomy,
+            daily: [.fixture(date: selectedDate, astronomy: nil)],
+            timeZoneIdentifier: "GMT",
+            fetchedAt: fetchDate
+        )
+
+        let conditions = FishingConditions.make(
+            snapshot: snapshot,
+            forecastPoint: selectedPoint,
+            calendar: calendar
+        )
+        let builtPoint = try #require(ForecastSeriesBuilder.build(
+            weather: snapshot,
+            tideSamples: [],
+            species: .bass,
+            now: selectedDate
+        ).first)
+
+        #expect(conditions.sunrise == nil)
+        #expect(conditions.moonPhase == .unknown)
+        #expect(builtPoint.sunrise == nil)
+        #expect(builtPoint.moonPhase == nil)
+    }
+
+    @Test("Fishing Details carries the selected point's exact score and reference")
+    func fishingDetailsCarryExactSelectedPointContext() throws {
         let selectedDate = Date(timeIntervalSince1970: 1_900_000_000)
         let forecastTimeZone = try #require(
             TimeZone(identifier: "Pacific/Honolulu")
         )
-
-        let reference = FishingDetailReference(
-            referenceDate: selectedDate,
-            forecastTimeZone: forecastTimeZone
+        let snapshot = WeatherSnapshot.fixture(
+            now: selectedDate,
+            hourly: [.fixture(date: selectedDate)]
         )
+        let selectedPoint = try #require(ForecastSeriesBuilder.build(
+            weather: snapshot,
+            tideSamples: [],
+            species: .bass,
+            now: selectedDate
+        ).first)
+        let reference = try #require(FishingDetailReference(
+            forecastPoint: selectedPoint,
+            forecastTimeZone: forecastTimeZone
+        ))
 
         #expect(reference.biteWindowsDate == selectedDate)
         #expect(reference.tideDate == selectedDate)
         #expect(reference.pressureDate == selectedDate)
         #expect(reference.forecastTimeZone == forecastTimeZone)
+        #expect(reference.score == selectedPoint.fishingScore)
+        #expect(reference.score.overall == selectedPoint.biteScore)
+        #expect(reference.score.factors.allSatisfy {
+            !$0.detail.localizedCaseInsensitiveContains("today")
+        })
+    }
+
+    @Test("Fishing detail times and day bounds use the forecast timezone")
+    func fishingDetailsUseForecastTimeZone() throws {
+        let instant = Date(timeIntervalSince1970: 1_800_000_000)
+        let honolulu = try #require(TimeZone(identifier: "Pacific/Honolulu"))
+        let tokyo = try #require(TimeZone(identifier: "Asia/Tokyo"))
+        let locale = Locale(identifier: "en_US_POSIX")
+
+        let honoluluLabel = FishingDetailDateFormatting.time(
+            instant,
+            timeZone: honolulu,
+            locale: locale
+        )
+        let tokyoLabel = FishingDetailDateFormatting.time(
+            instant,
+            timeZone: tokyo,
+            locale: locale
+        )
+        let honoluluBounds = FishingDetailDateFormatting.dayBounds(
+            containing: instant,
+            timeZone: honolulu
+        )
+        let tokyoBounds = FishingDetailDateFormatting.dayBounds(
+            containing: instant,
+            timeZone: tokyo
+        )
+
+        #expect(honoluluLabel != tokyoLabel)
+        #expect(honoluluBounds.start != tokyoBounds.start)
+        #expect(honoluluBounds.range.contains(instant))
+        #expect(tokyoBounds.range.contains(instant))
+    }
+
+    @Test("Forecast scoring uses the remote location month")
+    func forecastScoringUsesForecastTimeZoneMonth() throws {
+        let instant = try #require(
+            ISO8601DateFormatter().date(from: "2030-05-01T00:30:00Z")
+        )
+        let hour = HourlyWeatherPoint.fixture(date: instant)
+        let honoluluPoint = try #require(ForecastSeriesBuilder.build(
+            weather: .fixture(
+                now: instant,
+                hourly: [hour],
+                timeZoneIdentifier: "Pacific/Honolulu"
+            ),
+            tideSamples: [],
+            species: .catfish,
+            now: instant
+        ).first)
+        let tokyoPoint = try #require(ForecastSeriesBuilder.build(
+            weather: .fixture(
+                now: instant,
+                hourly: [hour],
+                timeZoneIdentifier: "Asia/Tokyo"
+            ),
+            tideSamples: [],
+            species: .catfish,
+            now: instant
+        ).first)
+        let honoluluSeason = try #require(
+            honoluluPoint.fishingScore?.factors.first { $0.kind == .season }
+        )
+        let tokyoSeason = try #require(
+            tokyoPoint.fishingScore?.factors.first { $0.kind == .season }
+        )
+
+        #expect(honoluluSeason.raw == 0.7)
+        #expect(tokyoSeason.raw == 1)
     }
 
     @Test func snapsToNearestHour() {
@@ -1063,7 +1192,8 @@ private extension WeatherSnapshot {
         hourly: [HourlyWeatherPoint],
         astronomy: AstronomySnapshot = .empty,
         daily: [DailyWeatherPoint] = [],
-        timeZoneIdentifier: String = "America/Chicago"
+        timeZoneIdentifier: String = "America/Chicago",
+        fetchedAt: Date? = nil
     ) -> WeatherSnapshot {
         WeatherSnapshot(
             coordinate: WeatherCoordinate(latitude: 30, longitude: -86),
@@ -1091,7 +1221,7 @@ private extension WeatherSnapshot {
             astronomy: astronomy,
             provenance: WeatherProvenance(
                 source: .weatherKit,
-                fetchedAt: now,
+                fetchedAt: fetchedAt ?? now,
                 isFallback: false,
                 attribution: "WeatherKit"
             )

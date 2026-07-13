@@ -27,6 +27,9 @@ struct ForecastPoint: Identifiable, Equatable, Sendable {
     let sunset: Date?
     let tideRateFeetPerHour: Double?
     let nextTideTurn: TideEvent?
+    /// Exact factor breakdown used to produce `biteScore`. Fishing Details
+    /// consumes this value directly so it cannot drift from the hero/timeline.
+    let fishingScore: FishingScore?
 
     init(
         weather: HourlyWeatherPoint,
@@ -39,7 +42,8 @@ struct ForecastPoint: Identifiable, Equatable, Sendable {
         sunrise: Date? = nil,
         sunset: Date? = nil,
         tideRateFeetPerHour: Double? = nil,
-        nextTideTurn: TideEvent? = nil
+        nextTideTurn: TideEvent? = nil,
+        fishingScore: FishingScore? = nil
     ) {
         self.weather = weather
         self.biteScore = biteScore
@@ -52,6 +56,7 @@ struct ForecastPoint: Identifiable, Equatable, Sendable {
         self.sunset = sunset
         self.tideRateFeetPerHour = tideRateFeetPerHour
         self.nextTideTurn = nextTideTurn
+        self.fishingScore = fishingScore
     }
 }
 
@@ -110,8 +115,7 @@ enum ForecastSeriesBuilder {
         let dayContexts = makeDayContexts(
             hours: hours,
             weather: weather,
-            calendar: calendar,
-            now: now
+            calendar: calendar
         )
         let pressureHistory = weather.hourly.compactMap { point in
             point.pressureHPa.map { (date: point.date, hPa: $0) }
@@ -160,7 +164,8 @@ enum ForecastSeriesBuilder {
                 species: species,
                 tideEvents: tide == nil ? [] : tideEvents,
                 weights: weights,
-                now: hour.date
+                now: hour.date,
+                calendar: calendar
             )
 
             return ForecastPoint(
@@ -174,7 +179,8 @@ enum ForecastSeriesBuilder {
                 sunrise: context.sunrise,
                 sunset: context.sunset,
                 tideRateFeetPerHour: tide?.rateFeetPerHour,
-                nextTideTurn: nextTideTurn
+                nextTideTurn: nextTideTurn,
+                fishingScore: score
             )
         }
     }
@@ -189,10 +195,14 @@ enum ForecastSeriesBuilder {
     private static func makeDayContexts(
         hours: some Sequence<HourlyWeatherPoint>,
         weather: WeatherSnapshot,
-        calendar: Calendar,
-        now: Date
+        calendar: Calendar
     ) -> [Date: DayContext] {
-        let currentDay = calendar.startOfDay(for: now)
+        // Providers calculate top-level astronomy for the request fetch date.
+        // Observation/current-hour timestamps and a later runtime clock can
+        // straddle midnight, so neither identifies this astronomy payload.
+        let astronomyDay = calendar.startOfDay(
+            for: weather.provenance.fetchedAt
+        )
         let dailyAstronomy: [Date: AstronomySnapshot] = weather.daily.reduce(
             into: [:]
         ) { result, day in
@@ -216,7 +226,7 @@ enum ForecastSeriesBuilder {
             into: [:]
         ) { result, day in
             let astronomy = dailyAstronomy[day]
-                ?? (day == currentDay ? weather.astronomy : .empty)
+                ?? (day == astronomyDay ? weather.astronomy : .empty)
             let moonPhase = LunarPhase(
                 cycleFraction: astronomy.moonPhaseFraction
             )

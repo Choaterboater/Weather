@@ -8,11 +8,14 @@ import os
 actor WeatherSnapshots {
     private enum SnapshotFileError: LocalizedError {
         case unsupportedVersion(Int)
+        case futureFetchTime
 
         var errorDescription: String? {
             switch self {
             case .unsupportedVersion(let version):
                 "Unsupported snapshot version \(version)"
+            case .futureFetchTime:
+                "Snapshot fetch time is in the future"
             }
         }
     }
@@ -34,29 +37,32 @@ actor WeatherSnapshots {
 
     private let directory: URL
     private let fileManager: FileManager
+    private let now: @Sendable () -> Date
 
     init(
         directory: URL = WeatherSnapshots.defaultDirectory(),
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        now: @escaping @Sendable () -> Date = { .now }
     ) {
         self.directory = directory
         self.fileManager = fileManager
+        self.now = now
     }
 
     func save(_ snapshot: WeatherSnapshot) throws {
+        let saveDate = now()
+        guard snapshot.provenance.fetchedAt <= saveDate else {
+            throw SnapshotFileError.futureFetchTime
+        }
+
         let url = fileURL(
             latitude: snapshot.coordinate.latitude,
             longitude: snapshot.coordinate.longitude
         )
         if fileManager.fileExists(atPath: url.path) {
+            let existing: WeatherSnapshot?
             do {
-                let existing = try decodedSnapshot(at: url)
-                // Equal timestamps keep the existing envelope. This makes
-                // retries idempotent and gives actor-serialized writers a
-                // deterministic winner.
-                if existing.provenance.fetchedAt >= snapshot.provenance.fetchedAt {
-                    return
-                }
+                existing = try decodedSnapshot(at: url)
             } catch {
                 Self.logger.error(
                     "snapshot decode failed before save for \(url.lastPathComponent): \(error.localizedDescription)"
@@ -64,6 +70,21 @@ actor WeatherSnapshots {
                 // A failed move must abort the save so the only copy of the
                 // invalid or unknown-version bytes is never overwritten.
                 try backupInvalidFile(at: url)
+                existing = nil
+            }
+
+            if let existing {
+                if existing.provenance.fetchedAt > saveDate {
+                    Self.logger.error(
+                        "future snapshot quarantined before save for \(url.lastPathComponent)"
+                    )
+                    try backupInvalidFile(at: url)
+                } else if existing.provenance.fetchedAt >= snapshot.provenance.fetchedAt {
+                    // Equal timestamps keep the existing envelope. This makes
+                    // retries idempotent and gives actor-serialized writers a
+                    // deterministic winner.
+                    return
+                }
             }
         }
 

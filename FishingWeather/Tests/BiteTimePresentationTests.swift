@@ -158,6 +158,77 @@ struct BiteTimePresentationTests {
                 calendar: calendar
             )
         )
+
+        let justFreshCache = WeatherProvenance(
+            source: .cache,
+            fetchedAt: now.addingTimeInterval(
+                -BiteTimeCurrentDecision.maximumCurrentCacheAge + 1
+            ),
+            isFallback: true,
+            attribution: "Cached from National Weather Service"
+        )
+        #expect(
+            BiteTimeCurrentDecision.isCurrent(
+                pointDate: sameHour,
+                capturedNow: now,
+                provenance: justFreshCache,
+                calendar: calendar
+            )
+        )
+
+        let expiredAtBoundary = WeatherProvenance(
+            source: .cache,
+            fetchedAt: now.addingTimeInterval(
+                -BiteTimeCurrentDecision.maximumCurrentCacheAge
+            ),
+            isFallback: true,
+            attribution: "Cached from National Weather Service"
+        )
+        #expect(
+            !BiteTimeCurrentDecision.isCurrent(
+                pointDate: sameHour,
+                capturedNow: now,
+                provenance: expiredAtBoundary,
+                calendar: calendar
+            )
+        )
+    }
+
+    @Test("Current decision distinguishes the repeated daylight-saving hour")
+    func currentDecisionDistinguishesRepeatedHour() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(
+            TimeZone(identifier: "America/New_York")
+        )
+        let formatter = ISO8601DateFormatter()
+        let firstHour = try #require(
+            formatter.date(from: "2030-11-03T01:15:00-04:00")
+        )
+        let firstHourPoint = try #require(
+            formatter.date(from: "2030-11-03T01:45:00-04:00")
+        )
+        let repeatedHourPoint = try #require(
+            formatter.date(from: "2030-11-03T01:30:00-05:00")
+        )
+        let provenance = WeatherProvenance(
+            source: .nws,
+            fetchedAt: firstHour,
+            isFallback: false,
+            attribution: "National Weather Service"
+        )
+
+        #expect(BiteTimeCurrentDecision.isCurrent(
+            pointDate: firstHourPoint,
+            capturedNow: firstHour,
+            provenance: provenance,
+            calendar: calendar
+        ))
+        #expect(!BiteTimeCurrentDecision.isCurrent(
+            pointDate: repeatedHourPoint,
+            capturedNow: firstHour,
+            provenance: provenance,
+            calendar: calendar
+        ))
     }
 
     @Test("Saved location accessibility retains its descriptive subtitle")
@@ -180,6 +251,43 @@ struct BiteTimePresentationTests {
         #expect(snapshot.provenance.source == .nws)
         #expect(snapshot.provenance.isFallback)
         #expect(snapshot.provenance.attribution == "National Weather Service")
+    }
+
+    @Test("Selected tide day slices the retained range in the forecast calendar")
+    func selectedTideDayUsesRetainedForecastRange() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(
+            TimeZone(identifier: "Pacific/Honolulu")
+        )
+        let firstDay = try #require(calendar.date(
+            from: DateComponents(year: 2030, month: 7, day: 13, hour: 9)
+        ))
+        let selectedDay = try #require(calendar.date(
+            from: DateComponents(year: 2030, month: 7, day: 14, hour: 9)
+        ))
+        let allEvents = [
+            TideEvent(time: firstDay, kind: .high, heightFeet: 3.2),
+            TideEvent(time: selectedDay, kind: .low, heightFeet: 0.8),
+        ]
+        let allSamples = [
+            TideSample(time: firstDay, heightFeet: 3.2),
+            TideSample(time: selectedDay, heightFeet: 0.8),
+        ]
+        let snapshot = BiteTimeTideSnapshot(
+            events: [allEvents[0]],
+            allEvents: allEvents,
+            samples: [allSamples[0]],
+            allSamples: allSamples,
+            stationName: "Fixture station",
+            distanceMiles: 1.5
+        )
+
+        let value = snapshot.selecting(selectedDay, calendar: calendar)
+
+        #expect(value.events == [allEvents[1]])
+        #expect(value.samples == [allSamples[1]])
+        #expect(value.allEvents == allEvents)
+        #expect(value.allSamples == allSamples)
     }
 
     @Test("Programmatic reset does not fire selection feedback")

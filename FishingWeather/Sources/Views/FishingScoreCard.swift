@@ -5,6 +5,7 @@ import SwiftUI
 /// styled as instrument readouts.
 struct FishingScoreCard: View {
     let score: FishingScore
+    var title = "Today's bite"
     /// Catches that personalized this score; 0 shows the standard, untuned score.
     var tunedCount: Int = 0
     /// Catches logged toward personalization before it unlocks (drives the
@@ -20,7 +21,7 @@ struct FishingScoreCard: View {
         InstrumentPanel {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text("Today's bite")
+                    Text(title)
                         .instrumentLabel(Ink.brass)
                     Spacer()
                     if tunedCount > 0 {

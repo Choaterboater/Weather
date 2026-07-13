@@ -31,7 +31,8 @@ enum FishingScorer {
         species: Species,
         tideEvents: [TideEvent] = [],
         weights: FactorWeights = .standard,
-        now: Date = .now
+        now: Date = .now,
+        calendar: Calendar = .current
     ) -> FishingScore {
         score(
             moonPhase: conditions.moonPhase,
@@ -48,7 +49,8 @@ enum FishingScorer {
             species: species,
             tideEvents: tideEvents,
             weights: weights,
-            now: now
+            now: now,
+            calendar: calendar
         )
     }
 
@@ -65,7 +67,8 @@ enum FishingScorer {
         species: Species,
         tideEvents: [TideEvent] = [],
         weights: FactorWeights = .standard,
-        now: Date = .now
+        now: Date = .now,
+        calendar: Calendar = .current
     ) -> FishingScore {
         // `.all` has no water type — include tide whenever events were supplied
         // (caller already gated on saltwater/brackish spots). Only an explicit
@@ -97,7 +100,11 @@ enum FishingScorer {
         let solunar = scoreSolunar(moonPhase: moonPhase, activeWindow: activeWindow, nextWindow: nextWindow, now: now)
         let pressure = scorePressure(tendency: pressureTendency, changePerHour: pressureChangePerHour)
         let wind = scoreWind(mph: windMph)
-        let season = scoreSeason(species: species, now: now)
+        let season = scoreSeason(
+            species: species,
+            now: now,
+            calendar: calendar
+        )
 
         var factors: [ScoreFactor] = [
             ScoreFactor(kind: .solunar, label: "Solunar", weight: w_solunar, raw: solunar.raw, detail: solunar.detail),
@@ -169,9 +176,10 @@ enum FishingScorer {
                 windowDetail = "No nearby bite window"
             }
         } else {
-            // No windows available today — keep a neutral-ish baseline.
+            // No windows available for this forecast day — keep a
+            // neutral-ish baseline.
             windowScore = 0.4
-            windowDetail = "No solunar windows today"
+            windowDetail = "No solunar windows for this forecast day"
         }
 
         let raw = Self.solunarPhaseWeight * phaseScore + Self.solunarWindowWeight * windowScore
@@ -303,8 +311,12 @@ enum FishingScorer {
         return Subscore(raw: raw, detail: "\(label) — \(suffix)")
     }
 
-    private static func scoreSeason(species: Species, now: Date) -> Subscore {
-        let month = Calendar.current.component(.month, from: now)
+    private static func scoreSeason(
+        species: Species,
+        now: Date,
+        calendar: Calendar
+    ) -> Subscore {
+        let month = calendar.component(.month, from: now)
         let peaks = species.peakMonths
         if peaks.isEmpty {
             return Subscore(raw: 0.7, detail: "Available year-round.")

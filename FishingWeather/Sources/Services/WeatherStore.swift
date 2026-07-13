@@ -2,6 +2,18 @@ import CoreLocation
 import Foundation
 import Observation
 
+enum WeatherFreshnessPolicy {
+    static let currentCacheMaxAge: TimeInterval = 15 * 60
+
+    static func isCurrentCache(
+        fetchedAt: Date,
+        now: Date
+    ) -> Bool {
+        let age = now.timeIntervalSince(fetchedAt)
+        return age >= 0 && age < currentCacheMaxAge
+    }
+}
+
 /// Loads and owns one provider-neutral snapshot for the active location.
 @MainActor
 @Observable
@@ -29,7 +41,6 @@ final class WeatherStore {
     private let cacheWriter: CacheWriter?
     private let now: Clock
     private var loadID = 0
-    private let cacheTTL: TimeInterval = 15 * 60
 
     init(
         worker: @escaping Worker,
@@ -74,8 +85,10 @@ final class WeatherStore {
         if !force,
            let snapshot,
            loadedKey == key {
-            let age = requestDate.timeIntervalSince(snapshot.provenance.fetchedAt)
-            if age >= 0, age < cacheTTL {
+            if WeatherFreshnessPolicy.isCurrentCache(
+                fetchedAt: snapshot.provenance.fetchedAt,
+                now: requestDate
+            ) {
                 isLoading = false
                 lastProviderError = nil
                 return

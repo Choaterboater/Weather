@@ -130,6 +130,7 @@ private enum BiteTimePreviewFixture {
             events: allEvents.filter { $0.time >= now }.prefix(4).map { $0 },
             allEvents: allEvents,
             samples: samples,
+            allSamples: samples,
             stationName: "St. Petersburg, Tampa Bay",
             distanceMiles: 2.4
         )
@@ -722,7 +723,7 @@ private struct DebugScoreCard: View {
                                 .font(.system(size: 14, weight: .medium, design: .monospaced))
                                 .foregroundStyle(Ink.chartDim)
                             PressureTrendChart(samples: samples,
-                                               now: start.addingTimeInterval(3 * 3600))
+                                               referenceDate: start.addingTimeInterval(3 * 3600))
                         }
                     }
                 }

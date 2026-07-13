@@ -48,11 +48,11 @@ struct WeatherSnapshotsTests {
         let gate = CacheSaveGate()
         let older = makeSnapshot(
             source: .weatherKit,
-            fetchedAt: Date(timeIntervalSince1970: 1_800_000_000)
+            fetchedAt: Date(timeIntervalSince1970: 1_700_000_000)
         )
         let newer = makeSnapshot(
             source: .nws,
-            fetchedAt: Date(timeIntervalSince1970: 1_800_000_300)
+            fetchedAt: Date(timeIntervalSince1970: 1_700_000_300)
         )
 
         let delayedOlderSave = Task {
@@ -73,7 +73,7 @@ struct WeatherSnapshotsTests {
 
     @Test func equalFetchTimeKeepsExistingSnapshotDeterministically() async throws {
         let cache = WeatherSnapshots(directory: tempDirectory())
-        let fetchedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let fetchedAt = Date(timeIntervalSince1970: 1_700_000_000)
         let existing = makeSnapshot(source: .nws, fetchedAt: fetchedAt)
         let equalIncoming = makeSnapshot(source: .weatherKit, fetchedAt: fetchedAt)
 
@@ -84,6 +84,98 @@ struct WeatherSnapshotsTests {
             for: CLLocation(latitude: 30.2938, longitude: -86.0049)
         )
         #expect(loaded == existing)
+    }
+
+    @Test("A future existing snapshot is quarantined after clock correction")
+    func futureExistingSnapshotIsReplaceableAfterClockCorrection() async throws {
+        let directory = tempDirectory()
+        let correctedNow = Date(timeIntervalSince1970: 1_800_000_000)
+        let future = makeSnapshot(
+            source: .nws,
+            fetchedAt: correctedNow.addingTimeInterval(3_600)
+        )
+        let corrected = makeSnapshot(
+            source: .weatherKit,
+            fetchedAt: correctedNow
+        )
+        try writeEnvelope(future, to: directory)
+        let cache = WeatherSnapshots(
+            directory: directory,
+            now: { correctedNow }
+        )
+
+        try await cache.save(corrected)
+
+        let loaded = await cache.load(
+            for: CLLocation(latitude: 30.2938, longitude: -86.0049)
+        )
+        let backups = try invalidBackups(in: directory)
+        #expect(loaded == corrected)
+        #expect(backups.count == 1)
+        let backup = try #require(backups.first)
+        let quarantined = try JSONDecoder().decode(
+            SnapshotEnvelope.self,
+            from: Data(contentsOf: backup)
+        )
+        #expect(quarantined.snapshot == future)
+    }
+
+    @Test("A valid newer existing snapshot still wins over an older save")
+    func validNewerExistingSnapshotStillWins() async throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let cache = WeatherSnapshots(
+            directory: tempDirectory(),
+            now: { now }
+        )
+        let newer = makeSnapshot(
+            source: .nws,
+            fetchedAt: now.addingTimeInterval(-60)
+        )
+        let older = makeSnapshot(
+            source: .weatherKit,
+            fetchedAt: now.addingTimeInterval(-300)
+        )
+
+        try await cache.save(newer)
+        try await cache.save(older)
+
+        let loaded = await cache.load(
+            for: CLLocation(latitude: 30.2938, longitude: -86.0049)
+        )
+        #expect(loaded == newer)
+    }
+
+    @Test("An incoming future snapshot is rejected without touching the cache")
+    func incomingFutureSnapshotIsRejected() async throws {
+        let directory = tempDirectory()
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let cache = WeatherSnapshots(
+            directory: directory,
+            now: { now }
+        )
+        let existing = makeSnapshot(
+            source: .weatherKit,
+            fetchedAt: now.addingTimeInterval(-60)
+        )
+        let future = makeSnapshot(
+            source: .nws,
+            fetchedAt: now.addingTimeInterval(3_600)
+        )
+        var didThrow = false
+
+        try await cache.save(existing)
+        do {
+            try await cache.save(future)
+        } catch {
+            didThrow = true
+        }
+
+        let loaded = await cache.load(
+            for: CLLocation(latitude: 30.2938, longitude: -86.0049)
+        )
+        #expect(didThrow)
+        #expect(loaded == existing)
+        #expect(try invalidBackups(in: directory).isEmpty)
     }
 
     @Test func missingSnapshotReturnsNil() async {
@@ -246,7 +338,7 @@ struct WeatherSnapshotsTests {
     @Test("Cached provider rejects a forecast older than its maximum age")
     func cachedProviderRejectsExpiredSnapshot() async throws {
         let cache = WeatherSnapshots(directory: tempDirectory())
-        let fetchedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let fetchedAt = Date(timeIntervalSince1970: 1_700_000_000)
         try await cache.save(makeSnapshot(source: .nws, fetchedAt: fetchedAt))
         let provider = CachedWeatherProvider(
             cache: cache,
@@ -264,7 +356,7 @@ struct WeatherSnapshotsTests {
     @Test("Cached provider rejects a forecast timestamp from the future")
     func cachedProviderRejectsFutureSnapshot() async throws {
         let cache = WeatherSnapshots(directory: tempDirectory())
-        let fetchedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let fetchedAt = Date(timeIntervalSince1970: 1_700_000_000)
         try await cache.save(makeSnapshot(source: .nws, fetchedAt: fetchedAt))
         let provider = CachedWeatherProvider(
             cache: cache,
@@ -303,6 +395,11 @@ struct WeatherSnapshotsTests {
         let version: Int
     }
 
+    private struct SnapshotEnvelope: Codable {
+        let version: Int
+        let snapshot: WeatherSnapshot
+    }
+
     private func invalidBackups(in directory: URL) throws -> [URL] {
         try FileManager.default.contentsOfDirectory(
             at: directory,
@@ -310,9 +407,22 @@ struct WeatherSnapshotsTests {
         ).filter { $0.lastPathComponent.hasPrefix("303,-860.invalid-") }
     }
 
+    private func writeEnvelope(
+        _ snapshot: WeatherSnapshot,
+        to directory: URL
+    ) throws {
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        let file = directory.appendingPathComponent("303,-860.json")
+        let envelope = SnapshotEnvelope(version: 1, snapshot: snapshot)
+        try JSONEncoder().encode(envelope).write(to: file, options: .atomic)
+    }
+
     private func makeSnapshot(
         source: WeatherSource,
-        fetchedAt date: Date = Date(timeIntervalSince1970: 1_800_000_000)
+        fetchedAt date: Date = Date(timeIntervalSince1970: 1_700_000_000)
     ) -> WeatherSnapshot {
         let wind = WindSnapshot(
             directionDegrees: 225,
