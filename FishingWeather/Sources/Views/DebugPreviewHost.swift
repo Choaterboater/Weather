@@ -1,9 +1,9 @@
 #if DEBUG
 import SwiftUI
 
-/// TEMPORARY verification harness — renders components with fixed mock data so
-/// they can be screenshotted on the simulator without WeatherKit/live location.
-/// Gated behind `-uiPreview <name>`. Remove before committing.
+/// Permanent deterministic visual-QA harness. It renders production components
+/// without relying on live WeatherKit, GPS, tides, or network services.
+/// Select a fixture with `-uiPreview <name>`.
 struct DebugPreviewHost: View {
     @State private var weatherStore = WeatherStore(worker: { _, _ in
         throw WeatherProviderError.serviceUnavailable
@@ -31,6 +31,8 @@ struct DebugPreviewHost: View {
                 .environment(osmClient)
                 .environment(inaturalist)
                 .environment(alertSettings)
+        } else if CommandLine.arguments.contains("proForecast") {
+            DebugProForecast()
         } else if CommandLine.arguments.contains("guide") {
             NavigationStack { SpeciesGuideView() }
                 .environment(SpotStore())
@@ -55,6 +57,78 @@ struct DebugPreviewHost: View {
         } else {
             Text("Unknown -uiPreview target")
         }
+    }
+}
+
+private struct DebugProForecast: View {
+    private let start = Date(timeIntervalSince1970: 1_800_000_000)
+    @State private var selectedDate: Date? = Date(
+        timeIntervalSince1970: 1_800_000_000
+    )
+
+    private var points: [ForecastPoint] {
+        let major = BiteWindow(
+            period: .major,
+            peak: start.addingTimeInterval(6 * 3_600),
+            cause: "Moon overhead"
+        )
+        return (0..<48).map { hour in
+            let date = start.addingTimeInterval(Double(hour) * 3_600)
+            let dayStart = start.addingTimeInterval(Double(hour / 24) * 86_400)
+            let temperature = 21 + 4 * sin(Double(hour) / 5)
+            let tideRate = 0.7 * cos(Double(hour) / 2.4)
+            return ForecastPoint(
+                weather: HourlyWeatherPoint(
+                    date: date,
+                    temperatureCelsius: temperature,
+                    apparentTemperatureCelsius: temperature + 1.2,
+                    dewPointCelsius: temperature - 4.5,
+                    humidityFraction: 0.58 + 0.14 * sin(Double(hour) / 6),
+                    pressureHPa: 1_016 - Double(hour) * 0.22,
+                    visibilityMeters: 15_500,
+                    uvIndex: max(0, 7 - abs(12 - hour % 24)),
+                    cloudCoverFraction: 0.18 + 0.25 * sin(Double(hour) / 4),
+                    precipitationChance: hour % 9 == 0 ? 0.32 : 0,
+                    precipitationMM: hour % 9 == 0 ? 1.4 : 0,
+                    conditionText: hour % 9 == 0 ? "Passing showers" : "Partly cloudy",
+                    symbolName: hour % 9 == 0 ? "cloud.rain.fill" : "cloud.sun.fill",
+                    wind: WindSnapshot(
+                        directionDegrees: Double((150 + hour * 6) % 360),
+                        speedMetersPerSecond: 3.6 + sin(Double(hour) / 3),
+                        gustMetersPerSecond: 6.2 + sin(Double(hour) / 2)
+                    )
+                ),
+                biteScore: min(94, 44 + (hour * 7) % 48),
+                tideHeightFeet: 2.1 + 1.3 * sin(Double(hour) / 2.4),
+                tidePhase: tideRate > 0.08
+                    ? "Rising"
+                    : (tideRate < -0.08 ? "Falling" : "Slack"),
+                solunarWindow: major.isActive(at: date) ? major : nil,
+                pressureTendency: .falling,
+                moonPhase: .full,
+                sunrise: dayStart.addingTimeInterval(6.5 * 3_600),
+                sunset: dayStart.addingTimeInterval(18.4 * 3_600),
+                tideRateFeetPerHour: tideRate,
+                nextTideTurn: TideEvent(
+                    time: dayStart.addingTimeInterval(8 * 3_600),
+                    kind: .high,
+                    heightFeet: 3.4
+                )
+            )
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            ProForecastMatrix(
+                points: points,
+                selectedDate: $selectedDate,
+                timeZone: .gmt,
+                now: start
+            )
+            .padding(16)
+        }
+        .background(Ink.backdrop)
     }
 }
 
