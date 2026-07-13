@@ -132,23 +132,24 @@ enum Species: String, CaseIterable, Identifiable, Codable, Sendable {
         return mine == waterType
     }
 
-    /// Photo credit line for the bundled Asset Catalog image. Source photos
-    /// are Creative Commons-licensed from iNaturalist's taxon pages.
+    /// The only bundled image that may be rendered is one admitted by the
+    /// validated, commercial-safe media manifest. No manifest means no photo.
+    var bundledMedia: SpeciesMediaLicense? {
+        SpeciesMediaCatalog.bundled[self]
+    }
+
+    /// Kept as a view-facing convenience so credits cannot drift from the
+    /// validated manifest. It is nil while the guide uses owned illustrations.
     var photoCredit: String? {
-        switch self {
-        case .all: nil
-        case .bass: "© Phil's 1stPix · CC BY-NC-SA · iNaturalist"
-        case .crappie: "Eric Engbretson, USFWS · public domain · iNaturalist"
-        case .catfish: "© Mitchel Buckner · CC BY-NC · iNaturalist"
-        case .bluegill: "© Kristiina Hurme · CC BY · iNaturalist"
-        case .redfish: "© Jacob Jones · CC BY-NC · iNaturalist"
-        case .speckledTrout: "© Quinn · CC BY · iNaturalist"
-        case .pompano: "© Jacob Jones · CC BY-NC · iNaturalist"
-        case .flounder: "© Kyran Leeker · iNaturalist"
-        case .sheepshead: "© Pauline Walsh Jacobson · CC BY · iNaturalist"
-        case .snook: "© Kevin Bryant · CC BY-NC-SA · iNaturalist"
-        case .mangroveSnapper: "© Frank Krasovec · CC BY-NC · iNaturalist"
+        bundledMedia?.attribution
+    }
+
+    var mediaAccessibilityLabel: String {
+        guard self != .all else { return "BiteCast fish illustration" }
+        if let scientificName {
+            return "BiteCast illustration of \(displayName), \(scientificName)"
         }
+        return "BiteCast illustration of \(displayName)"
     }
 }
 extension Species {
