@@ -54,7 +54,7 @@ struct FishingConditions {
         }?.astronomy
         let astronomy = selectedDayAstronomy
             ?? (calendar.isDate(
-                snapshot.current.date,
+                snapshot.provenance.fetchedAt,
                 inSameDayAs: forecastPoint.date
             ) ? snapshot.astronomy : .empty)
         return FishingConditions(

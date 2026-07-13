@@ -18,6 +18,7 @@ struct TripPlannerScreen: View {
     var body: some View {
         TripPlannerView(
             outlook: loader.outlook,
+            timeZone: forecastTimeZone,
             isLoading: loader.isLoading,
             errorMessage: loader.errorMessage,
             onRetry: { retryID += 1 }
@@ -27,10 +28,13 @@ struct TripPlannerScreen: View {
 
     private func load(force: Bool = false) async {
         let snapshot = matchingSnapshot
+        let calendar = TripForecastLoader.forecastCalendar(for: snapshot)
         guard let outlook = await loader.load(
             for: location, species: species, locationName: locationName,
             snapshot: snapshot,
-            tides: { await tides.weekTidesByDay(near: $0) },
+            tides: {
+                await tides.weekTidesByDay(near: $0, calendar: calendar)
+            },
             force: force
         ), !Task.isCancelled else { return }
         // Refresh scheduled bite alerts from the freshly loaded outlook. The
@@ -53,6 +57,53 @@ struct TripPlannerScreen: View {
     private var matchingSnapshot: WeatherSnapshot? {
         weather.hasData(for: location) ? weather.snapshot : nil
     }
+
+    private var forecastTimeZone: TimeZone {
+        TripForecastLoader.forecastCalendar(for: matchingSnapshot).timeZone
+    }
+}
+
+/// Explicit formatting for weekly forecast facts. SwiftUI's timezone
+/// environment does not affect strings already produced by `Date.formatted`.
+enum TripPlannerDateFormatting {
+    static func timeRange(
+        from start: Date,
+        to end: Date,
+        timeZone: TimeZone,
+        locale: Locale = .current
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return "\(formatter.string(from: start)) – \(formatter.string(from: end))"
+    }
+
+    static func weekday(
+        _ date: Date,
+        timeZone: TimeZone,
+        locale: Locale = .current
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "EEEE"
+        return formatter.string(from: date)
+    }
+
+    static func fullDate(
+        _ date: Date,
+        timeZone: TimeZone,
+        locale: Locale = .current
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        formatter.dateStyle = .full
+        formatter.timeStyle = .none
+        return formatter.string(from: date)
+    }
 }
 
 /// The Weekly Trip Planner screen: a ranked list of the coming week's best
@@ -60,6 +111,7 @@ struct TripPlannerScreen: View {
 /// presentational — the loader owns fetching and passes the outlook + state.
 struct TripPlannerView: View {
     let outlook: WeekOutlook?
+    var timeZone: TimeZone = .current
     var isLoading: Bool = false
     var errorMessage: String? = nil
     var onRetry: (() -> Void)? = nil
@@ -81,7 +133,7 @@ struct TripPlannerView: View {
             GlassCardStack(spacing: 12) {
                 header(outlook)
                 ForEach(outlook.windows) { window in
-                    ScoredWindowRow(window: window)
+                    ScoredWindowRow(window: window, timeZone: timeZone)
                 }
                 legend
             }
@@ -147,12 +199,18 @@ struct TripPlannerView: View {
 }
 
 private struct ScoredWindowRow: View {
+    @Environment(\.locale) private var locale
+
     let window: ScoredWindow
+    let timeZone: TimeZone
 
     private var timeRange: String {
-        let start = window.start.formatted(date: .omitted, time: .shortened)
-        let end = window.end.formatted(date: .omitted, time: .shortened)
-        return "\(start) – \(end)"
+        TripPlannerDateFormatting.timeRange(
+            from: window.start,
+            to: window.end,
+            timeZone: timeZone,
+            locale: locale
+        )
     }
 
     var body: some View {
@@ -160,7 +218,11 @@ private struct ScoredWindowRow: View {
             HStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 7) {
                     HStack(spacing: 8) {
-                        Text(window.start, format: .dateTime.weekday(.wide))
+                        Text(TripPlannerDateFormatting.weekday(
+                            window.start,
+                            timeZone: timeZone,
+                            locale: locale
+                        ))
                             .font(.system(size: 14, weight: .bold, design: .monospaced))
                             .foregroundStyle(Ink.chart)
                         periodPill
@@ -187,7 +249,7 @@ private struct ScoredWindowRow: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(window.start.formatted(date: .complete, time: .omitted)), \(timeRange), score \(window.score), \(window.confidence == .high ? "high" : "lower") confidence")
+        .accessibilityLabel("\(TripPlannerDateFormatting.fullDate(window.start, timeZone: timeZone, locale: locale)), \(timeRange), score \(window.score), \(window.confidence == .high ? "high" : "lower") confidence")
     }
 
     private var periodPill: some View {

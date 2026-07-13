@@ -8,23 +8,68 @@ import SwiftUI
 struct FishingDetailReference: Equatable, Sendable {
     let referenceDate: Date
     let forecastTimeZone: TimeZone
+    let score: FishingScore
+
+    init?(
+        forecastPoint: ForecastPoint,
+        forecastTimeZone: TimeZone
+    ) {
+        guard let score = forecastPoint.fishingScore else { return nil }
+        self.referenceDate = forecastPoint.date
+        self.forecastTimeZone = forecastTimeZone
+        self.score = score
+    }
 
     var biteWindowsDate: Date { referenceDate }
     var tideDate: Date { referenceDate }
     var pressureDate: Date { referenceDate }
 }
 
+struct FishingDetailDayBounds: Equatable, Sendable {
+    let start: Date
+    let end: Date
+
+    var range: ClosedRange<Date> { start...end }
+}
+
+/// Explicit formatting for selected forecast facts. SwiftUI's timezone
+/// environment does not affect strings already produced by `Date.formatted`.
+enum FishingDetailDateFormatting {
+    static func time(
+        _ date: Date,
+        timeZone: TimeZone,
+        locale: Locale = .current
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
+    static func dayBounds(
+        containing date: Date,
+        timeZone: TimeZone
+    ) -> FishingDetailDayBounds {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let start = calendar.startOfDay(for: date)
+        let nextDay = calendar.date(byAdding: .day, value: 1, to: start)
+            ?? start.addingTimeInterval(86_400)
+        return FishingDetailDayBounds(start: start, end: nextDay)
+    }
+}
+
 struct FishingView: View {
     @Environment(CatchLog.self) private var catchLog
 
     let species: Species
-    let score: FishingScore
+    let reference: FishingDetailReference
     let conditions: FishingConditions
     let tide: BiteTimeTideSnapshot?
     let activeLocation: CLLocation?
     let hourlySamples: [HourSample]
-    let referenceDate: Date
-    let forecastTimeZone: TimeZone
 
     @State private var showsPatterns = false
 
@@ -34,19 +79,13 @@ struct FishingView: View {
     private var learningCatchCount: Int {
         PersonalScoreModel.sampleCount(catchLog.entries, species: species)
     }
-    private var detailReference: FishingDetailReference {
-        FishingDetailReference(
-            referenceDate: referenceDate,
-            forecastTimeZone: forecastTimeZone
-        )
-    }
-
     var body: some View {
         ScrollView {
             GlassCardStack(spacing: 20) {
                 SpeciesFocusCard(species: species)
                 FishingScoreCard(
-                    score: score,
+                    score: reference.score,
+                    title: "Selected bite",
                     tunedCount: tunedCatchCount,
                     learningCount: learningCatchCount,
                     learningThreshold: PersonalScoreModel.minCatches,
@@ -54,7 +93,8 @@ struct FishingView: View {
                 )
                 BiteWindowsCard(
                     conditions: conditions,
-                    referenceDate: detailReference.biteWindowsDate
+                    referenceDate: reference.biteWindowsDate,
+                    forecastTimeZone: reference.forecastTimeZone
                 )
                 if let tide {
                     TideCard(
@@ -64,25 +104,29 @@ struct FishingView: View {
                         distanceMiles: tide.distanceMiles,
                         isLoading: tide.isLoading,
                         lastError: tide.lastError,
-                        referenceDate: detailReference.tideDate
+                        referenceDate: reference.tideDate
                     )
-                    .environment(\.timeZone, detailReference.forecastTimeZone)
+                    .environment(\.timeZone, reference.forecastTimeZone)
                 } else if let activeLocation {
                     WaterConditionsCard(location: activeLocation)
                 }
                 PressureCard(
                     reading: conditions.pressure,
                     samples: hourlySamples,
-                    referenceDate: detailReference.pressureDate
+                    referenceDate: reference.pressureDate,
+                    forecastTimeZone: reference.forecastTimeZone
                 )
-                SolunarDetailsCard(conditions: conditions)
+                SolunarDetailsCard(
+                    conditions: conditions,
+                    forecastTimeZone: reference.forecastTimeZone
+                )
             }
             .padding(.horizontal)
             .padding(.top, 12)
             .padding(.bottom, 24)
         }
         .background(Ink.backdrop)
-        .environment(\.timeZone, detailReference.forecastTimeZone)
+        .environment(\.timeZone, reference.forecastTimeZone)
         .sheet(isPresented: $showsPatterns) {
             YourPatternsView(
                 insights: PersonalInsightsBuilder.build(from: catchLog.entries, species: species),
@@ -122,6 +166,7 @@ private struct SpeciesFocusCard: View {
 private struct BiteWindowsCard: View {
     let conditions: FishingConditions
     let referenceDate: Date
+    let forecastTimeZone: TimeZone
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var reminderState: ReminderState = .none
@@ -141,10 +186,15 @@ private struct BiteWindowsCard: View {
                     } else {
                         BiteWindowsTimeline(
                             windows: conditions.windows,
-                            now: referenceDate
+                            referenceDate: referenceDate,
+                            timeZone: forecastTimeZone
                         )
                         ForEach(conditions.windows) { window in
-                            BiteWindowRow(window: window, now: referenceDate)
+                            BiteWindowRow(
+                                window: window,
+                                referenceDate: referenceDate,
+                                timeZone: forecastTimeZone
+                            )
                         }
                         reminderControl(at: referenceDate)
                     }
@@ -208,7 +258,7 @@ private struct BiteWindowsCard: View {
     private func headline(at date: Date) -> some View {
         if let active = conditions.activeWindow(at: date) {
             Label {
-                Text("\(active.period.rawValue) window now — until \(active.end.formatted(date: .omitted, time: .shortened))")
+                Text("\(active.period.rawValue) window at selected time — until \(FishingDetailDateFormatting.time(active.end, timeZone: forecastTimeZone))")
                     .font(.system(.callout, design: .rounded, weight: .semibold))
                     .monospacedDigit()
                     .foregroundStyle(Ink.chart)
@@ -223,7 +273,7 @@ private struct BiteWindowsCard: View {
             }
         } else if let next = conditions.nextWindow(after: date) {
             Label {
-                Text("Next: \(next.period.rawValue) at \(next.peak.formatted(date: .omitted, time: .shortened))")
+                Text("Next: \(next.period.rawValue) at \(FishingDetailDateFormatting.time(next.peak, timeZone: forecastTimeZone))")
                     .font(.system(.callout, design: .rounded, weight: .semibold))
                     .monospacedDigit()
                     .foregroundStyle(Ink.chart)
@@ -232,7 +282,7 @@ private struct BiteWindowsCard: View {
                     .foregroundStyle(Ink.brass)
             }
         } else {
-            Text("Today's feeding windows")
+            Text("Selected forecast day's feeding windows")
                 .font(.system(.callout, design: .rounded, weight: .semibold))
                 .foregroundStyle(Ink.chart)
         }
@@ -241,13 +291,20 @@ private struct BiteWindowsCard: View {
 
 private struct BiteWindowRow: View {
     let window: BiteWindow
-    let now: Date
+    let referenceDate: Date
+    let timeZone: TimeZone
 
-    private var isActive: Bool { window.isActive(at: now) }
+    private var isActive: Bool { window.isActive(at: referenceDate) }
 
     private var timeRange: String {
-        let start = window.start.formatted(date: .omitted, time: .shortened)
-        let end = window.end.formatted(date: .omitted, time: .shortened)
+        let start = FishingDetailDateFormatting.time(
+            window.start,
+            timeZone: timeZone
+        )
+        let end = FishingDetailDateFormatting.time(
+            window.end,
+            timeZone: timeZone
+        )
         return "\(start) – \(end)"
     }
 
@@ -288,6 +345,7 @@ private struct PressureCard: View {
     let reading: PressureReading
     var samples: [HourSample] = []
     let referenceDate: Date
+    let forecastTimeZone: TimeZone
 
     private var pressureText: String {
         reading.pressure?.formatted(
@@ -333,7 +391,8 @@ private struct PressureCard: View {
                     if samples.compactMap(\.pressureHPa).count > 1 {
                         PressureTrendChart(
                             samples: samples,
-                            now: referenceDate
+                            referenceDate: referenceDate,
+                            timeZone: forecastTimeZone
                         )
                             .padding(.top, 4)
                     }
@@ -347,6 +406,7 @@ private struct PressureCard: View {
 
 private struct SolunarDetailsCard: View {
     let conditions: FishingConditions
+    let forecastTimeZone: TimeZone
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -370,12 +430,12 @@ private struct SolunarDetailsCard: View {
                     Divider()
 
                     HStack {
-                        TimeFact(label: "Sunrise", date: conditions.sunrise, systemImage: "sunrise")
-                        TimeFact(label: "Sunset", date: conditions.sunset, systemImage: "sunset")
+                        TimeFact(label: "Sunrise", date: conditions.sunrise, systemImage: "sunrise", timeZone: forecastTimeZone)
+                        TimeFact(label: "Sunset", date: conditions.sunset, systemImage: "sunset", timeZone: forecastTimeZone)
                     }
                     HStack {
-                        TimeFact(label: "Moonrise", date: conditions.moonrise, systemImage: "moonrise")
-                        TimeFact(label: "Moonset", date: conditions.moonset, systemImage: "moonset")
+                        TimeFact(label: "Moonrise", date: conditions.moonrise, systemImage: "moonrise", timeZone: forecastTimeZone)
+                        TimeFact(label: "Moonset", date: conditions.moonset, systemImage: "moonset", timeZone: forecastTimeZone)
                     }
                 }
             }
@@ -387,6 +447,7 @@ private struct TimeFact: View {
     let label: String
     let date: Date?
     let systemImage: String
+    let timeZone: TimeZone
 
     var body: some View {
         HStack(spacing: 8) {
@@ -399,7 +460,9 @@ private struct TimeFact: View {
                     .foregroundStyle(Ink.chartDim)
                     .textCase(.uppercase)
                     .tracking(1)
-                Text(date?.formatted(date: .omitted, time: .shortened) ?? "—")
+                Text(date.map {
+                    FishingDetailDateFormatting.time($0, timeZone: timeZone)
+                } ?? "—")
                     .font(.system(.callout, design: .rounded, weight: .semibold))
                     .monospacedDigit()
                     .foregroundStyle(Ink.chart)

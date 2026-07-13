@@ -22,7 +22,10 @@ enum TripPlanner {
 
         for day in days {
             let windows = SolunarCalculator.windows(
-                moonrise: day.moonrise, moonset: day.moonset, on: day.date
+                moonrise: day.moonrise,
+                moonset: day.moonset,
+                on: day.date,
+                calendar: calendar
             )
             let dayKey = calendar.startOfDay(for: day.date)
             let tides = tidesByDay[dayKey] ?? []
@@ -42,7 +45,8 @@ enum TripPlanner {
                     windMph: hourlyCond?.windMph ?? day.dailyWindMph,
                     species: species,
                     tideEvents: tides,
-                    now: scoreTime
+                    now: scoreTime,
+                    calendar: calendar
                 )
                 scored.append(ScoredWindow(
                     date: dayKey,

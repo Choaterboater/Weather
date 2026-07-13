@@ -59,6 +59,7 @@ final class TripForecastLoader {
                     throw WeatherProviderError.serviceUnavailable
                 }
                 let now = Date.now
+                let calendar = Self.forecastCalendar(for: snapshot)
                 let days = snapshot.daily.prefix(7).map(Self.dayInput)
 
                 guard id == loadID, !Task.isCancelled else {
@@ -78,7 +79,8 @@ final class TripForecastLoader {
                     tidesByDay: tidesByDay,
                     species: species,
                     locationName: locationName,
-                    now: now
+                    now: now,
+                    calendar: calendar
                 )
             }
 
@@ -121,6 +123,16 @@ final class TripForecastLoader {
                 WeatherUnits.milesPerHour(metersPerSecond: $0)
             }
         )
+    }
+
+    nonisolated static func forecastCalendar(
+        for snapshot: WeatherSnapshot?
+    ) -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = snapshot
+            .flatMap { TimeZone(identifier: $0.timeZoneIdentifier) }
+            ?? .gmt
+        return calendar
     }
 
     nonisolated static func requestKey(

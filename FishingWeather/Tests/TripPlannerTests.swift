@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 import Testing
 @testable import BiteCast
@@ -196,6 +197,82 @@ struct TripPlannerTests {
         #expect(outlook.windows.allSatisfy { $0.end >= midday })
     }
 
+    @Test("Forecast calendar uses the snapshot timezone")
+    func forecastCalendarUsesSnapshotTimeZone() throws {
+        let snapshot = Self.makeSnapshot(
+            timeZoneIdentifier: "Pacific/Kiritimati",
+            day: try #require(Self.utcCalendar.date(
+                from: DateComponents(year: 2030, month: 7, day: 14)
+            ))
+        )
+
+        let calendar = TripForecastLoader.forecastCalendar(for: snapshot)
+
+        #expect(calendar.timeZone.identifier == "Pacific/Kiritimati")
+    }
+
+    @Test("Trip planner labels use the forecast timezone")
+    func tripPlannerLabelsUseForecastTimeZone() throws {
+        let instant = try #require(Self.utcCalendar.date(
+            from: DateComponents(year: 2030, month: 7, day: 14, hour: 2, minute: 30)
+        ))
+        let honolulu = try #require(TimeZone(identifier: "Pacific/Honolulu"))
+        let tokyo = try #require(TimeZone(identifier: "Asia/Tokyo"))
+        let locale = Locale(identifier: "en_US_POSIX")
+
+        let honoluluTime = TripPlannerDateFormatting.timeRange(
+            from: instant,
+            to: instant.addingTimeInterval(3_600),
+            timeZone: honolulu,
+            locale: locale
+        )
+        let tokyoTime = TripPlannerDateFormatting.timeRange(
+            from: instant,
+            to: instant.addingTimeInterval(3_600),
+            timeZone: tokyo,
+            locale: locale
+        )
+        let honoluluDay = TripPlannerDateFormatting.fullDate(
+            instant,
+            timeZone: honolulu,
+            locale: locale
+        )
+        let tokyoDay = TripPlannerDateFormatting.fullDate(
+            instant,
+            timeZone: tokyo,
+            locale: locale
+        )
+
+        #expect(honoluluTime != tokyoTime)
+        #expect(honoluluDay != tokyoDay)
+    }
+
+    @MainActor
+    @Test("Trip loader groups planned windows on the snapshot-local day")
+    func tripLoaderUsesSnapshotCalendar() async throws {
+        let referenceDate = try #require(Self.utcCalendar.date(
+            from: DateComponents(year: 2030, month: 7, day: 14, hour: 0, minute: 30)
+        ))
+        let snapshot = Self.makeSnapshot(
+            timeZoneIdentifier: "Pacific/Kiritimati",
+            day: referenceDate
+        )
+        let calendar = TripForecastLoader.forecastCalendar(for: snapshot)
+        let loader = TripForecastLoader()
+
+        let outlook = await loader.load(
+            for: CLLocation(latitude: 1.8721, longitude: -157.4278),
+            species: .bass,
+            locationName: "Kiritimati",
+            snapshot: snapshot
+        )
+
+        let expectedDay = calendar.startOfDay(for: referenceDate)
+        let unwrapped = try #require(outlook)
+        #expect(!unwrapped.windows.isEmpty)
+        #expect(unwrapped.windows.allSatisfy { $0.date == expectedDay })
+    }
+
     private func makeHour(
         date: Date,
         pressureHPa: Double?
@@ -238,6 +315,71 @@ struct TripPlannerTests {
             windMetersPerSecond: wind,
             windPeakMetersPerSecond: peak,
             astronomy: astronomy
+        )
+    }
+
+    private static var utcCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }
+
+    private static func makeSnapshot(
+        timeZoneIdentifier: String,
+        day: Date
+    ) -> WeatherSnapshot {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: timeZoneIdentifier)!
+        let dayStart = calendar.startOfDay(for: day)
+        let astronomy = AstronomySnapshot(
+            sunrise: dayStart.addingTimeInterval(6 * 3_600),
+            sunset: dayStart.addingTimeInterval(18 * 3_600),
+            moonrise: dayStart.addingTimeInterval(7 * 3_600),
+            moonset: dayStart.addingTimeInterval(19 * 3_600),
+            moonTransit: dayStart.addingTimeInterval(13 * 3_600),
+            moonPhaseFraction: 0.5
+        )
+        let wind = WindSnapshot(
+            directionDegrees: 180,
+            speedMetersPerSecond: 3,
+            gustMetersPerSecond: nil
+        )
+        return WeatherSnapshot(
+            coordinate: WeatherCoordinate(latitude: 1.8721, longitude: -157.4278),
+            timeZoneIdentifier: timeZoneIdentifier,
+            current: CurrentConditionsSnapshot(
+                date: day,
+                temperatureCelsius: 27,
+                apparentTemperatureCelsius: 28,
+                dewPointCelsius: 22,
+                humidityFraction: 0.7,
+                pressureHPa: 1_012,
+                visibilityMeters: 16_000,
+                uvIndex: 5,
+                conditionText: "Clear",
+                symbolName: "sun.max",
+                wind: wind
+            ),
+            hourly: [],
+            daily: [DailyWeatherPoint(
+                date: day,
+                lowCelsius: 24,
+                highCelsius: 29,
+                precipitationChance: 0.1,
+                conditionText: "Clear",
+                symbolName: "sun.max",
+                windMetersPerSecond: 3,
+                windPeakMetersPerSecond: nil,
+                astronomy: astronomy
+            )],
+            alerts: [],
+            astronomy: astronomy,
+            provenance: WeatherProvenance(
+                source: .weatherKit,
+                fetchedAt: day,
+                isFallback: false,
+                attribution: "WeatherKit"
+            )
         )
     }
 }
