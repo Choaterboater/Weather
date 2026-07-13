@@ -7,6 +7,7 @@ struct BestBaitTodayView: View {
     let context: BestBaitContext?
     let species: Species
     let engine: BaitEngine
+    let provenance: WeatherProvenance
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showsFullReason = false
@@ -42,7 +43,11 @@ struct BestBaitTodayView: View {
         }
         .sheet(isPresented: $showsMoreAdvice) {
             if let context {
-                BaitEngineView(context: context, engine: engine)
+                BaitEngineView(
+                    context: context,
+                    engine: engine,
+                    provenance: provenance
+                )
             }
         }
     }

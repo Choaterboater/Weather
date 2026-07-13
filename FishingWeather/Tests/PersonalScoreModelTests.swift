@@ -12,7 +12,15 @@ struct PersonalScoreModelTests {
         let date = Calendar.current.date(from: comps)!
         return CatchEntry(date: date, species: species, bait: "jig",
                           pressureTendency: pressure, moonPhase: moon,
-                          windMph: wind, tidePhase: tide)
+                          windMph: wind, tidePhase: tide,
+                          conditionSource: CatchConditionSource(
+                              providerKind: .nationalWeatherService,
+                              expiresAt: Date(timeIntervalSince1970: 2_000_000_900)
+                          ),
+                          tideSource: tide.map { _ in
+                              CatchTideSource(stationID: "8720218")
+                          },
+                          astronomySource: CatchAstronomySource())
     }
 
     private func sum(_ w: FactorWeights) -> Double {

@@ -155,7 +155,7 @@ private enum BiteTimePreviewFixture {
                 case .cache:
                     return snapshot(
                         source: .cache,
-                        fetchedAt: now.addingTimeInterval(-2 * 3_600),
+                        fetchedAt: now.addingTimeInterval(-20 * 60),
                         isFallback: true,
                         attribution: "Cached from National Weather Service"
                     )
@@ -215,10 +215,36 @@ private enum BiteTimePreviewFixture {
                 source: source,
                 fetchedAt: fetchedAt,
                 isFallback: isFallback,
-                attribution: attribution
+                attribution: attribution,
+                providerAttribution: source == .weatherKit
+                    ? appleAttribution
+                    : .nationalWeatherService,
+                expiresAt: now.addingTimeInterval(30 * 60)
             )
         )
     }
+
+    fileprivate static let appleAttribution = WeatherProviderAttribution(
+        providerKind: .appleWeather,
+        serviceName: "Apple Weather",
+        legalPageURL: URL(string: "https://weatherkit.apple.com/legal-attribution.html")!,
+        combinedMarkLightURL: URL(string: "https://weatherkit.apple.com/assets/branding/en/Apple_Weather_blk_en_3X_090122.png")!,
+        combinedMarkDarkURL: URL(string: "https://weatherkit.apple.com/assets/branding/en/Apple_Weather_wht_en_3X_090122.png")!,
+        legalText: "Weather data sources and legal attribution",
+        // Exact provider-supplied WeatherKit combined marks. Keeping both
+        // variants embedded makes the offline UI fixture exercise the same
+        // branded rendering path as a live or still-valid cached snapshot.
+        combinedMarkLightData: previewAppleBlackMark,
+        combinedMarkDarkData: previewAppleWhiteMark
+    )
+
+    private static let previewAppleWhiteMark = Data(base64Encoded:
+        "iVBORw0KGgoAAAANSUhEUgAAAOcAAAAqCAYAAABIgkxKAAAACXBIWXMAAAWxAAAFsQGS3qTBAAAE9GlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgNy4yLWMwMDAgNzkuNTY2ZWJjNWI0LCAyMDIyLzA1LzA5LTA4OjI1OjU1ICAgICAgICAiPiA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPiA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIiB4bWxuczp4bXA9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC8iIHhtbG5zOmRjPSJodHRwOi8vcHVybC5vcmcvZGMvZWxlbWVudHMvMS4xLyIgeG1sbnM6cGhvdG9zaG9wPSJodHRwOi8vbnMuYWRvYmUuY29tL3Bob3Rvc2hvcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RFdnQ9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZUV2ZW50IyIgeG1wOkNyZWF0b3JUb29sPSJBZG9iZSBQaG90b3Nob3AgMjMuNCAoTWFjaW50b3NoKSIgeG1wOkNyZWF0ZURhdGU9IjIwMjItMDktMDFUMTE6MjA6NTgtMDQ6MDAiIHhtcDpNb2RpZnlEYXRlPSIyMDIyLTA5LTAxVDE1OjM1OjU1LTA0OjAwIiB4bXA6TWV0YWRhdGFEYXRlPSIyMDIyLTA5LTAxVDE1OjM1OjU1LTA0OjAwIiBkYzpmb3JtYXQ9ImltYWdlL3BuZyIgcGhvdG9zaG9wOkNvbG9yTW9kZT0iMyIgeG1wTU06SW5zdGFuY2VJRD0ieG1wLmlpZDpjMmFiNWIzZC1lY2RmLTQ4MTQtYmYxYS1jNzAxNWEzNjVkZDYiIHhtcE1NOkRvY3VtZW50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"
+    )!
+
+    private static let previewAppleBlackMark = Data(base64Encoded:
+        "iVBORw0KGgoAAAANSUhEUgAAAOcAAAAqCAYAAABIgkxKAAAACXBIWXMAAAWxAAAFsQGS3qTBAAAE9GlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgNy4yLWMwMDAgNzkuNTY2ZWJjNWI0LCAyMDIyLzA1LzA5LTA4OjI1OjU1ICAgICAgICAiPiA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPiA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIiB4bWxuczp4bXA9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC8iIHhtbG5zOmRjPSJodHRwOi8vcHVybC5vcmcvZGMvZWxlbWVudHMvMS4xLyIgeG1sbnM6cGhvdG9zaG9wPSJodHRwOi8vbnMuYWRvYmUuY29tL3Bob3Rvc2hvcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RFdnQ9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZUV2ZW50IyIgeG1wOkNyZWF0b3JUb29sPSJBZG9iZSBQaG90b3Nob3AgMjMuNCAoTWFjaW50b3NoKSIgeG1wOkNyZWF0ZURhdGU9IjIwMjItMDktMDFUMTE6MjA6MDMtMDQ6MDAiIHhtcDpNb2RpZnlEYXRlPSIyMDIyLTA5LTAxVDE1OjM1OjI4LTA0OjAwIiB4bXA6TWV0YWRhdGFEYXRlPSIyMDIyLTA5LTAxVDE1OjM1OjI4LTA0OjAwIiBkYzpmb3JtYXQ9ImltYWdlL3BuZyIgcGhvdG9zaG9wOkNvbG9yTW9kZT0iMyIgeG1wTU06SW5zdGFuY2VJRD0ieG1wLmlpZDpjMzMyNWJlMi04NjhmLTRmYzctYTRiMC01OGUxNDIzZDc4NzYiIHhtcE1NOkRvY3VtZW50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"
+    )!
 
     private static func hourlyPoint(_ hour: Int) -> HourlyWeatherPoint {
         let date = now.addingTimeInterval(Double(hour) * 3_600)
@@ -293,6 +319,10 @@ private enum BiteTimePreviewFixture {
             moonPhaseFraction: 0.72
         )
     }
+}
+
+enum DebugWeatherFixtureAttribution {
+    static let apple = BiteTimePreviewFixture.appleAttribution
 }
 
 struct BiteTimePreviewProviderChainResult: Sendable {
@@ -629,7 +659,17 @@ private struct DebugTripPlanner: View {
 
     var body: some View {
         NavigationStack {
-            TripPlannerView(outlook: outlook)
+            TripPlannerView(
+                outlook: outlook,
+                provenance: WeatherProvenance(
+                    source: .nws,
+                    fetchedAt: .now,
+                    isFallback: true,
+                    attribution: "National Weather Service",
+                    providerAttribution: .nationalWeatherService,
+                    expiresAt: .now.addingTimeInterval(30 * 60)
+                )
+            )
         }
     }
 }

@@ -16,15 +16,29 @@ final class WaterScout {
 
     var status: Status = .idle
     var report: WaterScoutReport?
+    private(set) var reportProvenance: WeatherProvenance?
 
     /// Bumped on every analyze()/reset(); state writes after an await bail out
     /// when a newer photo superseded them, so the report always matches the
     /// photo on screen.
     private var generation = 0
 
-    func analyze(image: UIImage, species: Species, conditions: FishingConditions?) async {
+    func analyze(
+        image: UIImage,
+        species: Species,
+        conditions: FishingConditions?,
+        provenance: WeatherProvenance? = nil
+    ) async {
         generation += 1
         let gen = generation
+        report = nil
+        reportProvenance = nil
+
+        if conditions != nil,
+           provenance.map({ WeatherDerivedContentPolicy.canDisplay($0) }) != true {
+            status = .failed("The weather context expired. Refresh conditions and try again.")
+            return
+        }
 
         switch SystemLanguageModel.default.availability {
         case .available:
@@ -38,7 +52,6 @@ final class WaterScout {
         }
 
         status = .working
-        report = nil
 
         let imageData = await Self.analysisData(for: image)
         guard gen == generation else { return }
@@ -50,7 +63,13 @@ final class WaterScout {
             let session = LanguageModelSession(instructions: Self.instructions)
             let result = try await session.respond(to: prompt, generating: WaterScoutReport.self).content
             guard gen == generation else { return }
+            if conditions != nil,
+               provenance.map({ WeatherDerivedContentPolicy.canDisplay($0) }) != true {
+                status = .failed("The weather context expired. Refresh conditions and try again.")
+                return
+            }
             report = result
+            reportProvenance = conditions == nil ? nil : provenance
             status = .ready
         } catch {
             guard gen == generation else { return }
@@ -62,6 +81,21 @@ final class WaterScout {
         generation += 1
         status = .idle
         report = nil
+        reportProvenance = nil
+    }
+
+    func expireWeatherDerivedReportIfNeeded(at date: Date = .now) {
+        guard let reportProvenance,
+              !WeatherDerivedContentPolicy.canDisplay(
+                reportProvenance,
+                at: date
+              ) else { return }
+        generation += 1
+        report = nil
+        self.reportProvenance = nil
+        status = .failed(
+            "The weather context expired. Refresh conditions and analyze again."
+        )
     }
 
     /// Vision only needs a modest bitmap. Downscale + JPEG off the main actor

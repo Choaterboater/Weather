@@ -71,7 +71,20 @@ final class WeatherStore {
     }
 
     func hasData(for location: CLLocation) -> Bool {
-        loadedKey == Self.cacheKey(for: location) && snapshot != nil
+        guard loadedKey == Self.cacheKey(for: location),
+              let snapshot else { return false }
+        return snapshot.provenance.isValid(at: now())
+    }
+
+    /// Drives the root refresh task from the provider's authoritative expiry,
+    /// making an elapsed snapshot actively disappear/refetch instead of merely
+    /// becoming invalid when a view happens to ask.
+    func secondsUntilExpiry(for location: CLLocation) -> TimeInterval? {
+        let referenceDate = now()
+        guard loadedKey == Self.cacheKey(for: location),
+              let snapshot,
+              snapshot.provenance.isValid(at: referenceDate) else { return nil }
+        return snapshot.provenance.expiresAt.timeIntervalSince(referenceDate)
     }
 
     func load(for location: CLLocation, force: Bool = false) async {
@@ -82,10 +95,18 @@ final class WeatherStore {
         loadID += 1
         let id = loadID
 
+        if loadedKey == key,
+           let snapshot,
+           !snapshot.provenance.isValid(at: requestDate) {
+            self.snapshot = nil
+            loadedKey = nil
+        }
+
         if !force,
            let snapshot,
            loadedKey == key {
-            if WeatherFreshnessPolicy.isCurrentCache(
+            if snapshot.provenance.isValid(at: requestDate),
+               WeatherFreshnessPolicy.isCurrentCache(
                 fetchedAt: snapshot.provenance.fetchedAt,
                 now: requestDate
             ) {
@@ -104,13 +125,18 @@ final class WeatherStore {
 
         do {
             let result = try await worker(location, requestDate)
-
             // No result from a superseded or canceled request may become
             // observable, including its loading/error state.
             guard id == loadID else { return }
             if Task.isCancelled {
                 isLoading = false
                 return
+            }
+
+            // A request may cross the provider's metadata expiry while it is
+            // in flight. Validate against commit time, not request start.
+            guard result.provenance.isValid(at: now()) else {
+                throw WeatherProviderError.serviceUnavailable
             }
 
             snapshot = result

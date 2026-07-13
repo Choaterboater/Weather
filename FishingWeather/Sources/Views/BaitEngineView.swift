@@ -5,9 +5,11 @@ import SwiftUI
 struct BaitEngineView: View {
     let context: BestBaitContext
     let engine: BaitEngine
+    let provenance: WeatherProvenance
 
     @Environment(\.dismiss) private var dismiss
     @State private var question = ""
+    @State private var forecastExpired = false
 
     private var result: BestBaitResult? {
         guard engine.result?.key == context.key else { return nil }
@@ -16,33 +18,51 @@ struct BaitEngineView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    if let result {
-                        optionalReport(result)
-                        whySection(result)
-                        BaitArtView(
-                            recommendation: result.recommendation,
-                            species: context.species
-                        )
-                        YouTubeVideoCarousel(
-                            title: "Tutorials",
-                            query: "How to fish "
-                                + result.recommendation.topBait
-                                + " for \(context.species.displayName)"
-                        )
-                        questionSection
-                    } else {
-                        ContentUnavailableView(
-                            "Advice changed",
-                            systemImage: "arrow.triangle.2.circlepath",
-                            description: Text(
-                                "Close this view to load advice for the active forecast hour."
-                            )
-                        )
+            Group {
+                if canDisplayForecast {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 20) {
+                            if let attribution = provenance.providerAttribution {
+                                WeatherSourceAttributionView(attribution: attribution)
+                                ModifiedWeatherDataNotice(attribution: attribution)
+                                ForecastSafetyNotice()
+                            }
+                            if let result {
+                                optionalReport(result)
+                                whySection(result)
+                                BaitArtView(
+                                    recommendation: result.recommendation,
+                                    species: context.species
+                                )
+                                YouTubeVideoCarousel(
+                                    title: "Tutorials",
+                                    query: "How to fish "
+                                        + result.recommendation.topBait
+                                        + " for \(context.species.displayName)"
+                                )
+                                questionSection
+                            } else {
+                                ContentUnavailableView(
+                                    "Advice changed",
+                                    systemImage: "arrow.triangle.2.circlepath",
+                                    description: Text(
+                                        "Close this view to load advice for the active forecast hour."
+                                    )
+                                )
+                            }
+                        }
+                        .padding()
                     }
+                } else {
+                    ContentUnavailableView(
+                        "Forecast expired",
+                        systemImage: "clock.badge.exclamationmark",
+                        description: Text(
+                            "Close this view and refresh BiteTime before using this advice."
+                        )
+                    )
+                    .padding()
                 }
-                .padding()
             }
             .background(Ink.backdrop)
             .navigationTitle("More advice")
@@ -54,8 +74,34 @@ struct BaitEngineView: View {
             }
         }
         .task(id: result?.key) {
+            guard canDisplayForecast else { return }
             await engine.generateMoreAdvice(for: context)
         }
+        .task(id: provenance.expiresAt) {
+            await enforceExpiryBoundary()
+        }
+    }
+
+    private var canDisplayForecast: Bool {
+        !forecastExpired && WeatherDerivedContentPolicy.canDisplay(provenance)
+    }
+
+    @MainActor
+    private func enforceExpiryBoundary() async {
+        forecastExpired = false
+        guard let delay = WeatherDerivedContentPolicy.secondsUntilExpiry(
+            provenance
+        ) else {
+            forecastExpired = true
+            return
+        }
+        do {
+            try await Task.sleep(for: .seconds(max(delay, 0.01)))
+        } catch {
+            return
+        }
+        guard !Task.isCancelled else { return }
+        forecastExpired = true
     }
 
     @ViewBuilder

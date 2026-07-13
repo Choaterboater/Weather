@@ -91,6 +91,225 @@ struct CatchLogTests {
         #expect(reloaded.entries.first?.bait == "spinnerbait")
     }
 
+    @Test("Legacy condition fields decode and survive later catch writes without becoming usable")
+    func legacyConditionFieldsRemainCompatibleButUntrusted() throws {
+        let dir = try makeTempDirectory()
+        let legacy = CatchEntry(
+            species: .bass,
+            bait: "worm",
+            pressureTendency: "Falling",
+            moonPhase: "Full Moon",
+            airTempF: 78,
+            dewPointF: 69,
+            windMph: 8,
+            tidePhase: "Rising"
+        )
+        try JSONEncoder().encode([legacy]).write(
+            to: dir.appendingPathComponent("catches.json")
+        )
+
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let log = CatchLog(directory: dir)
+        let decodedLegacy = try #require(log.entries.first)
+        #expect(decodedLegacy.pressureTendency == "Falling")
+        #expect(decodedLegacy.moonPhase == "Full Moon")
+        #expect(decodedLegacy.airTempF == 78)
+        #expect(decodedLegacy.dewPointF == 69)
+        #expect(decodedLegacy.windMph == 8)
+        #expect(decodedLegacy.tidePhase == "Rising")
+        #expect(decodedLegacy.conditionSource == nil)
+        #expect(decodedLegacy.attributedPressureTendency == nil)
+        #expect(decodedLegacy.attributedMoonPhase == nil)
+        #expect(decodedLegacy.attributedAirTempF == nil)
+        #expect(decodedLegacy.attributedDewPointF == nil)
+        #expect(decodedLegacy.attributedWindMph == nil)
+        #expect(decodedLegacy.attributedTidePhase == nil)
+
+        try log.add(CatchEntry(species: .crappie, bait: "jig"), photo: nil, now: now)
+        let reloaded = CatchLog(directory: dir)
+        let preserved = try #require(reloaded.entries.first { $0.id == legacy.id })
+        #expect(preserved.pressureTendency == legacy.pressureTendency)
+        #expect(preserved.moonPhase == legacy.moonPhase)
+        #expect(preserved.airTempF == legacy.airTempF)
+        #expect(preserved.dewPointF == legacy.dewPointF)
+        #expect(preserved.windMph == legacy.windMph)
+        #expect(preserved.tidePhase == legacy.tidePhase)
+
+        let storedData = try Data(contentsOf: reloaded.storagePaths.metadataURL)
+        let storedObjects = try #require(
+            JSONSerialization.jsonObject(with: storedData) as? [[String: Any]]
+        )
+        let legacyObject = try #require(storedObjects.first {
+            ($0["id"] as? String)?.lowercased() == legacy.id.uuidString.lowercased()
+        })
+        #expect(legacyObject["conditionSource"] == nil)
+        #expect(legacyObject["pressureTendency"] as? String == "Falling")
+        #expect(legacyObject["moonPhase"] as? String == "Full Moon")
+        #expect(legacyObject["airTempF"] as? Double == 78)
+        #expect(legacyObject["dewPointF"] as? Double == 69)
+        #expect(legacyObject["windMph"] as? Double == 8)
+        #expect(legacyObject["tidePhase"] as? String == "Rising")
+    }
+
+    @Test("Catch provenance is minted only from an unexpired attributed NWS snapshot")
+    func catchSourceRequiresLiveAttributedNWSProvenance() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let expiresAt = now.addingTimeInterval(900)
+        let nws = WeatherProvenance(
+            source: .nws,
+            fetchedAt: now.addingTimeInterval(-60),
+            isFallback: true,
+            attribution: "National Weather Service",
+            providerAttribution: .nationalWeatherService,
+            expiresAt: expiresAt
+        )
+        let apple = WeatherProvenance(
+            source: .weatherKit,
+            fetchedAt: now.addingTimeInterval(-60),
+            isFallback: false,
+            attribution: "Apple Weather",
+            providerAttribution: WeatherProviderAttribution(
+                providerKind: .appleWeather,
+                serviceName: "Apple Weather",
+                legalPageURL: URL(string: "https://weatherkit.apple.com/legal-attribution.html")!,
+                combinedMarkLightURL: URL(string: "https://example.com/light.png"),
+                combinedMarkDarkURL: URL(string: "https://example.com/dark.png"),
+                legalText: nil
+            ),
+            expiresAt: expiresAt
+        )
+
+        let source = CatchConditionSource(
+            weatherProvenance: nws,
+            at: now
+        )
+        #expect(source == CatchConditionSource(
+            providerKind: .nationalWeatherService,
+            expiresAt: expiresAt
+        ))
+        #expect(source?.isEligibleForNewPersistence(at: now) == true)
+        #expect(source?.isEligibleForNewPersistence(at: expiresAt) == false)
+        #expect(source?.isDurablyAttributable == true)
+        #expect(CatchConditionSource(weatherProvenance: nws, at: expiresAt) == nil)
+        #expect(CatchConditionSource(weatherProvenance: apple, at: now) == nil)
+    }
+
+    @Test("Only unexpired NWS condition snapshots survive a new catch transaction")
+    func newCatchConditionPersistenceRequiresValidNWSSource() throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let future = now.addingTimeInterval(900)
+        let values = CatchEntry(
+            species: .redfish,
+            bait: "paddletail",
+            pressureTendency: "Steady",
+            moonPhase: "New Moon",
+            airTempF: 81,
+            dewPointF: 73,
+            windMph: 11
+        )
+
+        let cases: [(WeatherProviderKind?, Date?, Bool)] = [
+            (.nationalWeatherService, future, true),
+            (.nationalWeatherService, now, false),
+            (
+                .nationalWeatherService,
+                Date(timeIntervalSinceReferenceDate: .infinity),
+                false
+            ),
+            (.appleWeather, future, false),
+            (nil, nil, false),
+        ]
+
+        for (providerKind, expiresAt, shouldPersist) in cases {
+            let dir = try makeTempDirectory()
+            let log = CatchLog(directory: dir)
+            var entry = values
+            if let providerKind, let expiresAt {
+                entry.conditionSource = CatchConditionSource(
+                    providerKind: providerKind,
+                    expiresAt: expiresAt
+                )
+            }
+            if shouldPersist {
+                entry.astronomySource = CatchAstronomySource()
+            }
+
+            try log.add(entry, photo: nil, now: now)
+            let saved = try #require(CatchLog(directory: dir).entries.first)
+
+            if shouldPersist {
+                #expect(saved.conditionSource?.providerKind == .nationalWeatherService)
+                #expect(saved.conditionSource?.expiresAt == future)
+                #expect(saved.attributedPressureTendency == "Steady")
+                #expect(saved.attributedMoonPhase == "New Moon")
+                #expect(saved.astronomySource == CatchAstronomySource())
+                #expect(saved.attributedAirTempF == 81)
+                #expect(saved.attributedDewPointF == 73)
+                #expect(saved.attributedWindMph == 11)
+                // Provider expiry gates capture, not durable historical use.
+                #expect(saved.conditionSource?.isEligibleForNewPersistence(
+                    at: future
+                ) == false)
+                #expect(saved.attributedPressureTendency == "Steady")
+            } else {
+                #expect(saved.conditionSource == nil)
+                #expect(saved.pressureTendency == nil)
+                #expect(saved.moonPhase == nil)
+                #expect(saved.airTempF == nil)
+                #expect(saved.dewPointF == nil)
+                #expect(saved.windMph == nil)
+            }
+        }
+    }
+
+    @Test("NOAA tide provenance is durable and never implied to be NWS")
+    func noaaTideSourceIsIndependent() throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let directory = try makeTempDirectory()
+        let log = CatchLog(directory: directory)
+        let tideSource = CatchTideSource(stationID: "8720218")
+        let entry = CatchEntry(
+            species: .redfish,
+            bait: "paddletail",
+            tidePhase: "Falling",
+            tideSource: tideSource
+        )
+
+        try log.add(entry, photo: nil, now: now)
+        let saved = try #require(CatchLog(directory: directory).entries.first)
+
+        #expect(saved.conditionSource == nil)
+        #expect(saved.tideSource == tideSource)
+        #expect(saved.attributedTidePhase == "Falling")
+
+        let untrusted = CatchLog(directory: try makeTempDirectory())
+        try untrusted.add(CatchEntry(
+            species: .redfish,
+            bait: "shrimp",
+            tidePhase: "Rising"
+        ), photo: nil, now: now)
+        #expect(untrusted.entries.first?.tidePhase == nil)
+        #expect(untrusted.entries.first?.attributedTidePhase == nil)
+    }
+
+    @Test("On-device moon provenance is separate from NWS weather")
+    func onDeviceAstronomySourceIsIndependent() throws {
+        let directory = try makeTempDirectory()
+        let log = CatchLog(directory: directory)
+        let entry = CatchEntry(
+            species: .bass,
+            bait: "worm",
+            moonPhase: "First Quarter",
+            astronomySource: CatchAstronomySource()
+        )
+
+        try log.add(entry, photo: nil, now: .now)
+        let saved = try #require(log.entries.first)
+        #expect(saved.conditionSource == nil)
+        #expect(saved.astronomySource == CatchAstronomySource())
+        #expect(saved.attributedMoonPhase == "First Quarter")
+    }
+
     @Test
     func corruptFileIsBackedUpBeforeAnythingOverwritesIt() throws {
         let dir = try makeTempDirectory()

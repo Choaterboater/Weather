@@ -1,7 +1,7 @@
 import Foundation
 
 /// A single scheduled bite-window notification, derived from the week outlook.
-struct BiteAlert: Identifiable, Equatable {
+struct BiteAlert: Identifiable, Equatable, Sendable {
     /// Stable per window (its start time) so re-planning replaces rather than
     /// duplicates a pending notification.
     let id: String
@@ -15,7 +15,7 @@ struct BiteAlert: Identifiable, Equatable {
 
 /// User controls for smart bite alerts. Defaults are conservative: opt-in, only
 /// strong windows, a useful head start, and a small daily/weekly cap.
-struct AlertPreferences: Equatable, Codable {
+struct AlertPreferences: Equatable, Codable, Sendable {
     var enabled: Bool = false
     /// Only windows scoring at least this alert.
     var minScore: Int = 70

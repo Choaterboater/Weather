@@ -22,6 +22,10 @@ struct WeatherDashboardView: View {
         return weather.hasData(for: activeLocation)
     }
 
+    private var displaySnapshot: WeatherSnapshot? {
+        hasLiveWeather ? weather.snapshot : nil
+    }
+
     var body: some View {
         ScrollView {
             GlassCardStack(spacing: 20) {
@@ -39,6 +43,10 @@ struct WeatherDashboardView: View {
                     ErrorStateView(error: error)
                         .padding(.top, 80)
                 } else if hasLiveWeather, let snapshot = weather.snapshot {
+                    if let attribution = snapshot.provenance.providerAttribution {
+                        WeatherSourceAttributionView(attribution: attribution)
+                    }
+                    ForecastSafetyNotice()
                     if !snapshot.alerts.isEmpty {
                         WeatherAlertsView(alerts: snapshot.alerts)
                     }
@@ -74,8 +82,8 @@ struct WeatherDashboardView: View {
         }
         .background(
             WeatherTheme.skyBackdrop(
-                conditionText: weather.snapshot?.current.conditionText,
-                symbolName: weather.snapshot?.current.symbolName
+                conditionText: displaySnapshot?.current.conditionText,
+                symbolName: displaySnapshot?.current.symbolName
             )
         )
     }

@@ -65,7 +65,9 @@ struct BiteTimeSourcePresentation: Equatable, Sendable {
         switch provenance.source {
         case .weatherKit:
             title = provenance.isFallback ? "Apple Weather fallback" : "Apple Weather"
-            symbolName = "apple.logo"
+            // Provider branding is rendered separately from WeatherKit's
+            // supplied combined-mark URL.
+            symbolName = "cloud.sun"
         case .nws:
             title = provenance.isFallback
                 ? "National Weather Service fallback"
@@ -551,6 +553,12 @@ struct BiteTimeView: View {
     private func loadedContent(_ snapshot: WeatherSnapshot) -> some View {
         let capturedNow = now
 
+        if let attribution = snapshot.provenance.providerAttribution {
+            WeatherSourceAttributionView(attribution: attribution)
+            ModifiedWeatherDataNotice(attribution: attribution)
+        }
+        ForecastSafetyNotice()
+
         if !snapshot.alerts.isEmpty {
             WeatherAlertsView(alerts: snapshot.alerts)
         }
@@ -573,7 +581,8 @@ struct BiteTimeView: View {
         BestBaitTodayView(
             context: bestBaitContext,
             species: species,
-            engine: engine
+            engine: engine,
+            provenance: snapshot.provenance
         )
 
         sourceStatus(snapshot.provenance)
@@ -647,27 +656,37 @@ struct BiteTimeView: View {
             timeZone: forecastTimeZone,
             locale: .current
         )
-        return HStack(alignment: .top, spacing: 10) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 10))
+        return layout {
             Image(systemName: source.symbolName)
+                .font(.system(size: 16, weight: .semibold))
+                .imageScale(.medium)
                 .foregroundStyle(provenance.source == .cache ? Ink.brass : Ink.tide)
-                .frame(width: 22)
+                .frame(width: 22, height: 22)
+                .clipped()
             VStack(alignment: .leading, spacing: 2) {
                 Text(source.title)
                     .font(.system(.callout, design: .rounded, weight: .semibold))
                     .foregroundStyle(Ink.chart)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(weather.isLoading ? "Updating…" : source.freshness)
                     .font(.system(.caption, design: .rounded, weight: .medium))
                     .foregroundStyle(Ink.chartDim)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let detail = source.detail {
                     Text(detail)
                         .font(.system(.caption, design: .rounded, weight: .medium))
                         .foregroundStyle(Ink.chartDim)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Spacer(minLength: 0)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
             if weather.isLoading { ProgressView().controlSize(.small) }
         }
-        .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(source.title)
         .accessibilityValue(
@@ -980,6 +999,7 @@ struct BiteTimeView: View {
     private var fishingDetailLink: some View {
         if let conditions,
            let selectedPoint,
+           let snapshot = matchingSnapshot,
            let reference = FishingDetailReference(
                forecastPoint: selectedPoint,
                forecastTimeZone: forecastTimeZone
@@ -989,6 +1009,7 @@ struct BiteTimeView: View {
                     species: species,
                     reference: reference,
                     conditions: conditions,
+                    provenance: snapshot.provenance,
                     tide: showsTides ? selectedTideState : nil,
                     activeLocation: activeLocation,
                     hourlySamples: matchingSnapshot?.hourly.samples(

@@ -28,7 +28,7 @@ struct WeatherSnapshotsTests {
             EnvelopeHeader.self,
             from: Data(contentsOf: file)
         )
-        #expect(header.version == 1)
+        #expect(header.version == 2)
     }
 
     @Test func nearbyCoordinatesLoadTheMatchingGeoTile() async throws {
@@ -86,7 +86,7 @@ struct WeatherSnapshotsTests {
         #expect(loaded == existing)
     }
 
-    @Test("A future existing snapshot is quarantined after clock correction")
+    @Test("A future existing snapshot is purged after clock correction")
     func futureExistingSnapshotIsReplaceableAfterClockCorrection() async throws {
         let directory = tempDirectory()
         let correctedNow = Date(timeIntervalSince1970: 1_800_000_000)
@@ -109,15 +109,8 @@ struct WeatherSnapshotsTests {
         let loaded = await cache.load(
             for: CLLocation(latitude: 30.2938, longitude: -86.0049)
         )
-        let backups = try invalidBackups(in: directory)
         #expect(loaded == corrected)
-        #expect(backups.count == 1)
-        let backup = try #require(backups.first)
-        let quarantined = try JSONDecoder().decode(
-            SnapshotEnvelope.self,
-            from: Data(contentsOf: backup)
-        )
-        #expect(quarantined.snapshot == future)
+        #expect(try invalidBackups(in: directory).isEmpty)
     }
 
     @Test("A valid newer existing snapshot still wins over an older save")
@@ -188,7 +181,7 @@ struct WeatherSnapshotsTests {
         #expect(loaded == nil)
     }
 
-    @Test func corruptEnvelopeIsBackedUpBeforeReturningNil() async throws {
+    @Test func corruptEnvelopeIsDeletedBeforeReturningNil() async throws {
         let directory = tempDirectory()
         try FileManager.default.createDirectory(
             at: directory,
@@ -204,16 +197,13 @@ struct WeatherSnapshotsTests {
 
         #expect(loaded == nil)
         #expect(!FileManager.default.fileExists(atPath: file.path))
-        let backups = try FileManager.default.contentsOfDirectory(
+        #expect(try FileManager.default.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: nil
-        ).filter { $0.lastPathComponent.hasPrefix("303,-860.invalid-") }
-        #expect(backups.count == 1)
-        let backup = try #require(backups.first)
-        #expect(try Data(contentsOf: backup) == Data("not-json".utf8))
+        ).isEmpty)
     }
 
-    @Test func unknownEnvelopeVersionIsBackedUpBeforeReturningNil() async throws {
+    @Test func unknownEnvelopeVersionIsDeletedBeforeReturningNil() async throws {
         let directory = tempDirectory()
         try FileManager.default.createDirectory(
             at: directory,
@@ -230,16 +220,48 @@ struct WeatherSnapshotsTests {
 
         #expect(loaded == nil)
         #expect(!FileManager.default.fileExists(atPath: file.path))
-        let backups = try FileManager.default.contentsOfDirectory(
+        #expect(try FileManager.default.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: nil
-        ).filter { $0.lastPathComponent.hasPrefix("303,-860.invalid-") }
-        #expect(backups.count == 1)
-        let backup = try #require(backups.first)
-        #expect(try Data(contentsOf: backup) == unknown)
+        ).isEmpty)
     }
 
-    @Test func savingOverCorruptFileBacksItUpBeforeWritingSnapshot() async throws {
+    @Test("Cache sweep removes every unexpected non-hidden child")
+    func unexpectedCacheEntriesArePurged() async throws {
+        let directory = tempDirectory()
+        let cache = WeatherSnapshots(directory: directory)
+        let snapshot = makeSnapshot(source: .nws)
+        try await cache.save(snapshot)
+
+        let strayFile = directory.appendingPathComponent("notes.tmp")
+        let strayDirectory = directory.appendingPathComponent(
+            "old-provider",
+            isDirectory: true
+        )
+        try Data("unexpected".utf8).write(to: strayFile)
+        try FileManager.default.createDirectory(
+            at: strayDirectory,
+            withIntermediateDirectories: true
+        )
+        try Data("nested".utf8).write(
+            to: strayDirectory.appendingPathComponent("snapshot.bin")
+        )
+
+        let loaded = await cache.load(
+            for: CLLocation(latitude: 30.2938, longitude: -86.0049)
+        )
+
+        #expect(loaded == snapshot)
+        #expect(!FileManager.default.fileExists(atPath: strayFile.path))
+        #expect(!FileManager.default.fileExists(atPath: strayDirectory.path))
+        let remaining = try FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        )
+        #expect(remaining.map(\.lastPathComponent) == ["303,-860.json"])
+    }
+
+    @Test func savingOverCorruptFileDeletesItBeforeWritingSnapshot() async throws {
         let directory = tempDirectory()
         try FileManager.default.createDirectory(
             at: directory,
@@ -256,14 +278,11 @@ struct WeatherSnapshotsTests {
         let loaded = await cache.load(
             for: CLLocation(latitude: 30.2938, longitude: -86.0049)
         )
-        let backups = try invalidBackups(in: directory)
         #expect(loaded == snapshot)
-        #expect(backups.count == 1)
-        let backup = try #require(backups.first)
-        #expect(try Data(contentsOf: backup) == corrupt)
+        #expect(try invalidBackups(in: directory).isEmpty)
     }
 
-    @Test func savingOverUnknownVersionBacksItUpBeforeWritingSnapshot() async throws {
+    @Test func savingOverUnknownVersionDeletesItBeforeWritingSnapshot() async throws {
         let directory = tempDirectory()
         try FileManager.default.createDirectory(
             at: directory,
@@ -280,14 +299,11 @@ struct WeatherSnapshotsTests {
         let loaded = await cache.load(
             for: CLLocation(latitude: 30.2938, longitude: -86.0049)
         )
-        let backups = try invalidBackups(in: directory)
         #expect(loaded == snapshot)
-        #expect(backups.count == 1)
-        let backup = try #require(backups.first)
-        #expect(try Data(contentsOf: backup) == unknown)
+        #expect(try invalidBackups(in: directory).isEmpty)
     }
 
-    @Test func backupFailureThrowsWithoutOverwritingPriorBytes() async throws {
+    @Test func purgeFailureThrowsWithoutOverwritingPriorBytes() async throws {
         let directory = tempDirectory()
         try FileManager.default.createDirectory(
             at: directory,
@@ -298,15 +314,145 @@ struct WeatherSnapshotsTests {
         try corrupt.write(to: file)
         let cache = WeatherSnapshots(
             directory: directory,
-            fileManager: MoveFailingFileManager()
+            fileManager: RemoveFailingFileManager()
         )
 
-        await #expect(throws: MoveFailingFileManager.Failure.self) {
+        await #expect(throws: RemoveFailingFileManager.Failure.self) {
             try await cache.save(makeSnapshot(source: .nws))
         }
 
         #expect(try Data(contentsOf: file) == corrupt)
         #expect(try invalidBackups(in: directory).isEmpty)
+    }
+
+    @Test("Expired disk snapshots are deleted and never returned")
+    func expiredDiskSnapshotIsRejectedAndPurged() async throws {
+        let directory = tempDirectory()
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let snapshot = makeSnapshot(
+            source: .weatherKit,
+            fetchedAt: now.addingTimeInterval(-3_600),
+            expiresAt: now.addingTimeInterval(-1),
+            providerAttribution: .appleFixture
+        )
+        try writeEnvelope(snapshot, to: directory)
+        let cache = WeatherSnapshots(directory: directory, now: { now })
+
+        let loaded = await cache.load(
+            for: CLLocation(latitude: 30.2938, longitude: -86.0049)
+        )
+
+        #expect(loaded == nil)
+        #expect(!FileManager.default.fileExists(
+            atPath: directory.appendingPathComponent("303,-860.json").path
+        ))
+        #expect(try invalidBackups(in: directory).isEmpty)
+    }
+
+    @Test("Legacy Application Support weather cache is removed without recovery files")
+    func legacyDirectoryIsPurged() async throws {
+        let directory = tempDirectory().appendingPathComponent("new", isDirectory: true)
+        let legacy = tempDirectory().appendingPathComponent("legacy", isDirectory: true)
+        try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
+        try Data("legacy-weather".utf8).write(
+            to: legacy.appendingPathComponent("303,-860.json")
+        )
+
+        let cache = WeatherSnapshots(directory: directory, legacyDirectory: legacy)
+        _ = await cache.load(for: CLLocation(latitude: 30.2938, longitude: -86.0049))
+
+        #expect(!FileManager.default.fileExists(atPath: legacy.path))
+        #expect(!FileManager.default.fileExists(
+            atPath: legacy.deletingLastPathComponent()
+                .appendingPathComponent("legacy.invalid.json").path
+        ))
+    }
+
+    @Test("Default weather cache uses Caches and is excluded from device backup")
+    func defaultPathAndBackupExclusion() async throws {
+        let defaultDirectory = WeatherSnapshots.defaultDirectory()
+        #expect(defaultDirectory.path.contains("/Library/Caches/"))
+        #expect(defaultDirectory.path.hasSuffix("/BiteCast/WeatherSnapshots"))
+
+        let directory = tempDirectory()
+        let cache = WeatherSnapshots(directory: directory)
+        try await cache.save(makeSnapshot(source: .nws))
+
+        let values = try directory.resourceValues(forKeys: [.isExcludedFromBackupKey])
+        #expect(values.isExcludedFromBackup == true)
+    }
+
+    @Test("Cached Apple data retains required marks only until provider expiry")
+    func cachedAppleAttributionRetainedBeforeExpiry() async throws {
+        let fetchedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let expiresAt = fetchedAt.addingTimeInterval(30 * 60)
+        let cache = WeatherSnapshots(
+            directory: tempDirectory(),
+            now: { fetchedAt }
+        )
+        let original = makeSnapshot(
+            source: .weatherKit,
+            fetchedAt: fetchedAt,
+            expiresAt: expiresAt,
+            providerAttribution: .appleFixture
+        )
+        try await cache.save(original)
+
+        let cached = try await CachedWeatherProvider(
+            cache: cache,
+            now: { expiresAt.addingTimeInterval(-1) }
+        ).forecast(for: CLLocation(latitude: 30.2938, longitude: -86.0049))
+
+        #expect(cached.provenance.source == .cache)
+        #expect(cached.provenance.providerAttribution == .appleFixture)
+        #expect(cached.provenance.expiresAt == expiresAt)
+    }
+
+    @Test("Cached Apple data without usable combined marks fails closed")
+    func cachedAppleWithoutMarksIsRejected() async throws {
+        let fetchedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let directory = tempDirectory()
+        let cache = WeatherSnapshots(directory: directory, now: { fetchedAt })
+        let original = makeSnapshot(
+            source: .weatherKit,
+            fetchedAt: fetchedAt,
+            expiresAt: fetchedAt.addingTimeInterval(30 * 60),
+            providerAttribution: .appleWithoutMarks,
+            overridesDefaultAttribution: true
+        )
+        try writeEnvelope(original, to: directory)
+
+        await #expect(throws: WeatherProviderError.serviceUnavailable) {
+            _ = try await CachedWeatherProvider(
+                cache: cache,
+                now: { fetchedAt.addingTimeInterval(60) }
+            ).forecast(for: CLLocation(latitude: 30.2938, longitude: -86.0049))
+        }
+    }
+
+    @Test("Cached WeatherKit data rejects missing or mismatched provider identity")
+    func cachedWeatherKitProviderIdentityMustMatch() async throws {
+        let fetchedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let location = CLLocation(latitude: 30.2938, longitude: -86.0049)
+
+        for attribution in [nil, WeatherProviderAttribution.nationalWeatherService] {
+            let directory = tempDirectory()
+            let cache = WeatherSnapshots(directory: directory, now: { fetchedAt })
+            try writeEnvelope(makeSnapshot(
+                source: .weatherKit,
+                fetchedAt: fetchedAt,
+                expiresAt: fetchedAt.addingTimeInterval(30 * 60),
+                providerAttribution: attribution,
+                overridesDefaultAttribution: true
+            ), to: directory)
+
+            await #expect(throws: WeatherProviderError.serviceUnavailable) {
+                _ = try await CachedWeatherProvider(
+                    cache: cache,
+                    now: { fetchedAt.addingTimeInterval(60) }
+                ).forecast(for: location)
+            }
+        }
     }
 
     @Test func cachedProviderMarksOriginalSnapshotAsCachedFallback() async throws {
@@ -331,7 +477,9 @@ struct WeatherSnapshotsTests {
             source: .cache,
             fetchedAt: original.provenance.fetchedAt,
             isFallback: true,
-            attribution: "Cached from National Weather Service"
+            attribution: "Cached from National Weather Service",
+            providerAttribution: original.provenance.providerAttribution,
+            expiresAt: original.provenance.expiresAt
         ))
     }
 
@@ -416,19 +564,33 @@ struct WeatherSnapshotsTests {
             withIntermediateDirectories: true
         )
         let file = directory.appendingPathComponent("303,-860.json")
-        let envelope = SnapshotEnvelope(version: 1, snapshot: snapshot)
+        let envelope = SnapshotEnvelope(version: 2, snapshot: snapshot)
         try JSONEncoder().encode(envelope).write(to: file, options: .atomic)
     }
 
     private func makeSnapshot(
         source: WeatherSource,
-        fetchedAt date: Date = Date(timeIntervalSince1970: 1_700_000_000)
+        fetchedAt date: Date = Date(timeIntervalSince1970: 1_700_000_000),
+        expiresAt: Date = .distantFuture,
+        providerAttribution: WeatherProviderAttribution? = nil,
+        overridesDefaultAttribution: Bool = false
     ) -> WeatherSnapshot {
         let wind = WindSnapshot(
             directionDegrees: 225,
             speedMetersPerSecond: 4.5,
             gustMetersPerSecond: 7
         )
+        let resolvedAttribution: WeatherProviderAttribution? = if overridesDefaultAttribution {
+            providerAttribution
+        } else if let providerAttribution {
+            providerAttribution
+        } else {
+            switch source {
+            case .weatherKit: .appleFixture
+            case .nws: .nationalWeatherService
+            case .cache: nil
+            }
+        }
         return WeatherSnapshot(
             coordinate: WeatherCoordinate(latitude: 30.2938, longitude: -86.0049),
             timeZoneIdentifier: "America/Chicago",
@@ -492,20 +654,48 @@ struct WeatherSnapshotsTests {
                 source: source,
                 fetchedAt: date,
                 isFallback: false,
-                attribution: source == .nws ? "National Weather Service" : nil
+                attribution: source == .nws ? "National Weather Service" : nil,
+                providerAttribution: resolvedAttribution,
+                expiresAt: expiresAt
             )
         )
     }
 }
 
-private final class MoveFailingFileManager: FileManager, @unchecked Sendable {
+private final class RemoveFailingFileManager: FileManager, @unchecked Sendable {
     enum Failure: Error {
         case refused
     }
 
-    override func moveItem(at srcURL: URL, to dstURL: URL) throws {
+    override func removeItem(at URL: URL) throws {
         throw Failure.refused
     }
+}
+
+private extension WeatherProviderAttribution {
+    static let markData = Data(base64Encoded:
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9WQAAAABJRU5ErkJggg=="
+    )!
+
+    static let appleFixture = Self(
+        providerKind: .appleWeather,
+        serviceName: "Apple Weather",
+        legalPageURL: URL(string: "https://weatherkit.apple.com/legal-attribution.html")!,
+        combinedMarkLightURL: URL(string: "https://weatherkit.apple.com/assets/light.png")!,
+        combinedMarkDarkURL: URL(string: "https://weatherkit.apple.com/assets/dark.png")!,
+        legalText: "Weather data sources and legal attribution",
+        combinedMarkLightData: markData,
+        combinedMarkDarkData: markData
+    )
+
+    static let appleWithoutMarks = Self(
+        providerKind: .appleWeather,
+        serviceName: "Apple Weather",
+        legalPageURL: URL(string: "https://weatherkit.apple.com/legal-attribution.html")!,
+        combinedMarkLightURL: URL(string: "https://weatherkit.apple.com/assets/light.png")!,
+        combinedMarkDarkURL: URL(string: "https://weatherkit.apple.com/assets/dark.png")!,
+        legalText: "Weather data sources and legal attribution"
+    )
 }
 
 private actor CacheSaveGate {

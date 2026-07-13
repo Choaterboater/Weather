@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UIKit
 @testable import BiteCast
 
 @Suite("BiteTime presentation")
@@ -52,6 +53,114 @@ struct BiteTimePresentationTests {
         #expect(cache.freshness == "Cached 2 hr ago")
         #expect(cache.detail == "Cached from National Weather Service")
         #expect(!cache.title.localizedCaseInsensitiveContains("live"))
+    }
+
+    @Test("Source attribution exposes the provider mark and accessible legal destination")
+    func sourceAttributionAccessibilityContract() throws {
+        let apple = WeatherProviderAttribution(
+            providerKind: .appleWeather,
+            serviceName: "Apple Weather",
+            legalPageURL: URL(string: "https://weatherkit.apple.com/legal-attribution.html")!,
+            combinedMarkLightURL: URL(string: "https://weatherkit.apple.com/assets/light.png")!,
+            combinedMarkDarkURL: URL(string: "https://weatherkit.apple.com/assets/dark.png")!,
+            legalText: "Weather data sources and legal attribution"
+        )
+        let presentation = WeatherSourceAttributionPresentation.make(apple)
+
+        #expect(presentation?.serviceName == "Apple Weather")
+        #expect(presentation?.legalLinkLabel == "Apple Weather legal attribution")
+        #expect(presentation?.accessibilityLabel == "Weather source, Apple Weather")
+        #expect(presentation?.lightMarkURL == apple.combinedMarkLightURL)
+        #expect(presentation?.darkMarkURL == apple.combinedMarkDarkURL)
+
+        let nws = try #require(WeatherSourceAttributionPresentation.make(.nationalWeatherService))
+        #expect(nws.legalLinkLabel == "National Weather Service source")
+        #expect(nws.accessibilityLabel == "Weather source, National Weather Service")
+        #expect(nws.lightMarkURL == nil)
+        #expect(nws.darkMarkURL == nil)
+    }
+
+    @Test("Source attribution never presents an insecure legal destination")
+    func sourceAttributionRequiresHTTPS() {
+        let insecure = WeatherProviderAttribution(
+            providerKind: .nationalWeatherService,
+            serviceName: "National Weather Service",
+            legalPageURL: URL(string: "http://weather.gov/")!,
+            combinedMarkLightURL: nil,
+            combinedMarkDarkURL: nil,
+            legalText: "Weather data provided by the National Weather Service."
+        )
+
+        #expect(WeatherSourceAttributionPresentation.make(insecure) == nil)
+    }
+
+    @MainActor
+    @Test("Dark preview uses the provider's visible white combined mark")
+    func previewAppleMarksMatchAppearanceContrast() throws {
+        let attribution = DebugWeatherFixtureAttribution.apple
+        let lightData = try #require(attribution.combinedMarkLightData)
+        let darkData = try #require(attribution.combinedMarkDarkData)
+
+        #expect(attribution.combinedMarkLightURL?.lastPathComponent.contains("blk") == true)
+        #expect(attribution.combinedMarkDarkURL?.lastPathComponent.contains("wht") == true)
+        #expect(try #require(opaqueLuminance(lightData)) < 0.25)
+        #expect(try #require(opaqueLuminance(darkData)) > 0.75)
+    }
+
+    @Test("Fishing forecast safety copy is informational and rejects life-safety claims")
+    func safetyNoticeContract() {
+        #expect(ForecastSafetyNoticeContent.title == "Forecast guidance only")
+        #expect(ForecastSafetyNoticeContent.message.localizedCaseInsensitiveContains("informational"))
+        #expect(ForecastSafetyNoticeContent.message.localizedCaseInsensitiveContains("official alerts"))
+        #expect(!ForecastSafetyNoticeContent.message.localizedCaseInsensitiveContains("safe to navigate"))
+        #expect(!ForecastSafetyNoticeContent.message.localizedCaseInsensitiveContains("emergency service"))
+    }
+
+    @Test("Apple value-added fishing guidance discloses that provider data was modified")
+    func appleDerivedDataNoticeContract() {
+        #expect(ModifiedWeatherDataNoticeContent.isRequired(
+            for: DebugWeatherFixtureAttribution.apple
+        ))
+        #expect(!ModifiedWeatherDataNoticeContent.isRequired(
+            for: .nationalWeatherService
+        ))
+        #expect(
+            ModifiedWeatherDataNoticeContent.message
+                .localizedCaseInsensitiveContains("modified")
+        )
+        #expect(
+            ModifiedWeatherDataNoticeContent.message
+                .localizedCaseInsensitiveContains("Apple Weather")
+        )
+    }
+
+    @Test("Derived forecast screens stop displaying at the exact provider expiry")
+    func derivedContentExpiryBoundary() {
+        let provenance = WeatherProvenance(
+            source: .nws,
+            fetchedAt: now,
+            isFallback: true,
+            attribution: "National Weather Service",
+            providerAttribution: .nationalWeatherService,
+            expiresAt: now.addingTimeInterval(30)
+        )
+
+        #expect(WeatherDerivedContentPolicy.canDisplay(
+            provenance,
+            at: now.addingTimeInterval(29)
+        ))
+        #expect(!WeatherDerivedContentPolicy.canDisplay(
+            provenance,
+            at: provenance.expiresAt
+        ))
+        #expect(WeatherDerivedContentPolicy.secondsUntilExpiry(
+            provenance,
+            at: now
+        ) == 30)
+        #expect(WeatherDerivedContentPolicy.secondsUntilExpiry(
+            provenance,
+            at: provenance.expiresAt
+        ) == nil)
     }
 
     @Test("Old source timestamps use the forecast time zone and locale")
@@ -339,5 +448,43 @@ struct BiteTimePresentationTests {
 
         #expect(state.selectedDate == dates[0])
         #expect(state.feedbackGeneration == 1)
+    }
+
+    private func opaqueLuminance(_ data: Data) -> Double? {
+        guard let cgImage = UIImage(data: data)?.cgImage else { return nil }
+        let width = cgImage.width
+        let height = cgImage.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let didDraw = pixels.withUnsafeMutableBytes { bytes -> Bool in
+            guard let context = CGContext(
+                data: bytes.baseAddress,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                    | CGBitmapInfo.byteOrder32Big.rawValue
+            ) else { return false }
+            context.draw(
+                cgImage,
+                in: CGRect(x: 0, y: 0, width: width, height: height)
+            )
+            return true
+        }
+        guard didDraw else { return nil }
+
+        var total = 0.0
+        var opaquePixelCount = 0
+        for index in stride(from: 0, to: pixels.count, by: 4) {
+            guard pixels[index + 3] >= 64 else { continue }
+            let red = Double(pixels[index]) / 255
+            let green = Double(pixels[index + 1]) / 255
+            let blue = Double(pixels[index + 2]) / 255
+            total += 0.2126 * red + 0.7152 * green + 0.0722 * blue
+            opaquePixelCount += 1
+        }
+        guard opaquePixelCount > 0 else { return nil }
+        return total / Double(opaquePixelCount)
     }
 }

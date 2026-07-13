@@ -35,7 +35,10 @@ struct PersonalInsights {
 }
 
 enum PersonalInsightsBuilder {
-    static func build(from catches: [CatchEntry], species: Species) -> PersonalInsights? {
+    static func build(
+        from catches: [CatchEntry],
+        species: Species
+    ) -> PersonalInsights? {
         let sample = PersonalScoreModel.informingSample(catches, species: species)
         guard !sample.isEmpty else { return nil }
 
@@ -80,22 +83,30 @@ enum PersonalInsightsBuilder {
             .map { PersonalInsights.BaitCount(bait: $0.display, count: $0.count) }
     }
 
-    private static func conditions(in sample: [CatchEntry]) -> [PersonalInsights.ConditionStat] {
+    private static func conditions(
+        in sample: [CatchEntry]
+    ) -> [PersonalInsights.ConditionStat] {
         var stats: [PersonalInsights.ConditionStat] = []
         let total = sample.count
 
-        if let (label, n) = topCount(sample.compactMap(\.pressureTendency)) {
+        if let (label, n) = topCount(sample.compactMap {
+            $0.attributedPressureTendency
+        }) {
             stats.append(.init(icon: "barometer", label: "\(label) pressure",
                                detail: "\(n) of \(total) catches"))
         }
-        if let (label, n) = topCount(sample.compactMap(\.tidePhase)) {
+        if let (label, n) = topCount(sample.compactMap {
+            $0.attributedTidePhase
+        }) {
             stats.append(.init(icon: "water.waves", label: "\(label) tide",
                                detail: "\(n) of \(total) catches"))
         }
         if let (label, n) = topCount(sample.map { timeOfDay(for: $0.date) }) {
             stats.append(.init(icon: "clock", label: label, detail: "\(n) of \(total) catches"))
         }
-        if let (label, n) = topCount(sample.compactMap(\.moonPhase)) {
+        if let (label, n) = topCount(sample.compactMap {
+            $0.attributedMoonPhase
+        }) {
             stats.append(.init(icon: "moon.stars", label: label, detail: "\(n) of \(total) catches"))
         }
         return stats

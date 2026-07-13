@@ -21,9 +21,13 @@ struct TripPlannerScreen: View {
             timeZone: forecastTimeZone,
             isLoading: loader.isLoading,
             errorMessage: loader.errorMessage,
+            provenance: loader.provenance,
             onRetry: { retryID += 1 }
         )
         .task(id: taskKey) { await load() }
+        .task(id: loader.provenance?.expiresAt) {
+            await clearNotificationsAtExpiry()
+        }
     }
 
     private func load(force: Bool = false) async {
@@ -36,12 +40,51 @@ struct TripPlannerScreen: View {
                 await tides.weekTidesByDay(near: $0, calendar: calendar)
             },
             force: force
-        ), !Task.isCancelled else { return }
+        ) else {
+            if !Task.isCancelled {
+                await BiteAlertNotifier.clearAllWeatherDerivedNotifications()
+            }
+            return
+        }
+        guard !Task.isCancelled else { return }
         // Refresh scheduled bite alerts from the freshly loaded outlook. The
         // scheduler returns nothing when alerts are off, so this also clears.
-        let alerts = BiteAlertScheduler.plan(from: outlook,
-                                             preferences: alertSettings.preferences)
-        await BiteAlertNotifier.reschedule(alerts)
+        guard let provenance = loader.provenance,
+              WeatherDerivedNotificationPolicy.allows(provenance) else {
+            await BiteAlertNotifier.clearAllWeatherDerivedNotifications()
+            return
+        }
+        let alerts = BiteAlertScheduler.plan(
+            from: outlook,
+            preferences: alertSettings.preferences,
+            provenance: provenance
+        )
+        await BiteAlertNotifier.reschedule(
+            alerts,
+            provenance: provenance,
+            scopeKey: WeatherDerivedNotificationScope.key(
+                latitude: location.coordinate.latitude,
+                longitude: location.coordinate.longitude
+            )
+        )
+    }
+
+    private func clearNotificationsAtExpiry() async {
+        guard let provenance = loader.provenance else { return }
+        guard WeatherDerivedNotificationPolicy.allows(provenance),
+              let delay = WeatherDerivedContentPolicy.secondsUntilExpiry(
+                provenance
+              ) else {
+            await BiteAlertNotifier.clearAllWeatherDerivedNotifications()
+            return
+        }
+        do {
+            try await Task.sleep(for: .seconds(max(delay, 0.01)))
+        } catch {
+            return
+        }
+        guard !Task.isCancelled else { return }
+        await BiteAlertNotifier.clearAllWeatherDerivedNotifications()
     }
 
     private var taskKey: String {
@@ -114,7 +157,9 @@ struct TripPlannerView: View {
     var timeZone: TimeZone = .current
     var isLoading: Bool = false
     var errorMessage: String? = nil
+    var provenance: WeatherProvenance? = nil
     var onRetry: (() -> Void)? = nil
+    @State private var forecastExpired = false
 
     var body: some View {
         ScrollView {
@@ -125,17 +170,40 @@ struct TripPlannerView: View {
         .background(Ink.backdrop)
         .navigationTitle("Plan the Week")
         .navigationBarTitleDisplayMode(.inline)
+        .task(id: provenance?.expiresAt) {
+            await enforceExpiryBoundary()
+        }
     }
 
     @ViewBuilder
     private var content: some View {
-        if let outlook, !outlook.isEmpty {
-            GlassCardStack(spacing: 12) {
-                header(outlook)
-                ForEach(outlook.windows) { window in
-                    ScoredWindowRow(window: window, timeZone: timeZone)
+        if !canDisplayForecast {
+            ContentUnavailableView(
+                "Forecast expired",
+                systemImage: "clock.badge.exclamationmark",
+                description: Text("Return to BiteTime for refreshed conditions before planning.")
+            )
+            .padding(.top, 60)
+        } else if let outlook {
+            if !outlook.isEmpty {
+                GlassCardStack(spacing: 12) {
+                    complianceFooter
+                    header(outlook)
+                    ForEach(outlook.windows) { window in
+                        ScoredWindowRow(window: window, timeZone: timeZone)
+                    }
+                    legend
                 }
-                legend
+            } else {
+                VStack(spacing: 20) {
+                    complianceFooter
+                    ContentUnavailableView(
+                        "No strong windows this week",
+                        systemImage: "calendar.badge.clock",
+                        description: Text("Conditions look flat. Check back as the forecast firms up.")
+                    )
+                    .padding(.top, 60)
+                }
             }
         } else if isLoading {
             ProgressView("Scoring the week…")
@@ -152,13 +220,40 @@ struct TripPlannerView: View {
                 }
             }
             .padding(.top, 60)
-        } else {
-            ContentUnavailableView(
-                "No strong windows this week",
-                systemImage: "calendar.badge.clock",
-                description: Text("Conditions look flat. Check back as the forecast firms up.")
-            )
-            .padding(.top, 60)
+        }
+    }
+
+    private var canDisplayForecast: Bool {
+        guard let provenance else { return true }
+        return !forecastExpired
+            && WeatherDerivedContentPolicy.canDisplay(provenance)
+    }
+
+    @MainActor
+    private func enforceExpiryBoundary() async {
+        forecastExpired = false
+        guard let provenance else { return }
+        guard let delay = WeatherDerivedContentPolicy.secondsUntilExpiry(
+            provenance
+        ) else {
+            forecastExpired = true
+            return
+        }
+        do {
+            try await Task.sleep(for: .seconds(max(delay, 0.01)))
+        } catch {
+            return
+        }
+        guard !Task.isCancelled else { return }
+        forecastExpired = true
+    }
+
+    @ViewBuilder
+    private var complianceFooter: some View {
+        if let attribution = provenance?.providerAttribution {
+            WeatherSourceAttributionView(attribution: attribution)
+            ModifiedWeatherDataNotice(attribution: attribution)
+            ForecastSafetyNotice()
         }
     }
 

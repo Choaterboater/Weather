@@ -307,6 +307,7 @@ struct AsyncStateIdentityTests {
         #expect(store.lastProviderError?.isOffline == false)
     }
 
+    @MainActor
     @Test("Weather Details freshness changes when its minute clock advances")
     func weatherDetailsFreshnessAges() {
         let fetchedAt = Date(timeIntervalSince1970: 1_800_000_000)
@@ -436,6 +437,122 @@ struct AsyncStateIdentityTests {
     }
 
     @MainActor
+    @Test("Expired in-memory weather is removed and cannot survive a failed refresh")
+    func expiredMemoryIsRejected() async {
+        let calls = AsyncCounter()
+        let fetchedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        var currentDate = fetchedAt
+        let location = CLLocation(latitude: 30, longitude: -86)
+        let store = WeatherStore(
+            worker: { location, now in
+                await calls.increment()
+                if await calls.value > 1 {
+                    throw WeatherProviderError.serviceUnavailable
+                }
+                return Self.snapshot(
+                    latitude: location.coordinate.latitude,
+                    longitude: location.coordinate.longitude,
+                    fetchedAt: now,
+                    expiresAt: now.addingTimeInterval(30)
+                )
+            },
+            now: { currentDate }
+        )
+
+        await store.load(for: location)
+        #expect(store.hasData(for: location))
+
+        currentDate = fetchedAt.addingTimeInterval(31)
+        await store.load(for: location)
+
+        #expect(await calls.value == 2)
+        #expect(store.snapshot == nil)
+        #expect(!store.hasData(for: location))
+        #expect(store.lastProviderError == .serviceUnavailable)
+    }
+
+    @MainActor
+    @Test("An already expired provider result never enters memory or disk")
+    func alreadyExpiredWorkerResultIsRejected() async {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let writes = SnapshotRecorder()
+        let store = WeatherStore(
+            worker: { location, _ in
+                Self.snapshot(
+                    latitude: location.coordinate.latitude,
+                    longitude: location.coordinate.longitude,
+                    fetchedAt: now.addingTimeInterval(-120),
+                    expiresAt: now.addingTimeInterval(-1)
+                )
+            },
+            cacheWriter: { await writes.append($0) },
+            now: { now }
+        )
+
+        await store.load(for: CLLocation(latitude: 30, longitude: -86))
+
+        #expect(store.snapshot == nil)
+        #expect(store.lastProviderError == .serviceUnavailable)
+        #expect(await writes.sources.isEmpty)
+    }
+
+    @MainActor
+    @Test("A result that expires while loading is rejected at commit time")
+    func resultExpiringDuringLoadIsRejected() async {
+        let requestedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        var currentDate = requestedAt
+        let writes = SnapshotRecorder()
+        let store = WeatherStore(
+            worker: { location, requestDate in
+                let value = Self.snapshot(
+                    latitude: location.coordinate.latitude,
+                    longitude: location.coordinate.longitude,
+                    fetchedAt: requestDate,
+                    expiresAt: requestDate.addingTimeInterval(30)
+                )
+                await MainActor.run {
+                    currentDate = requestDate.addingTimeInterval(31)
+                }
+                return value
+            },
+            cacheWriter: { await writes.append($0) },
+            now: { currentDate }
+        )
+        let location = CLLocation(latitude: 30, longitude: -86)
+
+        await store.load(for: location)
+
+        #expect(store.snapshot == nil)
+        #expect(store.lastProviderError == .serviceUnavailable)
+        #expect(await writes.sources.isEmpty)
+    }
+
+    @MainActor
+    @Test("The store exposes the exact delay until the active forecast expires")
+    func storeExposesExpiryDelay() async {
+        let fetchedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        var currentDate = fetchedAt
+        let location = CLLocation(latitude: 30, longitude: -86)
+        let store = WeatherStore(
+            worker: { location, requestDate in
+                Self.snapshot(
+                    latitude: location.coordinate.latitude,
+                    longitude: location.coordinate.longitude,
+                    fetchedAt: requestDate,
+                    expiresAt: requestDate.addingTimeInterval(30)
+                )
+            },
+            now: { currentDate }
+        )
+
+        await store.load(for: location)
+        #expect(store.secondsUntilExpiry(for: location) == 30)
+
+        currentDate = fetchedAt.addingTimeInterval(30)
+        #expect(store.secondsUntilExpiry(for: location) == nil)
+    }
+
+    @MainActor
     @Test("A nearby cached coordinate is owned by the requested store key")
     func nearbyCachedCoordinateUsesRequestedIdentity() async {
         let persistedLocation = CLLocation(latitude: 30.2938, longitude: -86.0049)
@@ -545,6 +662,73 @@ struct AsyncStateIdentityTests {
         )
 
         #expect(await calls.value == 3)
+    }
+
+    @MainActor
+    @Test("Trip outlook and weather provenance commit and clear atomically")
+    func tripOutlookOwnsExactSnapshotProvenance() async throws {
+        let location = CLLocation(latitude: 27.7634, longitude: -82.6403)
+        let fetchedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let snapshot = Self.snapshot(
+            latitude: location.coordinate.latitude,
+            longitude: location.coordinate.longitude,
+            fetchedAt: fetchedAt
+        )
+        let loader = TripForecastLoader(
+            worker: { _, _, locationName in
+                WeekOutlook(locationName: locationName, generatedAt: .now, windows: [])
+            },
+            now: { fetchedAt }
+        )
+
+        _ = await loader.load(
+            for: location,
+            species: .bass,
+            locationName: "St. Petersburg",
+            snapshot: snapshot
+        )
+        #expect(loader.provenance == snapshot.provenance)
+
+        _ = await loader.load(
+            for: location,
+            species: .bass,
+            locationName: "St. Petersburg",
+            snapshot: nil,
+            force: true
+        )
+        #expect(loader.outlook != nil)
+        #expect(loader.provenance == nil)
+    }
+
+    @MainActor
+    @Test("Trip planning rejects a snapshot that expires while tides load")
+    func tripOutlookRejectsExpiryDuringLoad() async {
+        let fetchedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        var currentDate = fetchedAt
+        let location = CLLocation(latitude: 27.7634, longitude: -82.6403)
+        let snapshot = Self.snapshot(
+            latitude: location.coordinate.latitude,
+            longitude: location.coordinate.longitude,
+            fetchedAt: fetchedAt,
+            expiresAt: fetchedAt.addingTimeInterval(30)
+        )
+        let loader = TripForecastLoader(now: { currentDate })
+
+        let result = await loader.load(
+            for: location,
+            species: .bass,
+            locationName: "St. Petersburg",
+            snapshot: snapshot,
+            tides: { _ in
+                currentDate = fetchedAt.addingTimeInterval(31)
+                return [:]
+            }
+        )
+
+        #expect(result == nil)
+        #expect(loader.outlook == nil)
+        #expect(loader.provenance == nil)
+        #expect(loader.errorMessage != nil)
     }
 
     @Test("Catch tide phase is omitted when events belong to another location")
@@ -1037,7 +1221,8 @@ struct AsyncStateIdentityTests {
         latitude: Double,
         longitude: Double,
         fetchedAt: Date,
-        source: WeatherSource = .nws
+        source: WeatherSource = .nws,
+        expiresAt: Date? = nil
     ) -> WeatherSnapshot {
         let wind = WindSnapshot(
             directionDegrees: 180,
@@ -1068,7 +1253,8 @@ struct AsyncStateIdentityTests {
                 source: source,
                 fetchedAt: fetchedAt,
                 isFallback: source == .cache,
-                attribution: nil
+                attribution: nil,
+                expiresAt: expiresAt
             )
         )
     }

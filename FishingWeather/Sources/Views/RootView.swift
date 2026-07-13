@@ -5,6 +5,8 @@ struct RootView: View {
     @Environment(LocationManager.self) private var location
     @Environment(WeatherStore.self) private var weather
     @Environment(SpotStore.self) private var spots
+    @AppStorage(WeatherDerivedNotificationScope.storageKey)
+    private var notificationLocationKey = ""
 
     /// Selected saved spot wins; otherwise the device's current location.
     private var activeLocation: CLLocation? {
@@ -28,8 +30,45 @@ struct RootView: View {
     var body: some View {
         content
             .task(id: loadKey) {
-                if let coordinate = activeLocation {
+                let scopeKey = activeLocation.map {
+                    WeatherDerivedNotificationScope.key(
+                        latitude: $0.coordinate.latitude,
+                        longitude: $0.coordinate.longitude
+                    )
+                } ?? WeatherDerivedNotificationScope.unavailable
+                if WeatherDerivedNotificationPolicy.requiresClear(
+                    previousLocationKey: notificationLocationKey.isEmpty
+                        ? nil
+                        : notificationLocationKey,
+                    newLocationKey: scopeKey
+                ) {
+                    notificationLocationKey = scopeKey
+                    await BiteAlertNotifier.clearAllWeatherDerivedNotifications()
+                } else {
+                    notificationLocationKey = scopeKey
+                }
+                guard let coordinate = activeLocation else { return }
+                while !Task.isCancelled {
                     await weather.load(for: coordinate)
+                    guard !Task.isCancelled else { return }
+                    if !WeatherDerivedNotificationPolicy.allows(
+                        weather.provenance
+                    ) {
+                        await BiteAlertNotifier.clearAllWeatherDerivedNotifications()
+                    }
+                    guard
+                          let delay = weather.secondsUntilExpiry(
+                            for: coordinate
+                          ) else { return }
+                    do {
+                        try await Task.sleep(
+                            for: .seconds(max(delay, 0.25))
+                        )
+                    } catch {
+                        return
+                    }
+                    guard !Task.isCancelled else { return }
+                    await BiteAlertNotifier.clearAllWeatherDerivedNotifications()
                 }
             }
     }
