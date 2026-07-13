@@ -51,6 +51,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.choatelabs.bitecast.tests
         GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: RAYW3WPJ98
 
   BiteCastUITests:
     type: bundle.ui-testing
@@ -63,6 +65,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.choatelabs.bitecast.uitests
         GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: RAYW3WPJ98
 
 schemes:
   BiteCast:
