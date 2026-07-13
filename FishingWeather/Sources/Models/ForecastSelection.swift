@@ -125,7 +125,11 @@ enum ForecastSeriesBuilder {
                 sunrise: nil,
                 sunset: nil
             )
-            let windows = context.windows
+            let windows = neighboringWindows(
+                around: day,
+                contexts: dayContexts,
+                calendar: calendar
+            )
             let activeWindow = windows.first { $0.isActive(at: hour.date) }
             let nextWindow = windows
                 .filter { $0.start > hour.date }
@@ -199,7 +203,16 @@ enum ForecastSeriesBuilder {
             }
         }
 
-        return Set(hours.map { calendar.startOfDay(for: $0.date) }).reduce(
+        let forecastDays = Set(
+            hours.map { calendar.startOfDay(for: $0.date) }
+        )
+        let contextDays = Set(forecastDays.flatMap { day in
+            (-1...1).compactMap {
+                calendar.date(byAdding: .day, value: $0, to: day)
+            }
+        })
+
+        return contextDays.reduce(
             into: [:]
         ) { result, day in
             let astronomy = dailyAstronomy[day]
@@ -219,6 +232,24 @@ enum ForecastSeriesBuilder {
                 sunset: astronomy.sunset
             )
         }
+    }
+
+    private static func neighboringWindows(
+        around day: Date,
+        contexts: [Date: DayContext],
+        calendar: Calendar
+    ) -> [BiteWindow] {
+        (-1...1)
+            .compactMap {
+                calendar.date(byAdding: .day, value: $0, to: day)
+            }
+            .flatMap { contexts[$0]?.windows ?? [] }
+            .sorted {
+                if $0.start == $1.start {
+                    return $0.peak < $1.peak
+                }
+                return $0.start < $1.start
+            }
     }
 
     private static func forecastCalendar(
