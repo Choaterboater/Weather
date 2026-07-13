@@ -3,7 +3,11 @@ import Foundation
 
 struct NWSWeatherProvider: WeatherProvider {
     typealias Loader = @Sendable (URLRequest) async throws -> (Data, URLResponse)
-    typealias AstronomyWorker = @Sendable (CLLocation, Date) -> AstronomySnapshot
+    typealias AstronomyWorker = @Sendable (
+        CLLocation,
+        Date,
+        Calendar
+    ) -> AstronomySnapshot
 
     private let loader: Loader
     private let userAgent: String
@@ -12,7 +16,7 @@ struct NWSWeatherProvider: WeatherProvider {
     init(
         loader: @escaping Loader = NWSWeatherProvider.liveLoad,
         userAgent: String,
-        astronomy: @escaping AstronomyWorker = { _, _ in .empty }
+        astronomy: @escaping AstronomyWorker = { _, _, _ in .empty }
     ) {
         self.loader = loader
         self.userAgent = userAgent
@@ -23,6 +27,11 @@ struct NWSWeatherProvider: WeatherProvider {
         do {
             let fetchedAt = Date.now
             let point = try await loadPoint(location)
+            let calendar: Calendar = {
+                var value = Calendar(identifier: .gregorian)
+                value.timeZone = TimeZone(identifier: point.properties.timeZone) ?? .gmt
+                return value
+            }()
 
             var hourlyValue: [HourlyWeatherPoint]?
             var dailyValue: [DailyWeatherPoint]?
@@ -36,7 +45,8 @@ struct NWSWeatherProvider: WeatherProvider {
                 group.addTask {
                     .daily(try await self.loadDaily(
                         point.properties.forecast,
-                        timeZoneIdentifier: point.properties.timeZone
+                        location: location,
+                        calendar: calendar
                     ))
                 }
                 group.addTask {
@@ -81,7 +91,7 @@ struct NWSWeatherProvider: WeatherProvider {
                 hourly: hourlyValue,
                 daily: dailyValue,
                 alerts: alertValue,
-                astronomy: astronomy(location, fetchedAt),
+                astronomy: astronomy(location, fetchedAt, calendar),
                 provenance: WeatherProvenance(
                     source: .nws,
                     fetchedAt: fetchedAt,
@@ -125,7 +135,8 @@ struct NWSWeatherProvider: WeatherProvider {
 
     private func loadDaily(
         _ url: URL,
-        timeZoneIdentifier: String
+        location: CLLocation,
+        calendar: Calendar
     ) async throws -> [DailyWeatherPoint] {
         let data = try await data(for: url, notFound: .serviceUnavailable)
         let response = try decode(
@@ -134,7 +145,10 @@ struct NWSWeatherProvider: WeatherProvider {
         )
         return try Self.daily(
             response.properties.periods,
-            timeZoneIdentifier: timeZoneIdentifier
+            calendar: calendar,
+            astronomy: { date in
+                astronomy(location, date, calendar)
+            }
         )
     }
 
@@ -298,11 +312,9 @@ struct NWSWeatherProvider: WeatherProvider {
 
     private static func daily(
         _ periods: [NWSDailyPeriod],
-        timeZoneIdentifier: String
+        calendar: Calendar,
+        astronomy: (Date) -> AstronomySnapshot
     ) throws -> [DailyWeatherPoint] {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: timeZoneIdentifier) ?? .gmt
-
         let candidates = try periods.map { period -> NWSDailyCandidate in
             guard let parsedDate = date(period.startTime),
                   let temperatureCelsius = celsius(
@@ -324,6 +336,7 @@ struct NWSWeatherProvider: WeatherProvider {
                 precipitationChance: fraction(period.probabilityOfPrecipitation),
                 conditionText: period.shortForecast,
                 symbolName: symbol(text: period.shortForecast, icon: period.icon),
+                windMetersPerSecond: wind.midpointMetersPerSecond,
                 windPeakMetersPerSecond: wind.upperMetersPerSecond
             )
         }
@@ -345,7 +358,9 @@ struct NWSWeatherProvider: WeatherProvider {
                     precipitationChance: group.compactMap(\.precipitationChance).max(),
                     conditionText: daytime.conditionText,
                     symbolName: daytime.symbolName,
-                    windPeakMetersPerSecond: group.compactMap(\.windPeakMetersPerSecond).max()
+                    windMetersPerSecond: group.compactMap(\.windMetersPerSecond).max(),
+                    windPeakMetersPerSecond: group.compactMap(\.windPeakMetersPerSecond).max(),
+                    astronomy: astronomy(date)
                 )
             }
     }
@@ -707,6 +722,7 @@ private struct NWSDailyCandidate: Sendable {
     let precipitationChance: Double?
     let conditionText: String
     let symbolName: String
+    let windMetersPerSecond: Double?
     let windPeakMetersPerSecond: Double?
 }
 

@@ -1,39 +1,79 @@
+import Foundation
 import SwiftUI
-import WeatherKit
 
-/// Condition-driven theming and chart-friendly samples derived from WeatherKit's
-/// opaque `Forecast` types.
+/// Condition-driven theming and chart-friendly samples derived from canonical
+/// weather snapshots.
 enum WeatherTheme {
-    /// A two-stop gradient keyed off the WeatherKit condition, so the app's
-    /// backgrounds shift with the sky.
-    static func gradient(for condition: WeatherCondition?) -> [Color] {
-        switch condition {
-        case .clear, .mostlyClear, .hot:
-            [Color(red: 0.20, green: 0.55, blue: 0.95), .cyan.opacity(0.35)]
-        case .partlyCloudy, .mostlyCloudy:
-            [.blue.opacity(0.55), .gray.opacity(0.25)]
-        case .cloudy, .foggy, .haze, .smoky:
-            [.gray.opacity(0.6), .secondary.opacity(0.2)]
-        case .drizzle, .rain, .heavyRain, .sunShowers:
-            [Color(red: 0.18, green: 0.32, blue: 0.5), .teal.opacity(0.3)]
-        case .thunderstorms, .strongStorms, .isolatedThunderstorms, .scatteredThunderstorms:
-            [Color(red: 0.12, green: 0.14, blue: 0.28), .indigo.opacity(0.4)]
-        case .snow, .flurries, .sleet, .wintryMix, .blizzard, .freezingRain, .freezingDrizzle:
-            [Color(red: 0.55, green: 0.68, blue: 0.85), .white.opacity(0.25)]
-        default:
-            [.blue.opacity(0.35), .cyan.opacity(0.15)]
+    /// A two-stop gradient keyed off neutral condition text and SF Symbol name,
+    /// so provider-specific enums never leak into the presentation layer.
+    static func gradient(
+        conditionText: String?,
+        symbolName: String?
+    ) -> [Color] {
+        let condition = "\(conditionText ?? "") \(symbolName ?? "")".lowercased()
+
+        if condition.contains("thunder")
+            || condition.contains("storm")
+            || condition.contains("bolt") {
+            return [Color(red: 0.12, green: 0.14, blue: 0.28), .indigo.opacity(0.4)]
         }
+        if condition.contains("snow")
+            || condition.contains("flurr")
+            || condition.contains("sleet")
+            || condition.contains("wintry")
+            || condition.contains("freezing") {
+            return [Color(red: 0.55, green: 0.68, blue: 0.85), .white.opacity(0.25)]
+        }
+        if condition.contains("rain")
+            || condition.contains("drizzle")
+            || condition.contains("shower") {
+            return [Color(red: 0.18, green: 0.32, blue: 0.5), .teal.opacity(0.3)]
+        }
+        if condition.contains("partly")
+            || condition.contains("mostly clear")
+            || condition.contains("mostly sunny")
+            || condition.contains("mostly cloudy")
+            || condition.contains("cloud.sun")
+            || condition.contains("cloud.moon") {
+            return [.blue.opacity(0.55), .gray.opacity(0.25)]
+        }
+        if condition.contains("fog")
+            || condition.contains("haze")
+            || condition.contains("smok")
+            || condition.contains("cloudy")
+            || condition.contains("overcast")
+            || condition.contains("cloud") {
+            return [.gray.opacity(0.6), .secondary.opacity(0.2)]
+        }
+        if condition.contains("clear")
+            || condition.contains("sunny")
+            || condition.contains("hot")
+            || condition.contains("sun.max")
+            || condition.contains("moon.stars") {
+            return [Color(red: 0.20, green: 0.55, blue: 0.95), .cyan.opacity(0.35)]
+        }
+
+        return [.blue.opacity(0.35), .cyan.opacity(0.15)]
     }
 
     /// A dark instrument backdrop for the Weather tab that still shifts with the
     /// sky: the abyss ground with the condition's hue glowing at the top, fading
     /// out toward the bottom.
     @MainActor
-    static func skyBackdrop(for condition: WeatherCondition?) -> some View {
+    static func skyBackdrop(
+        conditionText: String?,
+        symbolName: String?
+    ) -> some View {
         ZStack {
             Ink.abyss
             LinearGradient(
-                colors: [(gradient(for: condition).first ?? Ink.hull).opacity(0.5), .clear],
+                colors: [
+                    (gradient(
+                        conditionText: conditionText,
+                        symbolName: symbolName
+                    ).first ?? Ink.hull).opacity(0.5),
+                    .clear,
+                ],
                 startPoint: .top,
                 endPoint: .center
             )
@@ -42,25 +82,22 @@ enum WeatherTheme {
     }
 }
 
-/// A plottable sample of one hour, decoupled from WeatherKit's `Forecast`.
-/// Wind fields default so older call sites and offline snapshots that predate
-/// wind still construct cleanly (they read back as calm rather than failing).
+/// A plottable sample of one hour, decoupled from any weather provider.
 struct HourSample: Identifiable {
     /// Use the sample's hour so charts keep identity across body re-evals.
     var id: Date { date }
     let date: Date
-    let temperature: Double   // °F
-    let pressureHPa: Double
+    let temperatureCelsius: Double
+    let pressureHPa: Double?
     let precipChance: Double
-    var windSpeedMph: Double = 0
-    var windGustMph: Double? = nil
+    let windSpeedMph: Double
+    let windGustMph: Double?
 }
 
-extension Forecast where Element == HourWeather {
+extension Array where Element == HourlyWeatherPoint {
     /// The next `count` hours from now as plottable samples.
     func samples(_ count: Int = 24, now: Date = .now) -> [HourSample] {
-        forecast
-            .filter { $0.date >= now }
+        filter { $0.date >= now }
             .prefix(count)
             .map(Self.hourSample(from:))
     }
@@ -68,32 +105,21 @@ extension Forecast where Element == HourWeather {
     /// Full hourly window (including any past hours loaded for pressure trend).
     /// Used for offline snapshots so charts still have a baseline.
     func allSamples() -> [HourSample] {
-        forecast.map(Self.hourSample(from:))
+        map(Self.hourSample(from:))
     }
 
-    private static func hourSample(from hour: HourWeather) -> HourSample {
+    private static func hourSample(from hour: HourlyWeatherPoint) -> HourSample {
         HourSample(
             date: hour.date,
-            temperature: hour.temperature.converted(to: .fahrenheit).value,
-            pressureHPa: hour.pressure.converted(to: .hectopascals).value,
-            precipChance: hour.precipitationChance,
-            windSpeedMph: hour.wind.speed.converted(to: .milesPerHour).value,
-            windGustMph: hour.wind.gust?.converted(to: .milesPerHour).value
+            temperatureCelsius: hour.temperatureCelsius,
+            pressureHPa: hour.pressureHPa,
+            precipChance: hour.precipitationChance ?? 0,
+            windSpeedMph: WeatherUnits.milesPerHour(
+                metersPerSecond: hour.wind.speedMetersPerSecond
+            ),
+            windGustMph: hour.wind.gustMetersPerSecond.map {
+                WeatherUnits.milesPerHour(metersPerSecond: $0)
+            }
         )
-    }
-}
-
-extension MoonPhase {
-    /// Approximate illuminated fraction (0 = new, 1 = full) for a tidy gauge,
-    /// since WeatherKit reports a named phase rather than a lit fraction.
-    var illuminationFraction: Double {
-        switch self {
-        case .new: 0.0
-        case .waxingCrescent, .waningCrescent: 0.25
-        case .firstQuarter, .lastQuarter: 0.5
-        case .waxingGibbous, .waningGibbous: 0.75
-        case .full: 1.0
-        @unknown default: 0.5
-        }
     }
 }

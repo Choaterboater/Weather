@@ -32,22 +32,20 @@ struct WeatherDashboardView: View {
                 } else if weather.errorMessage != nil, !hasLiveWeather {
                     ErrorStateView()
                         .padding(.top, 80)
-                } else if hasLiveWeather {
-                    if !weather.alerts.isEmpty {
-                        WeatherAlertsView(alerts: weather.alerts)
+                } else if hasLiveWeather, let snapshot = weather.snapshot {
+                    if !snapshot.alerts.isEmpty {
+                        WeatherAlertsView(alerts: snapshot.alerts)
                     }
-                    if let current = weather.current {
-                        CurrentConditionsView(current: current)
-                        WindCard(
-                            current: current,
-                            samples: weather.hourly?.samples() ?? []
-                        )
+                    CurrentConditionsView(current: snapshot.current)
+                    WindCard(
+                        wind: snapshot.current.wind,
+                        samples: snapshot.hourly.samples()
+                    )
+                    if !snapshot.hourly.isEmpty {
+                        HourlyForecastView(hourly: snapshot.hourly)
                     }
-                    if let hourly = weather.hourly {
-                        HourlyForecastView(hourly: hourly)
-                    }
-                    if let daily = weather.daily {
-                        DailyForecastView(daily: daily)
+                    if !snapshot.daily.isEmpty {
+                        DailyForecastView(daily: snapshot.daily)
                     }
                 } else {
                     ContentUnavailableView(

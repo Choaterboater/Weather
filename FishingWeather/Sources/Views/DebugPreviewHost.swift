@@ -5,13 +5,17 @@ import SwiftUI
 /// they can be screenshotted on the simulator without WeatherKit/live location.
 /// Gated behind `-uiPreview <name>`. Remove before committing.
 struct DebugPreviewHost: View {
+    @State private var weatherStore = WeatherStore(worker: { _, _ in
+        throw WeatherProviderError.serviceUnavailable
+    })
+
     var body: some View {
         if CommandLine.arguments.contains("guide") {
             NavigationStack { SpeciesGuideView() }
                 .environment(SpotStore())
         } else if CommandLine.arguments.contains("scout") {
             NavigationStack { ScoutView() }
-                .environment(WeatherStore())
+                .environment(weatherStore)
                 .environment(SpotStore())
                 .environment(LocationManager())
         } else if CommandLine.arguments.contains("log") {
@@ -160,7 +164,7 @@ private struct DebugScoreCard: View {
         (0..<24).map { i in
             HourSample(
                 date: start.addingTimeInterval(Double(i) * 3600),
-                temperature: 75,
+                temperatureCelsius: 23.9,
                 pressureHPa: 1016 - Double(i) * 0.34,
                 precipChance: 0,
                 windSpeedMph: 9 + 5 * sin(Double(i) / 3.0),

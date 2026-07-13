@@ -18,6 +18,22 @@ struct WeatherKitAdapterTests {
         #expect(wind.gustMetersPerSecond == 8)
     }
 
+    @Test func dailyWindUsesSustainedSpeedAndGustAsPeak() {
+        let wind = WeatherKitAdapter.dailyWind(
+            speedMetersPerSecond: 5,
+            gustMetersPerSecond: 8
+        )
+        let withoutGust = WeatherKitAdapter.dailyWind(
+            speedMetersPerSecond: 5,
+            gustMetersPerSecond: nil
+        )
+
+        #expect(wind.sustained == 5)
+        #expect(wind.peak == 8)
+        #expect(withoutGust.sustained == 5)
+        #expect(withoutGust.peak == 5)
+    }
+
     @Test func clampsFractions() {
         #expect(WeatherKitAdapter.fraction(1.4) == 1)
         #expect(WeatherKitAdapter.fraction(-0.1) == 0)
@@ -94,6 +110,23 @@ struct WeatherKitAdapterTests {
             _ = try await provider.forecast(
                 for: CLLocation(latitude: 30.29, longitude: -86)
             )
+        }
+    }
+
+    @Test func providerPreservesURLCancellation() async {
+        let provider = WeatherKitProvider(worker: { _, _, _ in
+            throw URLError(.cancelled)
+        })
+
+        do {
+            _ = try await provider.forecast(
+                for: CLLocation(latitude: 30.29, longitude: -86)
+            )
+            Issue.record("Expected URL cancellation")
+        } catch let error as URLError {
+            #expect(error.code == .cancelled)
+        } catch {
+            Issue.record("Expected URLError.cancelled, got \(error)")
         }
     }
 }

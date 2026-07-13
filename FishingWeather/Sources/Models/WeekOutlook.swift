@@ -1,5 +1,4 @@
 import Foundation
-import WeatherKit
 
 /// One scored solunar window in the week outlook — a specific fishing window on
 /// a specific day, with its 0–100 score and the confidence in that score.
@@ -27,13 +26,11 @@ struct WeekOutlook {
     var isEmpty: Bool { windows.isEmpty }
 }
 
-/// Plain, WeatherKit-decoupled inputs for one forecast day, assembled by the
-/// loader from `DayWeather`. Keeping the engine's inputs as plain values (like
-/// `HourSample`) is what makes `TripPlanner` unit-testable.
+/// Provider-neutral inputs for one forecast day.
 struct DayForecastInput {
     let date: Date          // start of day
     let moonrise: Date?
     let moonset: Date?
-    let moonPhase: MoonPhase
-    let dailyWindMph: Double
+    let moonPhase: LunarPhase
+    let dailyWindMph: Double?
 }

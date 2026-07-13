@@ -1,13 +1,12 @@
 import SwiftUI
-import WeatherKit
 
 struct WeatherAlertsView: View {
-    let alerts: [WeatherAlert]
+    let alerts: [WeatherAlertSnapshot]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: "Alerts", systemImage: "exclamationmark.triangle")
-            ForEach(alerts, id: \.detailsURL) { alert in
+            ForEach(alerts) { alert in
                 GlassCard {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(alert.summary)
@@ -16,8 +15,10 @@ struct WeatherAlertsView: View {
                         Text(alert.source)
                             .font(.system(size: 11, weight: .medium, design: .monospaced))
                             .foregroundStyle(Ink.chartDim)
-                        Link("Details", destination: alert.detailsURL)
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        if let detailsURL = alert.detailsURL {
+                            Link("Details", destination: detailsURL)
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        }
                     }
                 }
                 .tint(.orange)

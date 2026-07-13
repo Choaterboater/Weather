@@ -2,126 +2,144 @@ import CoreLocation
 import Foundation
 import os
 
-/// Single owner of the offline weather snapshot schema.
-/// `WeatherStore` writes after every successful fetch; views read when live
-/// WeatherKit data is unavailable. Keyed by GeoTile (0.1 degree, ~11 km).
-@MainActor
-enum WeatherSnapshots {
-    // MARK: Schema — private; this file is its only home
-
-    private struct Hour: Codable {
-        let date: Date
-        let temperature: Double
-        let pressureHPa: Double
-        let precipChance: Double
-        // Optional so snapshots written before wind existed still decode.
-        let windSpeedMph: Double?
-        let windGustMph: Double?
+/// Versioned, provider-neutral weather snapshot storage keyed by a 0.1-degree
+/// geographic tile. Actor isolation keeps file access and schema migration safe
+/// when live and fallback providers run concurrently.
+actor WeatherSnapshots {
+    private struct Envelope: Codable {
+        let version: Int
+        let snapshot: WeatherSnapshot
     }
 
-    private struct Pressure: Codable {
-        let pressureHPa: Double
-        let tendency: String
-        let changePerHour: Double?
+    private struct EnvelopeHeader: Decodable {
+        let version: Int
     }
 
-    private struct Entry: Codable {
-        let timestamp: Date
-        let samples: [Hour]
-        let pressure: Pressure
+    private static let currentVersion = 1
+    private static let logger = Logger(
+        subsystem: "app.choatelabs.bitecast",
+        category: "WeatherSnapshots"
+    )
+
+    private let directory: URL
+    private let fileManager: FileManager
+
+    init(
+        directory: URL = WeatherSnapshots.defaultDirectory(),
+        fileManager: FileManager = .default
+    ) {
+        self.directory = directory
+        self.fileManager = fileManager
     }
 
-    private static let logger = Logger(subsystem: "app.choatelabs.bitecast",
-                                       category: "WeatherSnapshots")
+    func save(_ snapshot: WeatherSnapshot) throws {
+        let envelope = Envelope(
+            version: Self.currentVersion,
+            snapshot: snapshot
+        )
+        let data = try JSONEncoder().encode(envelope)
+        try fileManager.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        try data.write(
+            to: fileURL(
+                latitude: snapshot.coordinate.latitude,
+                longitude: snapshot.coordinate.longitude
+            ),
+            options: .atomic
+        )
+    }
 
-    /// Overridable so tests can point at a temp directory.
-    static var baseDirectory: URL = FileManager.default
-        .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        .appendingPathComponent("WeatherSnapshots", isDirectory: true)
+    /// Loads the exact persisted snapshot, including its original provenance.
+    /// Callers that expose cache provenance adapt it after this boundary.
+    func load(for location: CLLocation) -> WeatherSnapshot? {
+        let url = fileURL(
+            latitude: location.coordinate.latitude,
+            longitude: location.coordinate.longitude
+        )
+        guard fileManager.fileExists(atPath: url.path) else { return nil }
 
-    // MARK: Write — called by WeatherStore.load on success
+        do {
+            let data = try Data(contentsOf: url)
+            let decoder = JSONDecoder()
+            let header = try decoder.decode(EnvelopeHeader.self, from: data)
+            guard header.version == Self.currentVersion else {
+                backupInvalidFile(at: url)
+                return nil
+            }
+            return try decoder.decode(Envelope.self, from: data).snapshot
+        } catch {
+            Self.logger.error(
+                "snapshot decode failed for \(url.lastPathComponent): \(error.localizedDescription)"
+            )
+            backupInvalidFile(at: url)
+            return nil
+        }
+    }
 
-    static func save(samples: [HourSample], pressure: PressureReading,
-                     for location: CLLocation, timestamp: Date = .now) {
-        let entry = Entry(
-            timestamp: timestamp,
-            samples: samples.map {
-                Hour(date: $0.date, temperature: $0.temperature,
-                     pressureHPa: $0.pressureHPa, precipChance: $0.precipChance,
-                     windSpeedMph: $0.windSpeedMph, windGustMph: $0.windGustMph)
-            },
-            pressure: Pressure(
-                pressureHPa: pressure.pressure.converted(to: .hectopascals).value,
-                tendency: pressure.tendency.label.lowercased(),
-                changePerHour: pressure.changePerHour
+    nonisolated private static func defaultDirectory() -> URL {
+        FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("WeatherSnapshots", isDirectory: true)
+    }
+
+    private func fileURL(latitude: Double, longitude: Double) -> URL {
+        let key = GeoTile.key(lat: latitude, lon: longitude)
+        return directory.appendingPathComponent("\(key).json")
+    }
+
+    private func backupInvalidFile(at url: URL) {
+        let stem = url.deletingPathExtension().lastPathComponent
+        let backup = directory.appendingPathComponent(
+            "\(stem).invalid-\(UUID().uuidString).json"
+        )
+        do {
+            try fileManager.moveItem(at: url, to: backup)
+        } catch {
+            Self.logger.error(
+                "snapshot backup failed for \(url.lastPathComponent): \(error.localizedDescription)"
+            )
+        }
+    }
+}
+
+/// Final provider in the fallback chain. It deliberately preserves the
+/// original fetch time while identifying the delivery source as the cache.
+struct CachedWeatherProvider: WeatherProvider {
+    let cache: WeatherSnapshots
+
+    func forecast(for location: CLLocation) async throws -> WeatherSnapshot {
+        guard let persisted = await cache.load(for: location) else {
+            throw WeatherProviderError.serviceUnavailable
+        }
+
+        let origin = persisted.provenance.attribution
+            ?? persisted.provenance.source.attributionName
+        return WeatherSnapshot(
+            coordinate: persisted.coordinate,
+            timeZoneIdentifier: persisted.timeZoneIdentifier,
+            current: persisted.current,
+            hourly: persisted.hourly,
+            daily: persisted.daily,
+            alerts: persisted.alerts,
+            astronomy: persisted.astronomy,
+            provenance: WeatherProvenance(
+                source: .cache,
+                fetchedAt: persisted.provenance.fetchedAt,
+                isFallback: true,
+                attribution: "Cached from \(origin)"
             )
         )
-        let key = tileKey(for: location)
-        do {
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
-            let data = try encoder.encode(entry)
-            try FileManager.default.createDirectory(at: baseDirectory,
-                                                    withIntermediateDirectories: true)
-            try data.write(to: fileURL(forKey: key), options: .atomic)
-        } catch {
-            logger.error("snapshot write failed for \(key): \(error.localizedDescription)")
-        }
     }
+}
 
-    // MARK: Read — called by FishingView (and future offline surfaces)
-
-    static func cachedSamples(for location: CLLocation) -> [HourSample] {
-        guard let entry = loadEntry(for: location) else { return [] }
-        return entry.samples.map {
-            HourSample(date: $0.date, temperature: $0.temperature,
-                       pressureHPa: $0.pressureHPa, precipChance: $0.precipChance,
-                       windSpeedMph: $0.windSpeedMph ?? 0, windGustMph: $0.windGustMph)
-        }
-    }
-
-    static func cachedPressure(for location: CLLocation) -> PressureReading? {
-        guard let entry = loadEntry(for: location) else { return nil }
-        let tendency: PressureTendency = switch entry.pressure.tendency.lowercased() {
-        case "rising": .rising
-        case "falling": .falling
-        default: .steady
-        }
-        return PressureReading(
-            pressure: Measurement(value: entry.pressure.pressureHPa, unit: UnitPressure.hectopascals),
-            tendency: tendency,
-            changePerHour: entry.pressure.changePerHour
-        )
-    }
-
-    /// When the snapshot was written — lets the UI caption "cached from ...".
-    static func cachedTimestamp(for location: CLLocation) -> Date? {
-        loadEntry(for: location)?.timestamp
-    }
-
-    // MARK: Plumbing
-
-    private static func fileURL(forKey key: String) -> URL {
-        baseDirectory.appendingPathComponent("\(key).json")
-    }
-
-    private static func tileKey(for location: CLLocation) -> String {
-        let c = location.coordinate
-        return GeoTile.key(lat: c.latitude, lon: c.longitude)
-    }
-
-    private static func loadEntry(for location: CLLocation) -> Entry? {
-        let key = tileKey(for: location)
-        let url = fileURL(forKey: key)
-        guard let data = try? Data(contentsOf: url) else { return nil }  // missing file is normal
-        do {
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            return try decoder.decode(Entry.self, from: data)
-        } catch {
-            // A snapshot that exists but won't decode is a schema-drift signal.
-            logger.error("snapshot decode failed for \(key): \(error.localizedDescription)")
-            return nil
+private extension WeatherSource {
+    var attributionName: String {
+        switch self {
+        case .weatherKit: "Apple Weather"
+        case .nws: "National Weather Service"
+        case .cache: "a previous weather source"
         }
     }
 }

@@ -1,13 +1,12 @@
 import SwiftUI
-import WeatherKit
 
 struct HourlyForecastView: View {
-    let hourly: Forecast<HourWeather>
+    let hourly: [HourlyWeatherPoint]
+    var now: Date = .now
 
     /// The next 24 hours from now.
-    private var upcoming: [HourWeather] {
-        let now = Date.now
-        return hourly.forecast
+    private var upcoming: [HourlyWeatherPoint] {
+        hourly
             .filter { $0.date >= now }
             .prefix(24)
             .map { $0 }
@@ -18,7 +17,7 @@ struct HourlyForecastView: View {
             SectionHeader(title: "Hourly", systemImage: "clock")
             GlassCard {
                 VStack(spacing: 14) {
-                    TemperatureChart(samples: hourly.samples())
+                    TemperatureChart(samples: hourly.samples(now: now))
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 20) {
                             ForEach(upcoming, id: \.date) { hour in
@@ -33,7 +32,7 @@ struct HourlyForecastView: View {
 }
 
 private struct HourCell: View {
-    let hour: HourWeather
+    let hour: HourlyWeatherPoint
 
     private var time: String {
         hour.date.formatted(.dateTime.hour())
@@ -47,11 +46,12 @@ private struct HourCell: View {
             Image(systemName: hour.symbolName)
                 .symbolRenderingMode(.multicolor)
                 .font(.system(size: 20, weight: .bold))
-            Text(hour.temperature.formatted(.measurement(width: .narrow, usage: .weather)))
+            Text(WeatherUnits.wholeTemperature(celsius: hour.temperatureCelsius))
                 .font(.system(size: 14, weight: .bold, design: .monospaced))
                 .foregroundStyle(Ink.chart)
-            if hour.precipitationChance > 0 {
-                Text(hour.precipitationChance.formatted(.percent.precision(.fractionLength(0))))
+            if let precipitationChance = hour.precipitationChance,
+               precipitationChance > 0 {
+                Text(precipitationChance.formatted(.percent.precision(.fractionLength(0))))
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundStyle(Ink.tide)
             }

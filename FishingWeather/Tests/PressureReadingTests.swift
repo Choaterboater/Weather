@@ -98,4 +98,56 @@ struct PressureReadingTests {
         let perHour = try! #require(reading.changePerHour)
         #expect(abs(perHour - (-1.0)) < 0.001)
     }
+
+    @Test
+    func missingCurrentPressureIsNotInventedFromHourlyForecasts() {
+        let reading = PressureReading.analyze(
+            currentHPa: nil,
+            hourly: [hourlyPoint(hoursAgo: 3, pressureHPa: 1_013)],
+            now: Self.now
+        )
+
+        #expect(reading.pressure == nil)
+        #expect(reading.tendency == .steady)
+        #expect(reading.changePerHour == nil)
+    }
+
+    @Test
+    func hourlyPointsWithoutPressureAreIgnoredDeterministically() {
+        let reading = PressureReading.analyze(
+            currentHPa: 1_010,
+            hourly: [hourlyPoint(hoursAgo: 3, pressureHPa: nil)],
+            now: Self.now
+        )
+
+        #expect(reading.pressure?.value == 1_010)
+        #expect(reading.tendency == .steady)
+        #expect(reading.changePerHour == nil)
+    }
+
+    private func hourlyPoint(
+        hoursAgo: Double,
+        pressureHPa: Double?
+    ) -> HourlyWeatherPoint {
+        HourlyWeatherPoint(
+            date: Self.now.addingTimeInterval(-hoursAgo * 3_600),
+            temperatureCelsius: 20,
+            apparentTemperatureCelsius: nil,
+            dewPointCelsius: nil,
+            humidityFraction: nil,
+            pressureHPa: pressureHPa,
+            visibilityMeters: nil,
+            uvIndex: nil,
+            cloudCoverFraction: nil,
+            precipitationChance: nil,
+            precipitationMM: nil,
+            conditionText: "Clear",
+            symbolName: "sun.max",
+            wind: WindSnapshot(
+                directionDegrees: 180,
+                speedMetersPerSecond: 2,
+                gustMetersPerSecond: nil
+            )
+        )
+    }
 }

@@ -1,6 +1,5 @@
 import Foundation
 import Testing
-import WeatherKit
 @testable import BiteCast
 
 /// Sanity checks for the FishingScorer. Targets the score bands defined in
@@ -9,6 +8,76 @@ import WeatherKit
 ///   * 85+ Excellent · 70–84 Strong · 50–69 Fair · 30–49 Tough · <30 Poor
 @Suite("FishingScorer")
 struct FishingScorerTests {
+
+    @Test
+    func lunarPhaseDerivesCategoriesAndDisplaySemanticsFromCycleFraction() {
+        #expect(LunarPhase(cycleFraction: 0) == .new)
+        #expect(LunarPhase(cycleFraction: 0.125) == .waxingCrescent)
+        #expect(LunarPhase(cycleFraction: 0.25) == .firstQuarter)
+        #expect(LunarPhase(cycleFraction: 0.5) == .full)
+        #expect(LunarPhase(cycleFraction: 0.75) == .lastQuarter)
+        #expect(LunarPhase(cycleFraction: 0.99) == .new)
+        #expect(LunarPhase(cycleFraction: nil) == .unknown)
+        #expect(LunarPhase.full.displayName == "Full Moon")
+        #expect(LunarPhase.full.symbolName == "moonphase.full.moon")
+        #expect(LunarPhase.full.biteRating == "Strong")
+        #expect(LunarPhase.full.illuminationFraction == 1)
+        #expect(LunarPhase.firstQuarter.illuminationFraction == 0.5)
+    }
+
+    @Test
+    func fishingConditionsAreBuiltOnlyFromNeutralSnapshotValues() {
+        let now = Self.fixedSpringDate
+        let wind = WindSnapshot(
+            directionDegrees: 225,
+            speedMetersPerSecond: 4.25,
+            gustMetersPerSecond: 7
+        )
+        let snapshot = WeatherSnapshot(
+            coordinate: WeatherCoordinate(latitude: 30, longitude: -86),
+            timeZoneIdentifier: "America/Chicago",
+            current: CurrentConditionsSnapshot(
+                date: now,
+                temperatureCelsius: 25.4,
+                apparentTemperatureCelsius: 26,
+                dewPointCelsius: 20,
+                humidityFraction: 0.7,
+                pressureHPa: nil,
+                visibilityMeters: nil,
+                uvIndex: 4,
+                conditionText: "Clear",
+                symbolName: "sun.max",
+                wind: wind
+            ),
+            hourly: [],
+            daily: [],
+            alerts: [],
+            astronomy: AstronomySnapshot(
+                sunrise: now.addingTimeInterval(-6 * 3_600),
+                sunset: now.addingTimeInterval(6 * 3_600),
+                moonrise: now.addingTimeInterval(-3 * 3_600),
+                moonset: now.addingTimeInterval(9 * 3_600),
+                moonTransit: now.addingTimeInterval(3 * 3_600),
+                moonPhaseFraction: 0.5
+            ),
+            provenance: WeatherProvenance(
+                source: .nws,
+                fetchedAt: now,
+                isFallback: true,
+                attribution: "National Weather Service"
+            )
+        )
+
+        let conditions = FishingConditions.make(snapshot: snapshot, now: now)
+
+        #expect(conditions.pressure.pressure == nil)
+        #expect(conditions.pressure.tendency == .steady)
+        #expect(conditions.moonPhase == .full)
+        #expect(conditions.wind == wind)
+        #expect(conditions.uvIndex == 4)
+        #expect(conditions.sunrise == snapshot.astronomy.sunrise)
+        #expect(conditions.windows.count == 4)
+    }
 
     // MARK: - Headline scenarios from the plan
 
@@ -764,6 +833,22 @@ struct FishingScorerTests {
 
         #expect(abs(calm - 0.55) < 0.0001)
         #expect(abs(storm - 0.20) < 0.0001)
+    }
+
+    @Test
+    func missingWindUsesNeutralScoreWithoutInventingCalmConditions() throws {
+        let factor = try #require(FishingScorer.score(
+            moonPhase: .firstQuarter,
+            activeWindow: nil,
+            nextWindow: nil,
+            pressureTendency: .steady,
+            pressureChangePerHour: nil,
+            windMph: nil,
+            species: .bass
+        ).factors.first { $0.kind == .wind })
+
+        #expect(factor.raw == 0.5)
+        #expect(factor.detail == "Wind data unavailable")
     }
 
     @Test

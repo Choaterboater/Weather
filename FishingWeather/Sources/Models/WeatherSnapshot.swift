@@ -61,7 +61,9 @@ struct DailyWeatherPoint: Identifiable, Codable, Equatable, Sendable {
     let precipitationChance: Double?
     let conditionText: String
     let symbolName: String
+    let windMetersPerSecond: Double?
     let windPeakMetersPerSecond: Double?
+    let astronomy: AstronomySnapshot?
 }
 
 struct AstronomySnapshot: Codable, Equatable, Sendable {

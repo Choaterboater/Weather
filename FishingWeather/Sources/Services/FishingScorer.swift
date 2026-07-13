@@ -1,5 +1,4 @@
 import Foundation
-import WeatherKit
 
 /// Pure scorer: given today's conditions, the focus species, and (optionally)
 /// today's tide events, returns a 0–100 fishing score plus per-factor breakdown.
@@ -40,7 +39,10 @@ enum FishingScorer {
             nextWindow: conditions.nextWindow(after: now),
             pressureTendency: conditions.pressure.tendency,
             pressureChangePerHour: conditions.pressure.changePerHour,
-            windMph: conditions.wind.speed.converted(to: .milesPerHour).value,
+            windMph: Measurement(
+                value: conditions.wind.speedMetersPerSecond,
+                unit: UnitSpeed.metersPerSecond
+            ).converted(to: .milesPerHour).value,
             species: species,
             tideEvents: tideEvents,
             weights: weights,
@@ -52,12 +54,12 @@ enum FishingScorer {
     /// overload above, and directly by unit tests (avoids needing to
     /// construct WeatherKit `Wind`/`UVIndex` structs).
     static func score(
-        moonPhase: MoonPhase,
+        moonPhase: LunarPhase,
         activeWindow: BiteWindow?,
         nextWindow: BiteWindow?,
         pressureTendency: PressureTendency,
         pressureChangePerHour: Double?,
-        windMph: Double,
+        windMph: Double?,
         species: Species,
         tideEvents: [TideEvent] = [],
         weights: FactorWeights = .standard,
@@ -130,7 +132,7 @@ enum FishingScorer {
     }
 
     private static func scoreSolunar(
-        moonPhase: MoonPhase,
+        moonPhase: LunarPhase,
         activeWindow: BiteWindow?,
         nextWindow: BiteWindow?,
         now: Date
@@ -141,7 +143,7 @@ enum FishingScorer {
         case .new, .full: phaseScore = 1.0
         case .waxingGibbous, .waningGibbous, .waxingCrescent, .waningCrescent: phaseScore = 0.7
         case .firstQuarter, .lastQuarter: phaseScore = 0.5
-        @unknown default: phaseScore = 0.6
+        case .unknown: phaseScore = 0.6
         }
 
         // Window proximity contribution: smooth falloff around peak.
@@ -190,7 +192,11 @@ enum FishingScorer {
         return Subscore(raw: raw, detail: "\(tendency.label) — \(tendency.fishingNote)")
     }
 
-    private static func scoreWind(mph: Double) -> Subscore {
+    private static func scoreWind(mph: Double?) -> Subscore {
+        guard let mph, mph.isFinite else {
+            return Subscore(raw: 0.5, detail: "Wind data unavailable")
+        }
+
         // Base piecewise values
         let base: Double
         let note: String
@@ -322,12 +328,12 @@ enum FishingScorer {
     #if DEBUG
     /// Human-readable factor breakdown for quick tuning in debug builds.
     static func debugDescribe(
-        moonPhase: MoonPhase,
+        moonPhase: LunarPhase,
         activeWindow: BiteWindow?,
         nextWindow: BiteWindow?,
         pressureTendency: PressureTendency,
         pressureChangePerHour: Double?,
-        windMph: Double,
+        windMph: Double?,
         species: Species,
         tideEvents: [TideEvent] = [],
         now: Date = .now

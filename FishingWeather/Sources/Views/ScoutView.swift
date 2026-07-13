@@ -16,8 +16,10 @@ struct ScoutView: View {
 
     private var liveConditions: FishingConditions? {
         guard let loc = spots.selectedSpot?.location ?? location.location,
-              weather.hasData(for: loc) else { return nil }
-        return weather.conditions
+              weather.hasData(for: loc),
+              let snapshot = weather.snapshot
+        else { return nil }
+        return FishingConditions.make(snapshot: snapshot)
     }
 
     var body: some View {

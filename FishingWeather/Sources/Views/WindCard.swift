@@ -1,19 +1,21 @@
 import SwiftUI
-import WeatherKit
 
-/// WeatherKit adapter: extracts the scalars `WindPanel` needs from the opaque
-/// `CurrentWeather`, so the presentation layer stays testable and previewable.
+/// Adapts provider-neutral wind values into the scalars `WindPanel` needs.
 struct WindCard: View {
-    let current: CurrentWeather
+    let wind: WindSnapshot
     let samples: [HourSample]
     var now: Date = .now
 
     var body: some View {
         WindPanel(
-            compass: current.wind.compassDirection.abbreviation,
-            fromDegrees: current.wind.direction.converted(to: .degrees).value,
-            speedMph: current.wind.speed.converted(to: .milesPerHour).value,
-            gustMph: current.wind.gust?.converted(to: .milesPerHour).value,
+            compass: WeatherUnits.compassAbbreviation(degrees: wind.directionDegrees),
+            fromDegrees: wind.directionDegrees,
+            speedMph: WeatherUnits.milesPerHour(
+                metersPerSecond: wind.speedMetersPerSecond
+            ),
+            gustMph: wind.gustMetersPerSecond.map {
+                WeatherUnits.milesPerHour(metersPerSecond: $0)
+            },
             samples: samples,
             now: now
         )
@@ -22,7 +24,7 @@ struct WindCard: View {
 
 /// Wind panel for the weather dashboard: current speed/direction/gust with a
 /// small compass, a fishing-oriented descriptor, and a 24-hour shaded forecast.
-/// Decoupled from WeatherKit (plain values in) — same philosophy as HourSample.
+/// Decoupled from the provider (plain values in) — same philosophy as HourSample.
 struct WindPanel: View {
     let compass: String
     let fromDegrees: Double
@@ -113,10 +115,15 @@ private struct WindCompass: View {
 
 #Preview("Wind") {
     let start = Date(timeIntervalSince1970: 1_700_000_000)
+    let wind = WindSnapshot(
+        directionDegrees: 315,
+        speedMetersPerSecond: 4.9,
+        gustMetersPerSecond: 8.0
+    )
     let samples = (0..<24).map { i in
         HourSample(
             date: start.addingTimeInterval(Double(i) * 3600),
-            temperature: 75,
+            temperatureCelsius: 23.9,
             pressureHPa: 1015,
             precipChance: 0,
             windSpeedMph: 9 + 6 * sin(Double(i) / 3.0),
@@ -124,8 +131,7 @@ private struct WindCompass: View {
         )
     }
     return ScrollView {
-        WindPanel(compass: "NW", fromDegrees: 315, speedMph: 11, gustMph: 18,
-                  samples: samples, now: start)
+        WindCard(wind: wind, samples: samples, now: start)
             .padding()
     }
 }

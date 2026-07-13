@@ -70,6 +70,8 @@ struct WeatherKitProvider: WeatherProvider {
             )
         } catch let cancellation as CancellationError {
             throw cancellation
+        } catch let cancellation as URLError where cancellation.code == .cancelled {
+            throw cancellation
         } catch {
             throw WeatherKitAdapter.providerError(error)
         }
@@ -138,6 +140,16 @@ enum WeatherKitAdapter {
             directionDegrees: directionDegrees,
             speedMetersPerSecond: speedMetersPerSecond,
             gustMetersPerSecond: gustMetersPerSecond
+        )
+    }
+
+    static func dailyWind(
+        speedMetersPerSecond: Double,
+        gustMetersPerSecond: Double?
+    ) -> (sustained: Double, peak: Double) {
+        (
+            sustained: speedMetersPerSecond,
+            peak: gustMetersPerSecond ?? speedMetersPerSecond
         )
     }
 
@@ -235,14 +247,22 @@ enum WeatherKitAdapter {
     }
 
     static func daily(_ weather: DayWeather) -> DailyWeatherPoint {
-        DailyWeatherPoint(
+        let speed = metersPerSecond(weather.wind.speed)
+        let gust = weather.wind.gust.map(metersPerSecond)
+        let dailyWind = dailyWind(
+            speedMetersPerSecond: speed,
+            gustMetersPerSecond: gust
+        )
+        return DailyWeatherPoint(
             date: weather.date,
             lowCelsius: celsius(weather.lowTemperature),
             highCelsius: celsius(weather.highTemperature),
             precipitationChance: fraction(weather.precipitationChance),
             conditionText: weather.condition.description,
             symbolName: weather.symbolName,
-            windPeakMetersPerSecond: weather.highWindSpeed.map(metersPerSecond)
+            windMetersPerSecond: dailyWind.sustained,
+            windPeakMetersPerSecond: dailyWind.peak,
+            astronomy: astronomy(weather)
         )
     }
 
@@ -272,14 +292,18 @@ enum WeatherKitAdapter {
             return .empty
         }
 
-        return AstronomySnapshot(
-            sunrise: today.sun.sunrise,
-            sunset: today.sun.sunset,
-            moonrise: today.moon.moonrise,
-            moonset: today.moon.moonset,
+        return astronomy(today)
+    }
+
+    static func astronomy(_ weather: DayWeather) -> AstronomySnapshot {
+        AstronomySnapshot(
+            sunrise: weather.sun.sunrise,
+            sunset: weather.sun.sunset,
+            moonrise: weather.moon.moonrise,
+            moonset: weather.moon.moonset,
             // WeatherKit's public MoonEvents surface has no transit instant.
             moonTransit: nil,
-            moonPhaseFraction: moonPhaseFraction(today.moon.phase)
+            moonPhaseFraction: moonPhaseFraction(weather.moon.phase)
         )
     }
 

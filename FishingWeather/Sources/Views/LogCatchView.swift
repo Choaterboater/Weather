@@ -1,8 +1,8 @@
 import CoreLocation
+import Foundation
 import PhotosUI
 import SwiftUI
 import UIKit
-import WeatherKit
 
 struct LogCatchView: View {
     @Environment(\.dismiss) private var dismiss
@@ -167,9 +167,15 @@ struct LogCatchView: View {
     }
 
     /// Only snapshot weather that belongs to the active location.
+    private var weatherSnapshot: WeatherSnapshot? {
+        guard let activeCLLocation,
+              weather.hasData(for: activeCLLocation)
+        else { return nil }
+        return weather.snapshot
+    }
+
     private var conditions: FishingConditions? {
-        guard let activeCLLocation, weather.hasData(for: activeCLLocation) else { return nil }
-        return weather.conditions
+        weatherSnapshot.map { FishingConditions.make(snapshot: $0) }
     }
 
     private var activeLocation: (latitude: Double, longitude: Double)? {
@@ -178,8 +184,17 @@ struct LogCatchView: View {
     }
 
     private var airTempF: Double? {
-        guard let activeCLLocation, weather.hasData(for: activeCLLocation) else { return nil }
-        return weather.current?.temperature.converted(to: .fahrenheit).value
+        guard let celsius = weatherSnapshot?.current.temperatureCelsius else { return nil }
+        return Measurement(value: celsius, unit: UnitTemperature.celsius)
+            .converted(to: .fahrenheit)
+            .value
+    }
+
+    private var dewPointF: Double? {
+        guard let celsius = weatherSnapshot?.current.dewPointCelsius else { return nil }
+        return Measurement(value: celsius, unit: UnitTemperature.celsius)
+            .converted(to: .fahrenheit)
+            .value
     }
 
     /// Tide movement now — "Rising", "Falling", or "Slack" — but only at a
@@ -212,16 +227,27 @@ struct LogCatchView: View {
     }
 
     private var conditionsSnapshot: [(label: String, value: String)]? {
-        guard let conditions else { return nil }
+        guard let conditions, let weatherSnapshot else { return nil }
         var items: [(String, String)] = []
-        items.append(("Pressure", conditions.pressure.tendency.label))
+        items.append((
+            "Pressure",
+            conditions.pressure.pressure == nil
+                ? "Unavailable"
+                : conditions.pressure.tendency.label
+        ))
         items.append(("Moon", conditions.moonPhase.displayName))
-        if let airTempF {
-            items.append(("Air temp", "\(Int(airTempF.rounded()))°F"))
-        }
-        if let dewPointF = weather.current?.dewPoint.converted(to: .fahrenheit).value {
-            items.append(("Dew Point", "\(Int(dewPointF.rounded()))°F"))
-        }
+        items.append((
+            "Air temp",
+            WeatherUnits.wholeTemperature(
+                celsius: weatherSnapshot.current.temperatureCelsius
+            )
+        ))
+        items.append((
+            "Dew Point",
+            weatherSnapshot.current.dewPointCelsius.map {
+                WeatherUnits.wholeTemperature(celsius: $0)
+            } ?? "Unavailable"
+        ))
         let spotName = spots.selectedSpot?.name ?? location.descriptor.displayName
         items.append(("Where", spotName))
         return items
@@ -246,11 +272,17 @@ struct LogCatchView: View {
             latitude: activeLocation?.latitude,
             longitude: activeLocation?.longitude,
             spotName: spots.selectedSpot?.name ?? location.descriptor.displayName,
-            pressureTendency: conditions?.pressure.tendency.label,
+            pressureTendency: conditions.flatMap {
+                $0.pressure.pressure == nil ? nil : $0.pressure.tendency.label
+            },
             moonPhase: conditions?.moonPhase.displayName,
             airTempF: airTempF,
-            dewPointF: weather.current?.dewPoint.converted(to: .fahrenheit).value,
-            windMph: conditions.map { $0.wind.speed.converted(to: .milesPerHour).value },
+            dewPointF: dewPointF,
+            windMph: conditions.map {
+                WeatherUnits.milesPerHour(
+                    metersPerSecond: $0.wind.speedMetersPerSecond
+                )
+            },
             tidePhase: tidePhase
         )
         log.add(entry, photo: photo)

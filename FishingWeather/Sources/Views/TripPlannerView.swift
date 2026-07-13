@@ -11,6 +11,7 @@ struct TripPlannerScreen: View {
 
     @Environment(TideService.self) private var tides
     @Environment(AlertSettings.self) private var alertSettings
+    @Environment(WeatherStore.self) private var weather
     @State private var loader = TripForecastLoader()
     @State private var retryID = 0
 
@@ -25,8 +26,10 @@ struct TripPlannerScreen: View {
     }
 
     private func load(force: Bool = false) async {
+        let snapshot = matchingSnapshot
         guard let outlook = await loader.load(
             for: location, species: species, locationName: locationName,
+            snapshot: snapshot,
             tides: { await tides.weekTidesByDay(near: $0) },
             force: force
         ), !Task.isCancelled else { return }
@@ -41,9 +44,14 @@ struct TripPlannerScreen: View {
         let request = TripForecastLoader.requestKey(
             location: location,
             species: species,
-            locationName: locationName
+            locationName: locationName,
+            snapshot: matchingSnapshot
         )
         return "\(request)|retry:\(retryID)"
+    }
+
+    private var matchingSnapshot: WeatherSnapshot? {
+        weather.hasData(for: location) ? weather.snapshot : nil
     }
 }
 
