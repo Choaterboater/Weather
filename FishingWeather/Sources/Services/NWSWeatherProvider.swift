@@ -24,22 +24,50 @@ struct NWSWeatherProvider: WeatherProvider {
             let fetchedAt = Date.now
             let point = try await loadPoint(location)
 
-            async let hourly = loadHourly(point.properties.forecastHourly)
-            async let daily = loadDaily(
-                point.properties.forecast,
-                timeZoneIdentifier: point.properties.timeZone
-            )
-            async let observation = loadObservation(point.properties.observationStations)
-            async let alerts = loadAlerts(location)
+            var hourlyValue: [HourlyWeatherPoint]?
+            var dailyValue: [DailyWeatherPoint]?
+            var observationValue: NWSObservationProperties?
+            var alertValue: [WeatherAlertSnapshot]?
 
-            let (hourlyValue, dailyValue, observationValue, alertValue) = try await (
-                hourly,
-                daily,
-                observation,
-                alerts
-            )
+            try await withThrowingTaskGroup(of: NWSFetchResult.self) { group in
+                group.addTask {
+                    .hourly(try await self.loadHourly(point.properties.forecastHourly))
+                }
+                group.addTask {
+                    .daily(try await self.loadDaily(
+                        point.properties.forecast,
+                        timeZoneIdentifier: point.properties.timeZone
+                    ))
+                }
+                group.addTask {
+                    .observation(try await self.loadObservation(
+                        point.properties.observationStations
+                    ))
+                }
+                group.addTask {
+                    .alerts(try await self.loadAlerts(location))
+                }
 
-            guard let firstHour = hourlyValue.first else {
+                do {
+                    while let result = try await group.next() {
+                        switch result {
+                        case let .hourly(value): hourlyValue = value
+                        case let .daily(value): dailyValue = value
+                        case let .observation(value): observationValue = value
+                        case let .alerts(value): alertValue = value
+                        }
+                    }
+                } catch {
+                    group.cancelAll()
+                    throw error
+                }
+            }
+
+            guard let hourlyValue,
+                  let dailyValue,
+                  let alertValue,
+                  let firstHour = hourlyValue.first
+            else {
                 throw WeatherProviderError.decoding("NWS hourly forecast contained no periods")
             }
 
@@ -204,6 +232,10 @@ struct NWSWeatherProvider: WeatherProvider {
             ?? fallback.wind.directionDegrees
         let speed = observation.flatMap { Self.speedMetersPerSecond($0.windSpeed) }
             ?? fallback.wind.speedMetersPerSecond
+        let symbolName = observation
+            .flatMap { $0.icon.nonEmpty }
+            .map { Self.symbol(text: conditionText, icon: $0) }
+            ?? fallback.symbolName
 
         return CurrentConditionsSnapshot(
             date: observation.flatMap { Self.date($0.timestamp) } ?? fallback.date,
@@ -219,9 +251,7 @@ struct NWSWeatherProvider: WeatherProvider {
             visibilityMeters: observation.flatMap { Self.meters($0.visibility) },
             uvIndex: fallback.uvIndex,
             conditionText: conditionText,
-            symbolName: observation.map {
-                Self.symbol(text: conditionText, icon: $0.icon)
-            } ?? fallback.symbolName,
+            symbolName: symbolName,
             wind: WindSnapshot(
                 directionDegrees: direction,
                 speedMetersPerSecond: speed,
@@ -304,20 +334,17 @@ struct NWSWeatherProvider: WeatherProvider {
             .sorted()
             .compactMap { date in
                 guard let group = groups[date],
-                      let representative = group.first(where: \.isDaytime) ?? group.first
+                      let daytime = group.first(where: \.isDaytime),
+                      let nighttime = group.first(where: { !$0.isDaytime })
                 else { return nil }
-
-                let daytime = group.first(where: \.isDaytime)
-                let nighttime = group.first(where: { !$0.isDaytime })
-                let temperatures = group.map(\.temperatureCelsius)
 
                 return DailyWeatherPoint(
                     date: date,
-                    lowCelsius: nighttime?.temperatureCelsius ?? temperatures.min() ?? 0,
-                    highCelsius: daytime?.temperatureCelsius ?? temperatures.max() ?? 0,
+                    lowCelsius: nighttime.temperatureCelsius,
+                    highCelsius: daytime.temperatureCelsius,
                     precipitationChance: group.compactMap(\.precipitationChance).max(),
-                    conditionText: representative.conditionText,
-                    symbolName: representative.symbolName,
+                    conditionText: daytime.conditionText,
+                    symbolName: daytime.symbolName,
                     windPeakMetersPerSecond: group.compactMap(\.windPeakMetersPerSecond).max()
                 )
             }
@@ -325,8 +352,9 @@ struct NWSWeatherProvider: WeatherProvider {
 
     private static func alert(_ feature: NWSAlertFeature) -> WeatherAlertSnapshot {
         let properties = feature.properties
-        let detailsURL = validHTTPURL(properties.detailsIdentifier)
-        let identifier = feature.id.nonEmpty
+        let detailsURL = validHTTPURL(properties.detailsIdentifier) ?? validHTTPURL(feature.id)
+        let identifier = properties.id.nonEmpty
+            ?? feature.id.nonEmpty
             ?? properties.detailsIdentifier.nonEmpty
             ?? [Optional(properties.event), properties.effective ?? properties.onset]
                 .compactMap(\.nonEmpty)
@@ -429,22 +457,45 @@ struct NWSWeatherProvider: WeatherProvider {
     }
 
     private static func windRange(_ text: String) -> NWSWindRange? {
-        let lowercase = text.lowercased()
-        if lowercase.contains("calm") {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.lowercased() == "calm" {
             return NWSWindRange(midpointMetersPerSecond: 0, upperMetersPerSecond: 0)
         }
 
-        let numbers = lowercase
-            .split(whereSeparator: { !$0.isNumber && $0 != "." })
-            .compactMap { Double($0) }
-        guard let first = numbers.first else { return nil }
-        let upper = numbers.dropFirst().first ?? first
-        guard lowercase.contains("mph") else { return nil }
+        let tokens = trimmed.split(whereSeparator: \.isWhitespace)
+        let first: Double
+        let upper: Double
+
+        switch tokens.count {
+        case 2:
+            guard tokens[1].lowercased() == "mph",
+                  let speed = Double(tokens[0]),
+                  speed.isFinite,
+                  speed >= 0
+            else { return nil }
+            first = speed
+            upper = speed
+        case 4:
+            guard tokens[1].lowercased() == "to",
+                  tokens[3].lowercased() == "mph",
+                  let lowerSpeed = Double(tokens[0]),
+                  let upperSpeed = Double(tokens[2]),
+                  lowerSpeed.isFinite,
+                  upperSpeed.isFinite,
+                  lowerSpeed >= 0,
+                  upperSpeed >= lowerSpeed
+            else { return nil }
+            first = lowerSpeed
+            upper = upperSpeed
+        default:
+            return nil
+        }
+
         let factor = 0.44704
 
         return NWSWindRange(
             midpointMetersPerSecond: ((first + upper) / 2) * factor,
-            upperMetersPerSecond: max(first, upper) * factor
+            upperMetersPerSecond: upper * factor
         )
     }
 
@@ -611,6 +662,7 @@ private struct NWSAlertFeature: Decodable, Sendable {
     let properties: Properties
 
     struct Properties: Decodable, Sendable {
+        let id: String?
         let detailsIdentifier: String?
         let event: String
         let headline: String?
@@ -622,6 +674,7 @@ private struct NWSAlertFeature: Decodable, Sendable {
         let expires: String?
 
         enum CodingKeys: String, CodingKey {
+            case id
             case detailsIdentifier = "@id"
             case event
             case headline
@@ -633,6 +686,13 @@ private struct NWSAlertFeature: Decodable, Sendable {
             case expires
         }
     }
+}
+
+private enum NWSFetchResult: Sendable {
+    case hourly([HourlyWeatherPoint])
+    case daily([DailyWeatherPoint])
+    case observation(NWSObservationProperties?)
+    case alerts([WeatherAlertSnapshot])
 }
 
 private struct NWSWindRange: Sendable {
