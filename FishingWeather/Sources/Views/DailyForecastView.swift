@@ -43,7 +43,7 @@ struct DailyForecastView: View {
         }
     }
 
-    static func dayLabel(
+    nonisolated static func dayLabel(
         for date: Date,
         now: Date,
         timeZoneIdentifier: String,
