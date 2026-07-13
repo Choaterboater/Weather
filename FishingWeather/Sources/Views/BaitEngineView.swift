@@ -109,9 +109,9 @@ struct BaitEngineView: View {
                         systemImage: "figure.fishing"
                     )
                     detail(
-                        label: "Depth",
-                        value: result.recommendation.depth,
-                        systemImage: "arrow.down.to.line"
+                        label: result.presentationDetailLabel,
+                        value: result.presentationDetailValue,
+                        systemImage: result.presentationDetailSystemImage
                     )
                 }
             }
