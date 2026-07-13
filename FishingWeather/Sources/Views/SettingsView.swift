@@ -25,6 +25,16 @@ struct SettingsView: View {
                 } footer: {
                     Text("Get a heads-up before the week's best fishing windows. Alerts refresh each time you open Plan the Week.")
                 }
+
+                Section("About") {
+                    NavigationLink {
+                        LegalCenterView()
+                    } label: {
+                        Label("Legal & Support", systemImage: "checkmark.shield.fill")
+                    }
+                    .accessibilityIdentifier("settings.legalSupport")
+                    .accessibilityHint("Opens privacy, terms, support, and third-party notices")
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)

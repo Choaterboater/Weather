@@ -1,0 +1,49 @@
+BiteCast Terms of Use
+
+Effective July 13, 2026
+
+Using BiteCast
+
+By using BiteCast, you agree to use the app lawfully and responsibly. BiteCast provides planning information, personal recordkeeping, and recreational-fishing guidance. It does not guarantee a catch, a safe trip, accurate identification, or uninterrupted service.
+
+Safety comes first
+
+BiteCast is not an emergency service, not a navigation service, and not a substitute for official marine, weather, flood, evacuation, or public-safety instructions. Conditions can change faster than the app refreshes. Check official forecasts and alerts, carry suitable safety equipment, obey closures, and use your own judgment before entering or remaining on the water. Call the appropriate emergency service when help is needed.
+
+Weather, water, and forecast limits
+
+Forecasts, observations, tides, water gauges, maps, and derived fishing scores can be delayed, unavailable, incomplete, or inaccurate. Apple Weather and other providers retain ownership of their data and supply it under their own terms. Source attribution and official alert links are shown where required. Never use a BiteCast score as a life-safety decision.
+
+Apple Weather legal attribution:
+
+https://weatherkit.apple.com/legal-attribution.html
+
+Fishing laws and access
+
+Regulation summaries are a convenience and may be incomplete or out of date. You must verify current fishing regulations, licenses, seasons, size and bag limits, protected species, property boundaries, and legal access with the responsible government agency and landowner before fishing or keeping a catch.
+
+Artificial intelligence and recommendations
+
+Artificial intelligence, on-device recognition, bite scores, bait suggestions, and water-scout guidance are estimates. They may misidentify a fish, overlook a hazard, recommend an unsuitable technique, or produce incorrect text or imagery. Confirm species and legal status independently before handling or harvesting a fish. Do not rely on generated bait art as an exact product or rigging diagram.
+
+Your content
+
+You are responsible for photos, notes, catch details, saved spots, and other material you add. Only add content you have the right to use. The current version stores personal catch content locally and does not publish it to a BiteCast community service. Protect sensitive locations before sharing screenshots or exported material outside the app.
+
+External services and purchases
+
+Links can open Apple, government, YouTube, iNaturalist, mapping, retailer, Replicate, or other third-party services. Their terms, privacy practices, availability, pricing, and content are outside BiteCast's control. Some shopping links may be affiliate links that can compensate the app owner. Verify the seller, product, price, shipping, and suitability before purchasing.
+
+Acceptable use
+
+Do not misuse the app to violate fishing, wildlife, trespass, privacy, intellectual-property, export, or other laws. Do not attempt to disrupt the app or its external services, bypass access controls, extract credentials, or submit unlawful or harmful material.
+
+Availability and changes
+
+Features can change, stop working, or be removed when a provider, law, safety requirement, or product design changes. These terms may be updated in the app with a new effective date. If you do not accept an update, stop using BiteCast and remove it from your device.
+
+Support
+
+Questions and issue reports can be submitted at:
+
+https://github.com/Choaterboater/Weather

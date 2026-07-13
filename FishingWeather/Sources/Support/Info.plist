@@ -27,11 +27,11 @@
 	<key>FishUSAAffiliateTemplate</key>
 	<string>$(FISHUSA_AFFILIATE_TEMPLATE)</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Take a photo of the water so the AI can suggest where to cast.</string>
+	<string>Photograph the water for on-device fishing guidance.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>BiteCast uses your location to show local conditions, forecasts, and fishing windows.</string>
+	<string>Show local conditions, maps, spots, regulations, and fishing windows, and optionally save a catch location.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Choose a photo of the water so the AI can suggest where to cast.</string>
+	<string>Choose a catch photo for your private log or a water photo for on-device fishing guidance.</string>
 	<key>TackleWarehouseAffiliateTemplate</key>
 	<string>$(TACKLEWAREHOUSE_AFFILIATE_TEMPLATE)</string>
 	<key>YouTubeAPIKey</key>
