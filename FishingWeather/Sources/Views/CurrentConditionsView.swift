@@ -3,6 +3,9 @@ import SwiftUI
 struct CurrentConditionsView: View {
     let current: CurrentConditionsSnapshot
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     private var temperature: String {
         WeatherUnits.wholeTemperature(celsius: current.temperatureCelsius)
     }
@@ -46,37 +49,56 @@ struct CurrentConditionsView: View {
         current.uvIndex.map { String($0) } ?? "—"
     }
 
+    private var metricColumns: [GridItem] {
+        [
+            GridItem(
+                .adaptive(
+                    minimum: dynamicTypeSize.isAccessibilitySize ? 140 : 56
+                ),
+                spacing: 8,
+                alignment: .top
+            ),
+        ]
+    }
+
     var body: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(temperature)
-                        .font(.system(size: 64, weight: .light, design: .monospaced))
+                        .font(.system(.largeTitle, design: .rounded, weight: .light))
+                        .monospacedDigit()
                         .foregroundStyle(Ink.chart)
-                        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-                        .minimumScaleFactor(0.7)
-                        .lineLimit(1)
                         .contentTransition(.numericText())
                     Spacer()
                     Image(systemName: current.symbolName)
                         .font(.largeTitle)
                         .imageScale(.large)
                         .symbolRenderingMode(.multicolor)
-                        .symbolEffect(.bounce, options: .nonRepeating)
+                        .symbolEffect(
+                            .bounce,
+                            options: .nonRepeating,
+                            isActive: !reduceMotion
+                        )
                         .accessibilityHidden(true)
                 }
 
                 Text(current.conditionText)
-                    .font(.system(size: 20, weight: .bold, design: .monospaced))
+                    .font(.system(.title3, design: .rounded, weight: .bold))
                     .foregroundStyle(Ink.chart)
 
                 Text("Feels like \(feelsLike)")
-                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .font(.system(.subheadline, design: .rounded, weight: .medium))
+                    .monospacedDigit()
                     .foregroundStyle(Ink.chartDim)
 
                 Divider()
 
-                HStack(spacing: 16) {
+                LazyVGrid(
+                    columns: metricColumns,
+                    alignment: .leading,
+                    spacing: 12
+                ) {
                     Metric(label: "Wind", value: wind, systemImage: "wind")
                     Metric(label: "Humidity", value: humidity, systemImage: "humidity")
                     Metric(label: "Dew Point", value: dewPoint, systemImage: "drop.fill")
@@ -96,23 +118,58 @@ private struct Metric: View {
     let value: String
     let systemImage: String
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        VStack(spacing: 4) {
-            Image(systemName: systemImage)
-                .foregroundStyle(Ink.chartDim)
-            Text(value)
-                .font(.system(size: 14, weight: .bold, design: .monospaced))
-                .foregroundStyle(Ink.chart)
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-            Text(label)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .textCase(.uppercase)
-                .tracking(1)
-                .foregroundStyle(Ink.chartDim)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                HStack(alignment: .top, spacing: 8) {
+                    metricIcon
+                        .frame(width: 24)
+                    VStack(alignment: .leading, spacing: 2) {
+                        metricValue
+                        metricLabel
+                    }
+                    Spacer(minLength: 0)
+                }
+            } else {
+                VStack(spacing: 4) {
+                    metricIcon
+                    metricValue
+                    metricLabel
+                }
+            }
         }
-        .frame(maxWidth: .infinity)
+        .frame(
+            maxWidth: .infinity,
+            alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .center
+        )
+    }
+
+    private var metricIcon: some View {
+        Image(systemName: systemImage)
+            .foregroundStyle(Ink.chartDim)
+            .accessibilityHidden(true)
+    }
+
+    private var metricValue: some View {
+        Text(value)
+            .font(.system(.subheadline, design: .rounded, weight: .bold))
+            .monospacedDigit()
+            .foregroundStyle(Ink.chart)
+            .multilineTextAlignment(
+                dynamicTypeSize.isAccessibilitySize ? .leading : .center
+            )
+    }
+
+    private var metricLabel: some View {
+        Text(label)
+            .font(.system(.caption2, design: .rounded, weight: .bold))
+            .textCase(.uppercase)
+            .tracking(1)
+            .foregroundStyle(Ink.chartDim)
+            .multilineTextAlignment(
+                dynamicTypeSize.isAccessibilitySize ? .leading : .center
+            )
     }
 }

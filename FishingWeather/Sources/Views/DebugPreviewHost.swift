@@ -1,4 +1,5 @@
 #if DEBUG
+import CoreLocation
 import SwiftUI
 
 /// Permanent deterministic visual-QA harness. It renders production components
@@ -19,7 +20,9 @@ struct DebugPreviewHost: View {
     @State private var regulationStore = RegulationStore()
 
     var body: some View {
-        if CommandLine.arguments.contains("shell") {
+        if let biteTimeMode = BiteTimePreviewMode.requested {
+            DebugBiteTime(mode: biteTimeMode)
+        } else if CommandLine.arguments.contains("shell") {
             MainTabView()
                 .environment(locationManager)
                 .environment(weatherStore)
@@ -57,6 +60,317 @@ struct DebugPreviewHost: View {
         } else {
             Text("Unknown -uiPreview target")
         }
+    }
+}
+
+private enum BiteTimePreviewMode: String, Sendable {
+    case live = "biteTimeLive"
+    case nws = "biteTimeNWS"
+    case cache = "biteTimeCache"
+    case authentication = "biteTimeAuth"
+    case network = "biteTimeNetwork"
+    case rateLimited = "biteTimeRateLimited"
+    case outage = "biteTimeOutage"
+    case unsupported = "biteTimeUnsupported"
+    case loading = "biteTimeLoading"
+
+    static var requested: Self? {
+        let arguments = CommandLine.arguments
+        guard let flag = arguments.firstIndex(of: "-uiPreview"),
+              arguments.indices.contains(flag + 1)
+        else { return nil }
+        return Self(rawValue: arguments[flag + 1])
+    }
+}
+
+private enum BiteTimePreviewFixture {
+    static let now = Date(timeIntervalSince1970: 1_800_000_000)
+    static let locale = Locale(identifier: "en_US_POSIX")
+    static let timeZone = TimeZone(identifier: "America/New_York")!
+    static let coordinate = WeatherCoordinate(
+        latitude: 27.7634,
+        longitude: -82.6403
+    )
+    static let location = CLLocation(
+        latitude: coordinate.latitude,
+        longitude: coordinate.longitude
+    )
+
+    static let preferenceSuiteName =
+        "app.choatelabs.bitecast.debug.biteTime.v1"
+    static let resetPreferenceArgument =
+        "-resetBiteTimePreviewPreferences"
+
+    @MainActor static let preferenceStore: UserDefaults = {
+        guard let store = UserDefaults(suiteName: preferenceSuiteName) else {
+            preconditionFailure("Unable to create isolated BiteTime preview defaults")
+        }
+        if CommandLine.arguments.contains(resetPreferenceArgument) {
+            store.removePersistentDomain(forName: preferenceSuiteName)
+        }
+        return store
+    }()
+
+    static var tide: BiteTimeTideSnapshot {
+        let allEvents = (0..<10).map { index in
+            TideEvent(
+                time: now.addingTimeInterval(Double(index * 6 - 12) * 3_600),
+                kind: index.isMultiple(of: 2) ? .high : .low,
+                heightFeet: index.isMultiple(of: 2) ? 3.6 : 0.7
+            )
+        }
+        let samples = (0..<73).map { index in
+            let offsetHours = Double(index - 12)
+            return TideSample(
+                time: now.addingTimeInterval(offsetHours * 3_600),
+                heightFeet: 2.15 + 1.45 * sin(offsetHours / 2.0)
+            )
+        }
+        return BiteTimeTideSnapshot(
+            events: allEvents.filter { $0.time >= now }.prefix(4).map { $0 },
+            allEvents: allEvents,
+            samples: samples,
+            stationName: "St. Petersburg, Tampa Bay",
+            distanceMiles: 2.4
+        )
+    }
+
+    @MainActor
+    static func weatherStore(for mode: BiteTimePreviewMode) -> WeatherStore {
+        WeatherStore(
+            worker: { _, _ in
+                switch mode {
+                case .live:
+                    return snapshot(
+                        source: .weatherKit,
+                        fetchedAt: now.addingTimeInterval(-5 * 60),
+                        isFallback: false,
+                        attribution: "Apple Weather"
+                    )
+                case .nws:
+                    return snapshot(
+                        source: .nws,
+                        fetchedAt: now.addingTimeInterval(-8 * 60),
+                        isFallback: true,
+                        attribution: "National Weather Service"
+                    )
+                case .cache:
+                    return snapshot(
+                        source: .cache,
+                        fetchedAt: now.addingTimeInterval(-2 * 3_600),
+                        isFallback: true,
+                        attribution: "Cached from National Weather Service"
+                    )
+                case .authentication:
+                    throw WeatherProviderError.authentication
+                case .network:
+                    throw WeatherProviderError.network(
+                        "The preview device is offline."
+                    )
+                case .rateLimited:
+                    throw WeatherProviderError.rateLimited(retryAfter: 45)
+                case .outage:
+                    throw WeatherProviderError.serviceUnavailable
+                case .unsupported:
+                    throw WeatherProviderError.unsupportedRegion
+                case .loading:
+                    try await Task.sleep(nanoseconds: 3_600_000_000_000)
+                    throw CancellationError()
+                }
+            },
+            now: { now }
+        )
+    }
+
+    static func snapshot(
+        source: WeatherSource,
+        fetchedAt: Date,
+        isFallback: Bool,
+        attribution: String?
+    ) -> WeatherSnapshot {
+        let astronomy = astronomy(for: now)
+        return WeatherSnapshot(
+            coordinate: coordinate,
+            timeZoneIdentifier: timeZone.identifier,
+            current: CurrentConditionsSnapshot(
+                date: now,
+                temperatureCelsius: 27.2,
+                apparentTemperatureCelsius: 28.4,
+                dewPointCelsius: 20.1,
+                humidityFraction: 0.64,
+                pressureHPa: 1_014.8,
+                visibilityMeters: 16_100,
+                uvIndex: 6,
+                conditionText: "Partly cloudy",
+                symbolName: "cloud.sun.fill",
+                wind: WindSnapshot(
+                    directionDegrees: 145,
+                    speedMetersPerSecond: 4.1,
+                    gustMetersPerSecond: 6.8
+                )
+            ),
+            hourly: (0..<48).map(hourlyPoint),
+            daily: (0..<7).map(dailyPoint),
+            alerts: [],
+            astronomy: astronomy,
+            provenance: WeatherProvenance(
+                source: source,
+                fetchedAt: fetchedAt,
+                isFallback: isFallback,
+                attribution: attribution
+            )
+        )
+    }
+
+    private static func hourlyPoint(_ hour: Int) -> HourlyWeatherPoint {
+        let date = now.addingTimeInterval(Double(hour) * 3_600)
+        let localHour = localHour(for: date)
+        let daylight = sin(
+            (Double(localHour) - 6) / 12 * .pi
+        ).clamped(to: 0...1)
+        let passingShower = hour == 7 || hour == 8 || hour == 31
+        let temperature = 22.4 + daylight * 6.4
+
+        return HourlyWeatherPoint(
+            date: date,
+            temperatureCelsius: hour == 0 ? 27.2 : temperature,
+            apparentTemperatureCelsius: temperature + 1.1,
+            dewPointCelsius: 19.7,
+            humidityFraction: 0.72 - daylight * 0.18,
+            pressureHPa: 1_015 - Double(hour) * 0.09,
+            visibilityMeters: passingShower ? 10_500 : 16_100,
+            uvIndex: Int((daylight * 8).rounded()),
+            cloudCoverFraction: passingShower ? 0.82 : 0.34,
+            precipitationChance: passingShower ? 0.48 : 0.08,
+            precipitationMM: passingShower ? 1.6 : 0,
+            conditionText: passingShower ? "Passing showers" : "Partly cloudy",
+            symbolName: passingShower ? "cloud.sun.rain.fill" : "cloud.sun.fill",
+            wind: WindSnapshot(
+                directionDegrees: Double((145 + hour * 4) % 360),
+                speedMetersPerSecond: 3.5 + sin(Double(hour) / 4),
+                gustMetersPerSecond: 6.2 + sin(Double(hour) / 3)
+            )
+        )
+    }
+
+    private static func dailyPoint(_ day: Int) -> DailyWeatherPoint {
+        let date = dayStart.addingTimeInterval(Double(day) * 86_400)
+        let showerDay = day == 2 || day == 5
+        return DailyWeatherPoint(
+            date: date,
+            lowCelsius: 21.4 + Double(day % 2),
+            highCelsius: 28.6 + Double(day % 3) * 0.7,
+            precipitationChance: showerDay ? 0.46 : 0.14,
+            conditionText: showerDay ? "Scattered showers" : "Partly cloudy",
+            symbolName: showerDay ? "cloud.sun.rain.fill" : "cloud.sun.fill",
+            windMetersPerSecond: 4.0 + Double(day) * 0.2,
+            windPeakMetersPerSecond: 7.1 + Double(day) * 0.25,
+            astronomy: astronomy(for: date)
+        )
+    }
+
+    private static var dayStart: Date {
+        calendar.startOfDay(for: now)
+    }
+
+    private static var calendar: Calendar {
+        var value = Calendar(identifier: .gregorian)
+        value.locale = locale
+        value.timeZone = timeZone
+        return value
+    }
+
+    private static func localHour(for date: Date) -> Int {
+        calendar.component(.hour, from: date)
+    }
+
+    private static func astronomy(for date: Date) -> AstronomySnapshot {
+        let midnight = calendar.startOfDay(for: date)
+        return AstronomySnapshot(
+            sunrise: midnight.addingTimeInterval(7.1 * 3_600),
+            sunset: midnight.addingTimeInterval(17.8 * 3_600),
+            moonrise: midnight.addingTimeInterval(19.4 * 3_600),
+            moonset: midnight.addingTimeInterval(8.2 * 3_600),
+            moonTransit: midnight.addingTimeInterval(1.7 * 3_600),
+            moonPhaseFraction: 0.72
+        )
+    }
+}
+
+private struct DebugBiteTime: View {
+    private let mode: BiteTimePreviewMode
+    @State private var weatherStore: WeatherStore
+    @State private var locationManager: LocationManager
+    @State private var spotStore: SpotStore
+    @State private var catchLog: CatchLog
+    @State private var tideService = TideService()
+    @State private var engine: BaitEngine
+
+    @MainActor
+    init(mode: BiteTimePreviewMode) {
+        self.mode = mode
+        _weatherStore = State(
+            initialValue: BiteTimePreviewFixture.weatherStore(for: mode)
+        )
+
+        let locationManager = LocationManager { _ in
+            LocationManager.GeocodeResult(
+                placeName: "St. Petersburg",
+                stateCode: "FL"
+            )
+        }
+        locationManager.acceptLocation(BiteTimePreviewFixture.location.coordinate)
+        _locationManager = State(initialValue: locationManager)
+
+        let spotStore = SpotStore()
+        spotStore.select(nil)
+        _spotStore = State(initialValue: spotStore)
+
+        let catchDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("BiteCast-BiteTime-Preview", isDirectory: true)
+        if CommandLine.arguments.contains(
+            BiteTimePreviewFixture.resetPreferenceArgument
+        ) {
+            try? FileManager.default.removeItem(at: catchDirectory)
+        }
+        _catchLog = State(initialValue: CatchLog(directory: catchDirectory))
+        _engine = State(initialValue: BaitEngine(modelAvailability: {
+            .unavailable("Deterministic preview guidance")
+        }))
+    }
+
+    var body: some View {
+        NavigationStack {
+            BiteTimeView(
+                fixedNow: BiteTimePreviewFixture.now,
+                allowsAutomaticTideLoad: false,
+                tideOverride: BiteTimePreviewFixture.tide,
+                preferencesStore: BiteTimePreviewFixture.preferenceStore,
+                initialSpecies: .bass,
+                engine: engine
+            )
+            .navigationTitle("BiteTime")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .environment(\.locale, BiteTimePreviewFixture.locale)
+        .environment(\.timeZone, BiteTimePreviewFixture.timeZone)
+        .environment(weatherStore)
+        .environment(locationManager)
+        .environment(spotStore)
+        .environment(catchLog)
+        .environment(tideService)
+        .task(id: mode) {
+            await weatherStore.load(
+                for: BiteTimePreviewFixture.location,
+                force: true
+            )
+        }
+    }
+}
+
+private extension Double {
+    func clamped(to range: ClosedRange<Self>) -> Self {
+        min(max(self, range.lowerBound), range.upperBound)
     }
 }
 

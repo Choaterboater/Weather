@@ -5,12 +5,35 @@ import SwiftUI
 /// Sits in the Fishing tab between the bite-windows card and the pressure card,
 /// only when the active spot is saltwater (or no spot is selected and we got data back).
 struct TideCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.locale) private var locale
+    @Environment(\.timeZone) private var timeZone
+
     let events: [TideEvent]
     let samples: [TideSample]
     let stationName: String?
     let distanceMiles: Double?
     let isLoading: Bool
     var lastError: String? = nil
+    var now: Date = .now
+
+    private var chartDomain: ClosedRange<Date> {
+        Self.visibleChartDomain(events: events, samples: samples, now: now)
+            ?? now...now
+    }
+
+    private var chartSamples: [TideSample] {
+        Self.visibleSamples(samples, in: chartDomain)
+    }
+
+    private var chartEvents: [TideEvent] {
+        events.filter { chartDomain.contains($0.time) }
+    }
+
+    /// Four centered labels preserve complete short times at the chart edges.
+    private var chartTickDates: [Date] {
+        Self.chartTickDates(in: chartDomain)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -20,17 +43,17 @@ struct TideCard: View {
                     HStack {
                         ProgressView()
                         Text("Loading tide predictions…")
-                            .font(.system(size: 14, weight: .medium, design: .monospaced))
+                            .font(.system(.subheadline, design: .rounded, weight: .medium))
                             .foregroundStyle(Ink.chartDim)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 } else if let lastError {
                     Label(lastError, systemImage: "wifi.slash")
-                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .font(.system(.subheadline, design: .rounded, weight: .medium))
                         .foregroundStyle(Ink.chartDim)
                 } else if events.isEmpty && samples.isEmpty {
                     Text("No tide station in range.")
-                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .font(.system(.subheadline, design: .rounded, weight: .medium))
                         .foregroundStyle(Ink.chartDim)
                 } else {
                     VStack(alignment: .leading, spacing: 14) {
@@ -48,9 +71,9 @@ struct TideCard: View {
 
     @ViewBuilder
     private var chart: some View {
-        if samples.count > 1 {
+        if chartSamples.count > 1 {
             Chart {
-                ForEach(samples) { sample in
+                ForEach(chartSamples) { sample in
                     AreaMark(
                         x: .value("Time", sample.time),
                         y: .value("ft", sample.heightFeet)
@@ -69,7 +92,7 @@ struct TideCard: View {
                     .foregroundStyle(Ink.tide)
                     .interpolationMethod(.catmullRom)
                 }
-                ForEach(events) { event in
+                ForEach(chartEvents) { event in
                     if let h = event.heightFeet {
                         PointMark(
                             x: .value("Time", event.time),
@@ -80,69 +103,224 @@ struct TideCard: View {
                         .foregroundStyle(event.kind == .high ? Ink.brass : Ink.tide)
                         .annotation(position: .top, alignment: .center, spacing: 2) {
                             Text(event.kind.label.first.map(String.init) ?? "")
-                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .font(.system(.caption2, design: .rounded, weight: .bold))
                                 .foregroundStyle(event.kind == .high ? Ink.brass : Ink.tide)
                         }
                     }
                 }
-                RuleMark(x: .value("Now", Date.now))
-                    .foregroundStyle(Ink.hullLine.opacity(0.7))
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                if Self.shouldShowNow(now, in: chartDomain) {
+                    RuleMark(x: .value("Now", now))
+                        .foregroundStyle(Ink.hullLine.opacity(0.7))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                }
             }
+            .chartXScale(domain: chartDomain)
             .chartXAxis {
-                AxisMarks(values: .stride(by: .hour, count: 6)) { value in
+                AxisMarks(values: chartTickDates) { value in
                     AxisGridLine()
                     AxisTick()
-                    AxisValueLabel(format: .dateTime.hour())
+                    AxisValueLabel {
+                        if let date = value.as(Date.self) {
+                            Text(chartTimeLabel(date))
+                                .font(.system(.caption2, design: .rounded, weight: .medium))
+                                .monospacedDigit()
+                        }
+                    }
                 }
             }
             .chartYAxis {
-                AxisMarks(position: .leading) { _ in
+                AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
                     AxisGridLine()
-                    AxisValueLabel()
+                    AxisValueLabel {
+                        if let height = value.as(Double.self) {
+                            Text(height.formatted(.number.precision(.fractionLength(1))))
+                                .font(.system(.caption2, design: .rounded, weight: .medium))
+                                .monospacedDigit()
+                        }
+                    }
                 }
             }
-            .frame(height: 140)
+            .frame(height: dynamicTypeSize.isAccessibilitySize ? 184 : 140)
+            .dynamicTypeSize(...DynamicTypeSize.large)
+            .accessibilityElement(children: .ignore)
+            .accessibilityIdentifier("bitetime.tideChart")
+            .accessibilityLabel("Tide forecast chart")
+            .accessibilityValue(chartAccessibilitySummary)
         }
+    }
+
+    private var chartAccessibilitySummary: String {
+        var details = [
+            "From \(shortTime(chartDomain.lowerBound)) to \(shortTime(chartDomain.upperBound))"
+        ]
+        if !chartEvents.isEmpty {
+            let eventDetails = chartEvents.map { event in
+                var description = "\(event.kind.label) at \(shortTime(event.time))"
+                if let height = event.heightFeet {
+                    description += ", \(height.formatted(.number.precision(.fractionLength(1)))) feet"
+                }
+                return description
+            }
+            details.append(eventDetails.joined(separator: "; "))
+        }
+        if Self.shouldShowNow(now, in: chartDomain) {
+            details.append("Current time \(shortTime(now))")
+        }
+        return details.joined(separator: ". ")
+    }
+
+    private func shortTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
+    private func chartTimeLabel(_ date: Date) -> String {
+        Self.chartTimeLabel(date, locale: locale, timeZone: timeZone)
+    }
+
+    /// Localized hour-only axis labels remain legible at the chart edges.
+    nonisolated static func chartTimeLabel(
+        _ date: Date,
+        locale: Locale,
+        timeZone: TimeZone
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        formatter.setLocalizedDateFormatFromTemplate("ha")
+        return formatter.string(from: date)
+    }
+
+    nonisolated static func visibleChartDomain(
+        events: [TideEvent],
+        samples: [TideSample],
+        now: Date
+    ) -> ClosedRange<Date>? {
+        let eventTimes = events.map(\.time)
+        if let firstEvent = eventTimes.min(),
+           let lastEvent = eventTimes.max() {
+            let padding: TimeInterval = 3 * 3_600
+            let lowerBound = firstEvent.addingTimeInterval(-padding)
+            let upperBound = lastEvent.addingTimeInterval(padding)
+            return lowerBound...upperBound
+        }
+
+        guard !samples.isEmpty else { return nil }
+        let halfDay: TimeInterval = 12 * 3_600
+        let lowerBound = now.addingTimeInterval(-halfDay)
+        let upperBound = now.addingTimeInterval(halfDay)
+        return lowerBound...upperBound
+    }
+
+    nonisolated static func visibleSamples(
+        _ samples: [TideSample],
+        in domain: ClosedRange<Date>
+    ) -> [TideSample] {
+        samples.filter { domain.contains($0.time) }
+    }
+
+    nonisolated static func chartTickDates(
+        in domain: ClosedRange<Date>
+    ) -> [Date] {
+        let duration = domain.upperBound.timeIntervalSince(domain.lowerBound)
+        return (0..<4).map { index in
+            domain.lowerBound.addingTimeInterval(
+                duration * (Double(index) + 0.5) / 4
+            )
+        }
+    }
+
+    nonisolated static func shouldShowNow(
+        _ now: Date,
+        in domain: ClosedRange<Date>
+    ) -> Bool {
+        domain.contains(now)
     }
 
     private var eventsList: some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(events) { event in
-                HStack(spacing: 12) {
-                    Image(systemName: event.kind.symbolName)
-                        .foregroundStyle(event.kind == .high ? Ink.brass : Ink.tide)
-                        .font(.system(size: 16, weight: .bold, design: .monospaced))
-                        .frame(width: 22)
-                    Text(event.kind.label)
-                        .font(.system(size: 14, weight: .bold, design: .monospaced))
-                        .foregroundStyle(Ink.chart)
-                    Spacer()
-                    Text(event.time.formatted(date: .omitted, time: .shortened))
-                        .font(.system(size: 14, weight: .medium, design: .monospaced))
-                        .foregroundStyle(Ink.chart)
-                    Text(event.heightFeet.map { String(format: "%.1f ft", $0) } ?? "—")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundStyle(Ink.chartDim)
-                        .frame(width: 56, alignment: .trailing)
-                }
+                eventRow(event)
             }
         }
     }
 
-    private func stationFootnote(_ name: String) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: "mappin.and.ellipse")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-            Text(name)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-            if let distanceMiles {
-                Text("· \(Int(distanceMiles)) mi")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+    private func eventRow(_ event: TideEvent) -> some View {
+        HStack(alignment: dynamicTypeSize.isAccessibilitySize ? .top : .center, spacing: 12) {
+            Image(systemName: event.kind.symbolName)
+                .foregroundStyle(event.kind == .high ? Ink.brass : Ink.tide)
+                .font(.headline.weight(.semibold))
+                .frame(width: 22)
+
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 5) {
+                    eventLabel(event)
+                    eventTime(event)
+                    eventHeight(event)
+                }
+            } else {
+                eventLabel(event)
+                Spacer()
+                eventTime(event)
+                eventHeight(event)
+                    .frame(minWidth: 56, alignment: .trailing)
             }
-            Spacer()
-            Text("NOAA")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
+        }
+    }
+
+    private func eventLabel(_ event: TideEvent) -> some View {
+        Text(event.kind.label)
+            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+            .foregroundStyle(Ink.chart)
+    }
+
+    private func eventTime(_ event: TideEvent) -> some View {
+        Text(event.time.formatted(date: .omitted, time: .shortened))
+            .font(.system(.subheadline, design: .rounded, weight: .medium))
+            .monospacedDigit()
+            .foregroundStyle(Ink.chart)
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func eventHeight(_ event: TideEvent) -> some View {
+        Text(event.heightFeet.map { String(format: "%.1f ft", $0) } ?? "—")
+            .font(.system(.caption, design: .rounded, weight: .semibold))
+            .monospacedDigit()
+            .foregroundStyle(Ink.chartDim)
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func stationFootnote(_ name: String) -> some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 5) {
+                    Label(name, systemImage: "mappin.and.ellipse")
+                        .font(.system(.caption, design: .rounded, weight: .medium))
+                    if let distanceMiles {
+                        Text("\(Int(distanceMiles)) mi away")
+                            .font(.system(.caption, design: .rounded, weight: .semibold))
+                            .monospacedDigit()
+                    }
+                    Text("Data: NOAA")
+                        .font(.system(.caption2, design: .rounded, weight: .semibold))
+                }
+            } else {
+                HStack(spacing: 4) {
+                    Image(systemName: "mappin.and.ellipse")
+                    Text(name)
+                    if let distanceMiles {
+                        Text("· \(Int(distanceMiles)) mi")
+                            .monospacedDigit()
+                    }
+                    Spacer()
+                    Text("NOAA")
+                }
+                .font(.system(.caption2, design: .rounded, weight: .semibold))
+            }
         }
         .foregroundStyle(Ink.chartDim)
     }

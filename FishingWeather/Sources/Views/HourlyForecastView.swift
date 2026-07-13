@@ -56,6 +56,23 @@ struct HourlyForecastView: View {
         sharedSelectedDate ?? $internalSelectedDate
     }
 
+    static func timelineAccessibilityIdentifier(for date: Date) -> String {
+        let seconds = date.timeIntervalSince1970
+        guard seconds.isFinite,
+              let epoch = Int64(exactly: seconds.rounded(.towardZero))
+        else {
+            return "timeline.hour.unavailable"
+        }
+        return "timeline.hour.\(epoch)"
+    }
+
+    static func timelineAccessibilityValue(
+        isSelected: Bool,
+        details: String
+    ) -> String {
+        "\(isSelected ? "Selected" : "Not selected"), \(details)"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: "Timeline", systemImage: "chart.xyaxis.line")
@@ -128,7 +145,7 @@ private struct HourCell: View {
         return "\(Int(mph.rounded())) mph wind"
     }
 
-    private var accessibilityValue: String {
+    private var accessibilityDetails: String {
         var values = [
             WeatherUnits.wholeTemperature(
                 celsius: point.weather.temperatureCelsius,
@@ -205,8 +222,16 @@ private struct HourCell: View {
                 locale: locale
             )
         )
-        .accessibilityValue(accessibilityValue)
+        .accessibilityValue(
+            HourlyForecastView.timelineAccessibilityValue(
+                isSelected: isSelected,
+                details: accessibilityDetails
+            )
+        )
         .accessibilityHint("Select this hour for forecast details")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityIdentifier(
+            HourlyForecastView.timelineAccessibilityIdentifier(for: point.date)
+        )
     }
 }

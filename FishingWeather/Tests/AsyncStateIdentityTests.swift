@@ -60,6 +60,7 @@ struct AsyncStateIdentityTests {
 
         #expect(store.snapshot?.coordinate.latitude == 31)
         #expect(store.errorMessage == nil)
+        #expect(store.lastProviderError == nil)
         #expect(!store.isLoading)
     }
 
@@ -89,6 +90,7 @@ struct AsyncStateIdentityTests {
         #expect(store.snapshot == nil)
         #expect(store.loadedKey == nil)
         #expect(store.errorMessage == nil)
+        #expect(store.lastProviderError == nil)
         #expect(!store.isLoading)
     }
 
@@ -120,8 +122,220 @@ struct AsyncStateIdentityTests {
         await store.load(for: CLLocation(latitude: 30, longitude: -86))
 
         #expect(store.snapshot == nil)
+        #expect(store.lastProviderError == .allProvidersFailed([
+            WeatherProviderFailure(
+                provider: "NestedChain",
+                error: .allProvidersFailed([
+                    WeatherProviderFailure(
+                        provider: "TransientProvider",
+                        error: .network("offline")
+                    ),
+                    WeatherProviderFailure(
+                        provider: "WeatherKitProvider",
+                        error: .authentication
+                    ),
+                ])
+            ),
+            WeatherProviderFailure(
+                provider: "NWSWeatherProvider",
+                error: .serviceUnavailable
+            ),
+        ]))
         #expect(store.errorMessage == "Weather authorization failed. Check the app's WeatherKit entitlement.")
         #expect(!store.isLoading)
+    }
+
+    @MainActor
+    @Test("A failed forced refresh keeps matching live and cached content")
+    func failedForcedRefreshKeepsMatchingContent() async {
+        let location = CLLocation(latitude: 30, longitude: -86)
+
+        for source in [WeatherSource.nws, .cache] {
+            let attempts = AsyncCounter()
+            let store = WeatherStore(worker: { location, now in
+                if await attempts.next() == 1 {
+                    return Self.snapshot(
+                        latitude: location.coordinate.latitude,
+                        longitude: location.coordinate.longitude,
+                        fetchedAt: now,
+                        source: source
+                    )
+                }
+                throw WeatherProviderError.rateLimited(retryAfter: 120)
+            })
+
+            await store.load(for: location)
+            let original = store.snapshot
+            await store.load(for: location, force: true)
+
+            #expect(store.snapshot == original)
+            #expect(store.hasData(for: location))
+            #expect(store.lastProviderError == .rateLimited(retryAfter: 120))
+            #expect(store.errorMessage == "The weather service is busy. Try again in 120 seconds.")
+            #expect(!store.isLoading)
+        }
+    }
+
+    @MainActor
+    @Test("A fresh TTL hit clears a retained refresh error without refetching")
+    func freshTTLHitClearsRetainedRefreshError() async {
+        let attempts = AsyncCounter()
+        let location = CLLocation(latitude: 30, longitude: -86)
+        let store = WeatherStore(worker: { location, now in
+            if await attempts.next() == 1 {
+                return Self.snapshot(
+                    latitude: location.coordinate.latitude,
+                    longitude: location.coordinate.longitude,
+                    fetchedAt: now
+                )
+            }
+            throw WeatherProviderError.network("offline")
+        })
+
+        await store.load(for: location)
+        await store.load(for: location, force: true)
+        #expect(store.lastProviderError == .network("offline"))
+
+        await store.load(for: location)
+
+        #expect(await attempts.value == 2)
+        #expect(store.hasData(for: location))
+        #expect(store.lastProviderError == nil)
+        #expect(store.errorMessage == nil)
+    }
+
+    @MainActor
+    @Test("A successful refresh clears an earlier typed provider error")
+    func successfulRefreshClearsTypedError() async {
+        let attempts = AsyncCounter()
+        let location = CLLocation(latitude: 30, longitude: -86)
+        let store = WeatherStore(worker: { location, now in
+            switch await attempts.next() {
+            case 1:
+                return Self.snapshot(
+                    latitude: location.coordinate.latitude,
+                    longitude: location.coordinate.longitude,
+                    fetchedAt: now,
+                    source: .nws
+                )
+            case 2:
+                throw WeatherProviderError.serviceUnavailable
+            default:
+                return Self.snapshot(
+                    latitude: location.coordinate.latitude,
+                    longitude: location.coordinate.longitude,
+                    fetchedAt: now,
+                    source: .weatherKit
+                )
+            }
+        })
+
+        await store.load(for: location)
+        await store.load(for: location, force: true)
+        #expect(store.lastProviderError == .serviceUnavailable)
+
+        await store.load(for: location, force: true)
+
+        #expect(store.provenance?.source == .weatherKit)
+        #expect(store.lastProviderError == nil)
+        #expect(store.errorMessage == nil)
+    }
+
+    @MainActor
+    @Test("A different-location failure clears old content and retains its type")
+    func differentLocationFailureClearsOldContent() async {
+        let oldLocation = CLLocation(latitude: 30, longitude: -86)
+        let newLocation = CLLocation(latitude: 31, longitude: -87)
+        let store = WeatherStore(worker: { location, now in
+            guard location.coordinate.latitude == 30 else {
+                throw WeatherProviderError.unsupportedRegion
+            }
+            return Self.snapshot(
+                latitude: location.coordinate.latitude,
+                longitude: location.coordinate.longitude,
+                fetchedAt: now
+            )
+        })
+
+        await store.load(for: oldLocation)
+        await store.load(for: newLocation)
+
+        #expect(store.snapshot == nil)
+        #expect(store.loadedKey == nil)
+        #expect(!store.hasData(for: oldLocation))
+        #expect(!store.hasData(for: newLocation))
+        #expect(store.lastProviderError == .unsupportedRegion)
+        #expect(store.errorMessage == "Weather is not available for this location.")
+    }
+
+    @MainActor
+    @Test("An untyped worker failure is normalized into a typed network error")
+    func untypedFailureIsNormalized() async {
+        let store = WeatherStore(worker: { _, _ in
+            throw AsyncWeatherError.offline
+        })
+
+        await store.load(for: CLLocation(latitude: 30, longitude: -86))
+
+        #expect(store.lastProviderError == .network("offline"))
+        #expect(store.errorMessage == "offline")
+    }
+
+    @Test("Every provider failure has a distinct presentation category")
+    func providerFailurePresentationCategoriesAreDistinct() {
+        #expect(WeatherProviderError.authentication.presentationKind == .authentication)
+        #expect(WeatherProviderError.network("offline").presentationKind == .network(message: "offline"))
+        #expect(WeatherProviderError.rateLimited(retryAfter: 30).presentationKind == .rateLimited(retryAfter: 30))
+        #expect(WeatherProviderError.serviceUnavailable.presentationKind == .serviceUnavailable)
+        #expect(WeatherProviderError.unsupportedRegion.presentationKind == .unsupportedRegion)
+        #expect(WeatherProviderError.decoding("bad data").presentationKind == .decoding(message: "bad data"))
+    }
+
+    @Test("Nested provider failures recursively choose authentication when present")
+    func nestedProviderFailurePresentationIsRecursive() {
+        let error = WeatherProviderError.allProvidersFailed([
+            WeatherProviderFailure(
+                provider: "WeatherKitProvider",
+                error: .network("offline")
+            ),
+            WeatherProviderFailure(
+                provider: "NestedFallback",
+                error: .allProvidersFailed([
+                    WeatherProviderFailure(
+                        provider: "Cache",
+                        error: .decoding("corrupt")
+                    ),
+                    WeatherProviderFailure(
+                        provider: "EntitledProvider",
+                        error: .authentication
+                    ),
+                ])
+            ),
+        ])
+
+        #expect(error.presentationKind == .authentication)
+    }
+
+    @Test("Nested provider failures preserve the first non-authentication leaf")
+    func nestedProviderFailurePreservesFirstLeaf() {
+        let error = WeatherProviderError.allProvidersFailed([
+            WeatherProviderFailure(
+                provider: "NestedPrimary",
+                error: .allProvidersFailed([
+                    WeatherProviderFailure(
+                        provider: "Primary",
+                        error: .rateLimited(retryAfter: 45)
+                    ),
+                ])
+            ),
+            WeatherProviderFailure(
+                provider: "Fallback",
+                error: .serviceUnavailable
+            ),
+        ])
+
+        #expect(error.presentationKind == .rateLimited(retryAfter: 45))
+        #expect(WeatherProviderError.allProvidersFailed([]).presentationKind == .serviceUnavailable)
     }
 
     @MainActor
@@ -835,6 +1049,11 @@ private actor AsyncCounter {
     func increment() {
         value += 1
     }
+
+    func next() -> Int {
+        value += 1
+        return value
+    }
 }
 
 private actor SnapshotRecorder {
@@ -863,6 +1082,10 @@ private actor WeatherSourceSequence {
 
 private enum AsyncBaitError: Error {
     case failed
+}
+
+private enum AsyncWeatherError: Error {
+    case offline
 }
 
 @MainActor

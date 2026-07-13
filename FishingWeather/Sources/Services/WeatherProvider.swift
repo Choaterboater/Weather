@@ -20,14 +20,61 @@ indirect enum WeatherProviderError: Error, Equatable, Sendable {
     case allProvidersFailed([WeatherProviderFailure])
 }
 
+enum WeatherErrorPresentationKind: Equatable, Sendable {
+    case authentication
+    case network(message: String?)
+    case rateLimited(retryAfter: TimeInterval?)
+    case serviceUnavailable
+    case unsupportedRegion
+    case decoding(message: String?)
+}
+
+extension WeatherProviderError {
+    /// A provider-neutral presentation category. Aggregate failures recurse
+    /// through nested chains, preferring authentication because it is the one
+    /// failure a developer must fix rather than asking the user to retry.
+    var presentationKind: WeatherErrorPresentationKind {
+        switch self {
+        case .authentication:
+            return .authentication
+        case let .network(message):
+            return .network(message: message)
+        case let .rateLimited(retryAfter):
+            return .rateLimited(retryAfter: retryAfter)
+        case .serviceUnavailable:
+            return .serviceUnavailable
+        case .unsupportedRegion:
+            return .unsupportedRegion
+        case let .decoding(message):
+            return .decoding(message: message)
+        case let .allProvidersFailed(failures):
+            let kinds = failures.map(\.error.presentationKind)
+            return kinds.first(where: \.isAuthentication)
+                ?? kinds.first
+                ?? .serviceUnavailable
+        }
+    }
+}
+
 extension WeatherProviderError: LocalizedError {
     var errorDescription: String? {
+        presentationKind.errorDescription
+    }
+}
+
+private extension WeatherErrorPresentationKind {
+    var isAuthentication: Bool {
+        if case .authentication = self { return true }
+        return false
+    }
+
+    var errorDescription: String {
         switch self {
         case .authentication:
             "Weather authorization failed. Check the app's WeatherKit entitlement."
-        case let .network(message):
+        case let .network(message: message):
             Self.nonEmpty(message) ?? "The weather service could not be reached."
-        case let .rateLimited(retryAfter):
+        case let .rateLimited(retryAfter: retryAfter):
             if let retryAfter {
                 "The weather service is busy. Try again in \(Int(retryAfter.rounded())) seconds."
             } else {
@@ -37,38 +84,9 @@ extension WeatherProviderError: LocalizedError {
             "Weather is temporarily unavailable."
         case .unsupportedRegion:
             "Weather is not available for this location."
-        case let .decoding(message):
+        case let .decoding(message: message):
             Self.nonEmpty(message) ?? "The weather response could not be read."
-        case let .allProvidersFailed(failures):
-            Self.representativeError(in: failures)?.errorDescription
-                ?? "Weather is temporarily unavailable."
         }
-    }
-
-    private static func representativeError(
-        in failures: [WeatherProviderFailure]
-    ) -> WeatherProviderError? {
-        let errors = failures.map(\.error)
-        if let authentication = errors.first(where: { error in
-            if case .authentication = error { return true }
-            if case let .allProvidersFailed(nested) = error {
-                return representativeError(in: nested) == .authentication
-            }
-            return false
-        }) {
-            if case let .allProvidersFailed(nested) = authentication {
-                return representativeError(in: nested)
-            }
-            return authentication
-        }
-
-        for error in errors {
-            if case let .allProvidersFailed(nested) = error,
-               let representative = representativeError(in: nested) {
-                return representative
-            }
-        }
-        return errors.first
     }
 
     private static func nonEmpty(_ value: String?) -> String? {
