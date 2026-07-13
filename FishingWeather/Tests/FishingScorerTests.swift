@@ -26,7 +26,7 @@ struct FishingScorerTests {
     }
 
     @Test
-    func fishingConditionsAreBuiltOnlyFromNeutralSnapshotValues() {
+    func fishingConditionsAndScoreUseOnlyAvailableNeutralSnapshotValues() {
         let now = Self.fixedSpringDate
         let wind = WindSnapshot(
             directionDegrees: 225,
@@ -77,6 +77,14 @@ struct FishingScorerTests {
         #expect(conditions.uvIndex == 4)
         #expect(conditions.sunrise == snapshot.astronomy.sunrise)
         #expect(conditions.windows.count == 4)
+
+        let pressureFactor = FishingScorer.score(
+            conditions: conditions,
+            species: .bass,
+            now: now
+        ).factors.first { $0.kind == .pressure }
+        #expect(pressureFactor?.raw == 0.5)
+        #expect(pressureFactor?.detail == "Pressure data unavailable")
     }
 
     // MARK: - Headline scenarios from the plan
@@ -849,6 +857,22 @@ struct FishingScorerTests {
 
         #expect(factor.raw == 0.5)
         #expect(factor.detail == "Wind data unavailable")
+    }
+
+    @Test
+    func missingPressureUsesNeutralScoreWithoutInventingStableConditions() throws {
+        let factor = try #require(FishingScorer.score(
+            moonPhase: .firstQuarter,
+            activeWindow: nil,
+            nextWindow: nil,
+            pressureTendency: nil,
+            pressureChangePerHour: nil,
+            windMph: 8,
+            species: .bass
+        ).factors.first { $0.kind == .pressure })
+
+        #expect(factor.raw == 0.5)
+        #expect(factor.detail == "Pressure data unavailable")
     }
 
     @Test

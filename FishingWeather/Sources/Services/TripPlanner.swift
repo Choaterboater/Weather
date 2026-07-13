@@ -4,9 +4,9 @@ import Foundation
 /// multi-day forecast to rank the coming week's solunar fishing windows for a
 /// location and species. Pure and deterministic given its plain-value inputs.
 ///
-/// Days within the hourly-forecast horizon score with real pressure trend and
-/// wind (high confidence); days beyond it fall back to the daily wind with a
-/// neutral pressure trend and are marked low confidence.
+/// Days within the hourly-forecast horizon score with available pressure trend
+/// and wind (high confidence); days beyond it fall back to the daily wind and
+/// neutral missing-pressure score, and are marked low confidence.
 enum TripPlanner {
     static func outlook(
         days: [DayForecastInput],
@@ -37,7 +37,7 @@ enum TripPlanner {
                     moonPhase: day.moonPhase,
                     activeWindow: window,
                     nextWindow: nil,
-                    pressureTendency: hourlyCond?.tendency ?? .steady,
+                    pressureTendency: hourlyCond?.tendency,
                     pressureChangePerHour: hourlyCond?.changePerHour,
                     windMph: hourlyCond?.windMph ?? day.dailyWindMph,
                     species: species,
@@ -75,7 +75,7 @@ enum TripPlanner {
     /// daily wind and marks the window low confidence).
     static func conditions(
         at date: Date, hourly: [HourlyWeatherPoint]
-    ) -> (windMph: Double, tendency: PressureTendency, changePerHour: Double?)? {
+    ) -> (windMph: Double, tendency: PressureTendency?, changePerHour: Double?)? {
         guard let first = hourly.first, let last = hourly.last,
               date >= first.date, date <= last.date else { return nil }
 
@@ -104,7 +104,7 @@ enum TripPlanner {
               let afterHPa = after.pressureHPa,
               after.date > before.date
         else {
-            return (windMph, .steady, nil)
+            return (windMph, nil, nil)
         }
 
         let hours = after.date.timeIntervalSince(before.date) / 3_600
@@ -132,9 +132,10 @@ enum TripPlanner {
             switch driver.kind {
             case .pressure:
                 switch tendency {
-                case .falling: result.append("Falling pressure")
-                case .rising: result.append("Rising pressure")
-                default: result.append("Steady pressure")
+                case .falling?: result.append("Falling pressure")
+                case .rising?: result.append("Rising pressure")
+                case .steady?: result.append("Steady pressure")
+                case nil: break
                 }
             case .tide: result.append("Moving tide")
             case .wind: result.append("Good wind")

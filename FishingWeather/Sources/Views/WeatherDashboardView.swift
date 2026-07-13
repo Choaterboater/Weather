@@ -45,7 +45,10 @@ struct WeatherDashboardView: View {
                         HourlyForecastView(hourly: snapshot.hourly)
                     }
                     if !snapshot.daily.isEmpty {
-                        DailyForecastView(daily: snapshot.daily)
+                        DailyForecastView(
+                            daily: snapshot.daily,
+                            timeZoneIdentifier: snapshot.timeZoneIdentifier
+                        )
                     }
                 } else {
                     ContentUnavailableView(

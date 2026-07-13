@@ -6,6 +6,17 @@ import os
 /// geographic tile. Actor isolation keeps file access and schema migration safe
 /// when live and fallback providers run concurrently.
 actor WeatherSnapshots {
+    private enum SnapshotFileError: LocalizedError {
+        case unsupportedVersion(Int)
+
+        var errorDescription: String? {
+            switch self {
+            case .unsupportedVersion(let version):
+                "Unsupported snapshot version \(version)"
+            }
+        }
+    }
+
     private struct Envelope: Codable {
         let version: Int
         let snapshot: WeatherSnapshot
@@ -33,6 +44,29 @@ actor WeatherSnapshots {
     }
 
     func save(_ snapshot: WeatherSnapshot) throws {
+        let url = fileURL(
+            latitude: snapshot.coordinate.latitude,
+            longitude: snapshot.coordinate.longitude
+        )
+        if fileManager.fileExists(atPath: url.path) {
+            do {
+                let existing = try decodedSnapshot(at: url)
+                // Equal timestamps keep the existing envelope. This makes
+                // retries idempotent and gives actor-serialized writers a
+                // deterministic winner.
+                if existing.provenance.fetchedAt >= snapshot.provenance.fetchedAt {
+                    return
+                }
+            } catch {
+                Self.logger.error(
+                    "snapshot decode failed before save for \(url.lastPathComponent): \(error.localizedDescription)"
+                )
+                // A failed move must abort the save so the only copy of the
+                // invalid or unknown-version bytes is never overwritten.
+                try backupInvalidFile(at: url)
+            }
+        }
+
         let envelope = Envelope(
             version: Self.currentVersion,
             snapshot: snapshot
@@ -42,13 +76,7 @@ actor WeatherSnapshots {
             at: directory,
             withIntermediateDirectories: true
         )
-        try data.write(
-            to: fileURL(
-                latitude: snapshot.coordinate.latitude,
-                longitude: snapshot.coordinate.longitude
-            ),
-            options: .atomic
-        )
+        try data.write(to: url, options: .atomic)
     }
 
     /// Loads the exact persisted snapshot, including its original provenance.
@@ -61,19 +89,18 @@ actor WeatherSnapshots {
         guard fileManager.fileExists(atPath: url.path) else { return nil }
 
         do {
-            let data = try Data(contentsOf: url)
-            let decoder = JSONDecoder()
-            let header = try decoder.decode(EnvelopeHeader.self, from: data)
-            guard header.version == Self.currentVersion else {
-                backupInvalidFile(at: url)
-                return nil
-            }
-            return try decoder.decode(Envelope.self, from: data).snapshot
+            return try decodedSnapshot(at: url)
         } catch {
             Self.logger.error(
                 "snapshot decode failed for \(url.lastPathComponent): \(error.localizedDescription)"
             )
-            backupInvalidFile(at: url)
+            do {
+                try backupInvalidFile(at: url)
+            } catch {
+                Self.logger.error(
+                    "snapshot backup failed for \(url.lastPathComponent): \(error.localizedDescription)"
+                )
+            }
             return nil
         }
     }
@@ -89,18 +116,22 @@ actor WeatherSnapshots {
         return directory.appendingPathComponent("\(key).json")
     }
 
-    private func backupInvalidFile(at url: URL) {
+    private func decodedSnapshot(at url: URL) throws -> WeatherSnapshot {
+        let data = try Data(contentsOf: url)
+        let decoder = JSONDecoder()
+        let header = try decoder.decode(EnvelopeHeader.self, from: data)
+        guard header.version == Self.currentVersion else {
+            throw SnapshotFileError.unsupportedVersion(header.version)
+        }
+        return try decoder.decode(Envelope.self, from: data).snapshot
+    }
+
+    private func backupInvalidFile(at url: URL) throws {
         let stem = url.deletingPathExtension().lastPathComponent
         let backup = directory.appendingPathComponent(
             "\(stem).invalid-\(UUID().uuidString).json"
         )
-        do {
-            try fileManager.moveItem(at: url, to: backup)
-        } catch {
-            Self.logger.error(
-                "snapshot backup failed for \(url.lastPathComponent): \(error.localizedDescription)"
-            )
-        }
+        try fileManager.moveItem(at: url, to: backup)
     }
 }
 

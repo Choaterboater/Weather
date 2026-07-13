@@ -115,7 +115,7 @@ struct TripPlannerTests {
             TripPlanner.conditions(at: now, hourly: points)
         )
 
-        #expect(conditions.tendency == .steady)
+        #expect(conditions.tendency == nil)
         #expect(conditions.changePerHour == nil)
         #expect(abs(conditions.windMph - 8) < 0.001)
     }

@@ -37,7 +37,9 @@ enum FishingScorer {
             moonPhase: conditions.moonPhase,
             activeWindow: conditions.activeWindow(at: now),
             nextWindow: conditions.nextWindow(after: now),
-            pressureTendency: conditions.pressure.tendency,
+            pressureTendency: conditions.pressure.pressure == nil
+                ? nil
+                : conditions.pressure.tendency,
             pressureChangePerHour: conditions.pressure.changePerHour,
             windMph: Measurement(
                 value: conditions.wind.speedMetersPerSecond,
@@ -57,7 +59,7 @@ enum FishingScorer {
         moonPhase: LunarPhase,
         activeWindow: BiteWindow?,
         nextWindow: BiteWindow?,
-        pressureTendency: PressureTendency,
+        pressureTendency: PressureTendency?,
         pressureChangePerHour: Double?,
         windMph: Double?,
         species: Species,
@@ -177,7 +179,11 @@ enum FishingScorer {
         return Subscore(raw: raw, detail: detail)
     }
 
-    private static func scorePressure(tendency: PressureTendency, changePerHour: Double?) -> Subscore {
+    private static func scorePressure(tendency: PressureTendency?, changePerHour: Double?) -> Subscore {
+        guard let tendency else {
+            return Subscore(raw: 0.5, detail: "Pressure data unavailable")
+        }
+
         let base: Double
         switch tendency {
         case .falling: base = 1.0
@@ -331,7 +337,7 @@ enum FishingScorer {
         moonPhase: LunarPhase,
         activeWindow: BiteWindow?,
         nextWindow: BiteWindow?,
-        pressureTendency: PressureTendency,
+        pressureTendency: PressureTendency?,
         pressureChangePerHour: Double?,
         windMph: Double?,
         species: Species,
