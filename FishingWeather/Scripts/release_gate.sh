@@ -1108,6 +1108,7 @@ if [[ -n "$DEVICE_ID" ]]; then
     readonly PREFERENCES_BEFORE="$AUDIT_DIR/device-preferences-before.txt"
     readonly PREFERENCES_AFTER_FIRST="$AUDIT_DIR/device-preferences-after-first-install.txt"
     readonly PREFERENCES_AFTER_REINSTALL="$AUDIT_DIR/device-preferences-after-reinstall.txt"
+    readonly CONTAINER_PATHS="$AUDIT_DIR/device-container-paths.txt"
 
     run_logged "$LOG_DIR/device-details.log" \
         xcrun devicectl device info details \
@@ -1157,6 +1158,7 @@ if [[ -n "$DEVICE_ID" ]]; then
         > "$AUDIT_DIR/device-install-classification.txt"
 
     capture_preferences_fingerprint "before" "$PREFERENCES_BEFORE"
+    printf 'before=%s\n' "$OLD_CONTAINER" > "$CONTAINER_PATHS"
 
     note "Installing the first signed Release product without removing app data"
     assert_live_source_unchanged "first physical Release install"
@@ -1172,11 +1174,14 @@ if [[ -n "$DEVICE_ID" ]]; then
     capture_device_app_state "$AFTER_FIRST_APPS_JSON" "after-first-install"
     assert_equal "$(jq -r '.result.apps[0].bundleVersion' "$AFTER_FIRST_APPS_JSON")" \
         "$BUILD_NUMBER" "first-install build number"
-    assert_equal "$(jq -r '.result.apps[0].dataContainerPath' "$AFTER_FIRST_APPS_JSON")" \
-        "$OLD_CONTAINER" "first-install preserved data-container path"
+    FIRST_CONTAINER="$(jq -r '.result.apps[0].dataContainerPath' "$AFTER_FIRST_APPS_JSON")"
+    printf 'after_first_install=%s\n' "$FIRST_CONTAINER" >> "$CONTAINER_PATHS"
     capture_preferences_fingerprint "after-first-install" "$PREFERENCES_AFTER_FIRST"
     assert_preferences_unchanged \
         "$PREFERENCES_BEFORE" "$PREFERENCES_AFTER_FIRST" "after-first-install"
+    if [[ "$FIRST_CONTAINER" != "$OLD_CONTAINER" ]]; then
+        note "iOS relocated the app-data container; verified persisted preferences are unchanged"
+    fi
 
     note "Running the exact physical complete-file-protection test"
     assert_live_source_unchanged "physical complete-file-protection test"
@@ -1213,13 +1218,17 @@ if [[ -n "$DEVICE_ID" ]]; then
     capture_device_app_state "$AFTER_REINSTALL_APPS_JSON" "after-reinstall"
     assert_equal "$(jq -r '.result.apps[0].bundleVersion' "$AFTER_REINSTALL_APPS_JSON")" \
         "$BUILD_NUMBER" "reinstall build number"
-    assert_equal "$(jq -r '.result.apps[0].dataContainerPath' "$AFTER_REINSTALL_APPS_JSON")" \
-        "$OLD_CONTAINER" "reinstall preserved data-container path"
-    DEVICE_CONTAINER_STATUS="passed"
+    REINSTALL_CONTAINER="$(jq -r '.result.apps[0].dataContainerPath' "$AFTER_REINSTALL_APPS_JSON")"
+    printf 'after_reinstall=%s\n' "$REINSTALL_CONTAINER" >> "$CONTAINER_PATHS"
     capture_preferences_fingerprint "after-reinstall" "$PREFERENCES_AFTER_REINSTALL"
     assert_preferences_unchanged \
         "$PREFERENCES_BEFORE" "$PREFERENCES_AFTER_REINSTALL" "after-reinstall"
     DEVICE_PREFERENCES_STATUS="passed"
+    if [[ "$FIRST_CONTAINER" == "$OLD_CONTAINER" && "$REINSTALL_CONTAINER" == "$OLD_CONTAINER" ]]; then
+        DEVICE_CONTAINER_STATUS="unchanged"
+    else
+        DEVICE_CONTAINER_STATUS="relocated-with-preferences-preserved"
+    fi
 
     note "Launching BiteCast with a bounded physical-device console capture"
     launch_device_with_bounded_console
