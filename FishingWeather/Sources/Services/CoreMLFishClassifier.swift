@@ -4,11 +4,10 @@ import Vision
 
 /// On-device fish-species classifier backed by a bundled Core ML model.
 ///
-/// Drop a species classifier compiled as `FishClassifier.mlmodelc` into the app
-/// bundle (e.g. trained with Create ML on a freshwater-species dataset). When the
-/// model isn't present, `init?` fails and the recognizer falls back to the cloud.
-/// This path is free, offline, and private — no Replicate needed.
-struct CoreMLFishClassifier {
+/// Bundle a properly licensed species classifier as `FishClassifier.mlmodelc`.
+/// When it is absent, `init?` fails and the UI reports that identification is
+/// unavailable. There is deliberately no network fallback for user photos.
+struct CoreMLFishClassifier: Sendable {
     private let modelURL: URL
 
     init?(resourceName: String = "FishClassifier") {

@@ -22,6 +22,7 @@ struct LogCatchView: View {
     @State private var pickerItem: PhotosPickerItem?
     @State private var photo: UIImage?
     @State private var recognizer = FishRecognizer()
+    @State private var saveErrorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -79,6 +80,14 @@ struct LogCatchView: View {
                 return nil
             }
             .sensoryFeedback(.selection, trigger: species)
+            .alert("Couldn't Save Catch", isPresented: showingSaveError) {
+                Button("OK", role: .cancel) {
+                    saveErrorMessage = nil
+                    log.clearError()
+                }
+            } message: {
+                Text(saveErrorMessage ?? "Nothing was saved. Please try again.")
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -285,7 +294,28 @@ struct LogCatchView: View {
             },
             tidePhase: tidePhase
         )
-        log.add(entry, photo: photo)
-        dismiss()
+        let operation = CatchOperationUIState.perform {
+            try log.add(entry, photo: photo)
+        }
+        if operation.committed {
+            dismiss()
+        } else {
+            // Keep the form and selected photo intact so the angler can retry.
+            saveErrorMessage = log.lastErrorMessage
+                ?? operation.alertMessage
+                ?? "Nothing was saved. Please try again."
+        }
+    }
+
+    private var showingSaveError: Binding<Bool> {
+        Binding(
+            get: { saveErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    saveErrorMessage = nil
+                    log.clearError()
+                }
+            }
+        )
     }
 }

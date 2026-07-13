@@ -4,6 +4,8 @@ import UIKit
 struct CatchLogView: View {
     @Environment(CatchLog.self) private var log
     @State private var showingForm = false
+    @State private var errorTitle = "Catch History Needs Attention"
+    @State private var deleteErrorMessage: String?
 
     var body: some View {
         Group {
@@ -28,9 +30,7 @@ struct CatchLogView: View {
                         ForEach(log.entries) { entry in
                             CatchRow(entry: entry)
                         }
-                        .onDelete { offsets in
-                            offsets.map { log.entries[$0] }.forEach(log.remove)
-                        }
+                        .onDelete(perform: delete)
                     }
                 }
                 .scrollContentBackground(.hidden)
@@ -47,7 +47,53 @@ struct CatchLogView: View {
         .sheet(isPresented: $showingForm) {
             LogCatchView()
         }
+        .onAppear {
+            if let message = log.lastErrorMessage {
+                errorTitle = "Catch History Needs Attention"
+                deleteErrorMessage = message
+            }
+        }
+        .alert(errorTitle, isPresented: showingDeleteError) {
+            Button("OK", role: .cancel) {
+                deleteErrorMessage = nil
+                log.clearError()
+            }
+        } message: {
+            Text(deleteErrorMessage ?? "The catch was kept. Please try again.")
+        }
         .sensoryFeedback(.success, trigger: log.entries.count)
+    }
+
+    private func delete(_ offsets: IndexSet) {
+        let selected = offsets.compactMap { index in
+            log.entries.indices.contains(index) ? log.entries[index] : nil
+        }
+        for entry in selected {
+            let operation = CatchOperationUIState.perform {
+                try log.remove(entry)
+            }
+            if !operation.committed {
+                // Each removal is transactional. Stop at the first failure and
+                // tell the angler which operation did not commit.
+                errorTitle = "Couldn't Delete Catch"
+                deleteErrorMessage = log.lastErrorMessage
+                    ?? operation.alertMessage
+                    ?? "The catch was kept. Please try again."
+                break
+            }
+        }
+    }
+
+    private var showingDeleteError: Binding<Bool> {
+        Binding(
+            get: { deleteErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    deleteErrorMessage = nil
+                    log.clearError()
+                }
+            }
+        )
     }
 }
 

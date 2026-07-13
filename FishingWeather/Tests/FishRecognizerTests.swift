@@ -36,4 +36,20 @@ struct FishRecognizerTests {
         #expect(recognizer.status == .ready)
         #expect(recognizer.result == expected)
     }
+
+    @MainActor
+    @Test("no on-device model reports unavailable without a cloud fallback")
+    func unavailableWithoutOnDeviceModel() async {
+        let recognizer = FishRecognizer(worker: nil)
+
+        await recognizer.identify(image: UIImage())
+
+        guard case .unavailable(let message) = recognizer.status else {
+            Issue.record("Expected an honest unavailable state")
+            return
+        }
+        #expect(message.localizedCaseInsensitiveContains("on-device"))
+        #expect(!message.localizedCaseInsensitiveContains("token"))
+        #expect(recognizer.result == nil)
+    }
 }

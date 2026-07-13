@@ -1,7 +1,7 @@
 import Foundation
 
 /// A logged catch, with an automatic snapshot of the conditions when it happened.
-struct CatchEntry: Identifiable, Codable, Equatable {
+struct CatchEntry: Identifiable, Codable, Equatable, Sendable {
     let id: UUID
     var date: Date
     var species: Species

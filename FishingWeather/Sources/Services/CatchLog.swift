@@ -2,101 +2,153 @@ import Foundation
 import Observation
 import UIKit
 
-/// Stores logged catches as JSON in the Documents directory, with photos written
-/// as separate files (kept out of the JSON and out of UserDefaults).
+/// Observable interface to the private, on-device catch repository.
 ///
-/// Persistence safety: writes are atomic, an unreadable file is backed up (never
-/// silently replaced — catch history is irreplaceable), and one malformed entry
-/// doesn't discard the rest.
+/// Entries change only after the protected transaction's journal is removed.
+/// A failed add/delete therefore leaves both this observable collection and
+/// the last committed on-disk log unchanged.
 @MainActor
 @Observable
 final class CatchLog {
-    private(set) var entries: [CatchEntry] = []
+    struct ThumbnailLoad: @unchecked Sendable {
+        let image: UIImage?
+        let generatedData: Data?
+    }
 
-    private let directory: URL
-    private let fileURL: URL
-    private let photosDirectory: URL
+    typealias ThumbnailLoader = @Sendable (URL, URL, CGFloat) async -> ThumbnailLoad
+
+    private(set) var entries: [CatchEntry] = []
+    private(set) var lastErrorMessage: String?
+
+    private let repository: CatchRepository
+    @ObservationIgnored private let thumbnailLoader: ThumbnailLoader
     private let thumbnailCache = NSCache<NSString, UIImage>()
+    @ObservationIgnored private var photoGenerations: [UUID: UInt64] = [:]
 
     /// Photos are only ever shown at list/detail size; storing the full 12MP
     /// original costs ~2-4 MB per catch and a ~47 MB decode per row.
     private static let storedPhotoMaxDimension: CGFloat = 1600
     private static let thumbnailMaxDimension: CGFloat = 240
 
-    init(directory: URL? = nil) {
-        let base = directory ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        self.directory = base
-        fileURL = base.appendingPathComponent("catches.json")
-        photosDirectory = base.appendingPathComponent("CatchPhotos", isDirectory: true)
-        try? FileManager.default.createDirectory(at: photosDirectory, withIntermediateDirectories: true)
-        load()
+    init(
+        directory: URL? = nil,
+        thumbnailLoader: ThumbnailLoader? = nil,
+        protectionRecorder: @escaping CatchRepository.ProtectionRecorder = { _, _ in },
+        failureInjector: @escaping CatchRepository.FailureInjector = { _ in }
+    ) {
+        let base = directory
+            ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        repository = CatchRepository(
+            baseDirectory: base,
+            protectionRecorder: protectionRecorder,
+            failureInjector: failureInjector
+        )
+        self.thumbnailLoader = thumbnailLoader ?? Self.defaultThumbnailLoader
+        do {
+            entries = try repository.load()
+        } catch {
+            entries = repository.bestEffortEntries()
+            lastErrorMessage = Self.loadErrorMessage(error)
+        }
     }
 
-    func add(_ entry: CatchEntry, photo: UIImage?) {
-        var entry = entry
-        if let photo {
-            let scaled = photo.downscaled(maxDimension: Self.storedPhotoMaxDimension)
-            if let data = scaled.jpegData(compressionQuality: 0.8) {
-                let filename = "\(entry.id.uuidString).jpg"
-                do {
-                    try data.write(to: photosDirectory.appendingPathComponent(filename), options: .atomic)
-                    entry.photoFilename = filename
-                    writeThumbnail(from: scaled, filename: filename)
-                } catch {
-                    // Keep the entry; just don't point it at a photo that isn't there.
-                }
+    /// Internal paths are exposed for deterministic protection/recovery tests,
+    /// not as a second persistence API for production views.
+    var storagePaths: CatchRepository.Paths { repository.paths }
+
+    func add(_ requestedEntry: CatchEntry, photo: UIImage?) throws {
+        do {
+            let photoPayload = try Self.photoPayload(for: photo)
+            let updated = try repository.add(
+                requestedEntry,
+                photoData: photoPayload?.photo,
+                thumbnailData: photoPayload?.thumbnail,
+                to: entries
+            )
+            entries = updated
+            photoGenerations[requestedEntry.id, default: 0] &+= 1
+            lastErrorMessage = nil
+        } catch {
+            lastErrorMessage = error.localizedDescription
+            throw error
+        }
+    }
+
+    func remove(_ entry: CatchEntry) throws {
+        do {
+            let updated = try repository.remove(entry, from: entries)
+            if let filename = entry.photoFilename {
+                thumbnailCache.removeObject(forKey: filename as NSString)
             }
+            entries = updated
+            photoGenerations[entry.id, default: 0] &+= 1
+            lastErrorMessage = nil
+        } catch {
+            lastErrorMessage = error.localizedDescription
+            throw error
         }
-        entries.insert(entry, at: 0)
-        persist()
     }
 
-    func remove(_ entry: CatchEntry) {
-        if let filename = entry.photoFilename {
-            try? FileManager.default.removeItem(at: photosDirectory.appendingPathComponent(filename))
-            try? FileManager.default.removeItem(at: photosDirectory.appendingPathComponent(Self.thumbnailName(for: filename)))
-            thumbnailCache.removeObject(forKey: filename as NSString)
-        }
-        entries.removeAll { $0.id == entry.id }
-        persist()
+    func clearError() {
+        lastErrorMessage = nil
     }
 
     func photo(for entry: CatchEntry) -> UIImage? {
-        guard let filename = entry.photoFilename else { return nil }
-        return UIImage(contentsOfFile: photosDirectory.appendingPathComponent(filename).path)
+        guard let filename = entry.photoFilename,
+              let url = try? repository.photoURL(for: filename) else { return nil }
+        return UIImage(contentsOfFile: url.path)
     }
 
     /// Small row thumbnail, cached in memory and on disk. File I/O and decoding
-    /// run off the main actor so list rows never hitch.
+    /// run off the main actor so list rows never hitch. A newly derived cache is
+    /// handed back to the repository so it receives complete file protection.
     func thumbnail(for entry: CatchEntry) async -> UIImage? {
         guard let filename = entry.photoFilename else { return nil }
-        if let cached = thumbnailCache.object(forKey: filename as NSString) { return cached }
+        if let cached = thumbnailCache.object(forKey: filename as NSString) {
+            return cached
+        }
+        guard let thumbnailURL = try? repository.thumbnailURL(for: filename),
+              let photoURL = try? repository.photoURL(for: filename) else { return nil }
 
-        let thumbURL = photosDirectory.appendingPathComponent(Self.thumbnailName(for: filename))
-        let photoURL = photosDirectory.appendingPathComponent(filename)
         let maxDimension = Self.thumbnailMaxDimension
-        let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
-            if let existing = UIImage(contentsOfFile: thumbURL.path) { return existing }
-            // Entries logged before thumbnails existed: derive one now.
-            guard let full = UIImage(contentsOfFile: photoURL.path) else { return nil }
-            let thumb = full.downscaled(maxDimension: maxDimension)
-            try? thumb.jpegData(compressionQuality: 0.8)?.write(to: thumbURL, options: .atomic)
-            return thumb
+        let generation = photoGenerations[entry.id, default: 0]
+        let loaded = await thumbnailLoader(thumbnailURL, photoURL, maxDimension)
+
+        guard photoGenerations[entry.id, default: 0] == generation,
+              entries.contains(where: {
+                  $0.id == entry.id && $0.photoFilename == filename
+              }) else {
+            return nil
+        }
+
+        if let data = loaded.generatedData {
+            // This is a reproducible cache, not a catch mutation. A failed cache
+            // write leaves the protected source photo and metadata untouched.
+            try? repository.storeThumbnail(data, filename: filename)
+        }
+        if let image = loaded.image {
+            thumbnailCache.setObject(image, forKey: filename as NSString)
+        }
+        return loaded.image
+    }
+
+    private nonisolated static let defaultThumbnailLoader: ThumbnailLoader = {
+        thumbnailURL,
+        photoURL,
+        maxDimension in
+        await Task.detached(priority: .userInitiated) {
+            if let existing = UIImage(contentsOfFile: thumbnailURL.path) {
+                return ThumbnailLoad(image: existing, generatedData: nil)
+            }
+            guard let full = UIImage(contentsOfFile: photoURL.path) else {
+                return ThumbnailLoad(image: nil, generatedData: nil)
+            }
+            let thumbnail = full.downscaled(maxDimension: maxDimension)
+            return ThumbnailLoad(
+                image: thumbnail,
+                generatedData: thumbnail.jpegData(compressionQuality: 0.8)
+            )
         }.value
-
-        if let image { thumbnailCache.setObject(image, forKey: filename as NSString) }
-        return image
-    }
-
-    private func writeThumbnail(from image: UIImage, filename: String) {
-        let thumb = image.downscaled(maxDimension: Self.thumbnailMaxDimension)
-        let url = photosDirectory.appendingPathComponent(Self.thumbnailName(for: filename))
-        try? thumb.jpegData(compressionQuality: 0.8)?.write(to: url, options: .atomic)
-        thumbnailCache.setObject(thumb, forKey: filename as NSString)
-    }
-
-    nonisolated private static func thumbnailName(for filename: String) -> String {
-        "thumb-" + filename
     }
 
     // MARK: - Quick stats
@@ -120,41 +172,51 @@ final class CatchLog {
         return counts.max { $0.value < $1.value }?.key
     }
 
-    // MARK: - Persistence
-
-    private func load() {
-        guard let data = try? Data(contentsOf: fileURL) else { return }
-        if let decoded = try? JSONDecoder().decode([CatchEntry].self, from: data) {
-            entries = decoded
-            return
+    private static func photoPayload(
+        for photo: UIImage?
+    ) throws -> (photo: Data, thumbnail: Data?)? {
+        guard let photo else { return nil }
+        let scaled = photo.downscaled(maxDimension: storedPhotoMaxDimension)
+        guard let data = scaled.jpegData(compressionQuality: 0.8) else {
+            throw CatchLogError.photoEncoding
         }
-        // The file exists but doesn't decode cleanly (schema change, corrupt
-        // write, …). Preserve the original bytes before anything can overwrite
-        // them, then salvage whatever entries still decode.
-        backUpUnreadableFile(data)
-        if let salvaged = try? JSONDecoder().decode([FailableEntry].self, from: data) {
-            entries = salvaged.compactMap(\.value)
-        }
+        let thumbnail = scaled.downscaled(maxDimension: thumbnailMaxDimension)
+            .jpegData(compressionQuality: 0.8)
+        return (data, thumbnail)
     }
 
-    private func backUpUnreadableFile(_ data: Data) {
-        let name = "catches-recovered-\(UUID().uuidString).json"
-        try? data.write(to: directory.appendingPathComponent(name), options: .atomic)
-    }
-
-    private func persist() {
-        guard let data = try? JSONEncoder().encode(entries) else { return }
-        // Atomic replace: a crash mid-write leaves the old file, never a torn one.
-        try? data.write(to: fileURL, options: .atomic)
+    private static func loadErrorMessage(_ error: Error) -> String {
+        "Catch history couldn't finish recovery. Your files were left in place. \(error.localizedDescription)"
     }
 }
 
-/// Decodes to nil instead of failing the whole array. File scope so the
-/// synthesized/handwritten decoding stays free of the log's actor isolation.
-private struct FailableEntry: Decodable {
-    let value: CatchEntry?
+private enum CatchLogError: LocalizedError {
+    case photoEncoding
 
-    init(from decoder: Decoder) throws {
-        value = try? decoder.singleValueContainer().decode(CatchEntry.self)
+    var errorDescription: String? {
+        switch self {
+        case .photoEncoding:
+            "The catch photo couldn't be prepared. Nothing was saved."
+        }
+    }
+}
+
+/// Pure UI handoff used by both save and delete flows. Views dismiss/remove
+/// presentation only when `committed` is true; failures retain the form/row and
+/// carry a nonempty message into their alert state.
+struct CatchOperationUIState: Equatable, Sendable {
+    let committed: Bool
+    let alertMessage: String?
+
+    static func perform(_ operation: () throws -> Void) -> Self {
+        do {
+            try operation()
+            return Self(committed: true, alertMessage: nil)
+        } catch {
+            return Self(
+                committed: false,
+                alertMessage: error.localizedDescription
+            )
+        }
     }
 }
