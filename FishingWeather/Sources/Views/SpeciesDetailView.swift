@@ -1,5 +1,6 @@
 import CoreLocation
 import SwiftUI
+import UIKit
 
 /// Single-species detail screen: hero, in-season indicator, regulations panel
 /// (for the user-picked state), bait/technique guide, habitat & timing tips,
@@ -300,7 +301,7 @@ struct SpeciesDetailView: View {
             Text("Community observations · iNaturalist")
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
             Spacer()
-            Link(destination: URL(string: "https://www.inaturalist.org")!) {
+            Link(destination: ExternalServiceAttribution.iNaturalistURL) {
                 Text("inaturalist.org")
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
             }
@@ -404,24 +405,50 @@ private struct SightingRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            thumbnail
-            VStack(alignment: .leading, spacing: 2) {
-                Text(dateText)
-                    .font(.system(size: 14, weight: .bold, design: .monospaced))
-                    .foregroundStyle(Ink.chart)
-                if let place = sighting.placeGuess {
-                    Text(place)
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+        VStack(alignment: .leading, spacing: 6) {
+            Link(destination: sighting.observationURL) {
+                HStack(spacing: 12) {
+                    thumbnail
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(dateText)
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Ink.chart)
+                        if let place = sighting.placeGuess {
+                            Text(place)
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Ink.chartDim)
+                                .lineLimit(1)
+                        }
+                        Text(sighting.creator)
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    if let distanceMiles {
+                        Text("\(Int(distanceMiles)) mi")
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
+                    }
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(Ink.chartDim)
-                        .lineLimit(1)
                 }
             }
-            Spacer()
-            if let distanceMiles {
-                Text("\(Int(distanceMiles)) mi")
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .foregroundStyle(Ink.chartDim)
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens this observation on iNaturalist")
+
+            if let photo = sighting.photo {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(photo.attribution)
+                        .lineLimit(2)
+                    Spacer(minLength: 6)
+                    Link(photo.licenseCode, destination: photo.licenseURL)
+                        .fontWeight(.bold)
+                        .accessibilityLabel("Photo license \(photo.licenseCode)")
+                }
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .foregroundStyle(Ink.chartDim)
             }
         }
     }
@@ -429,19 +456,7 @@ private struct SightingRow: View {
     @ViewBuilder
     private var thumbnail: some View {
         if let url = sighting.thumbnailURL {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    Image(systemName: "fish")
-                        .foregroundStyle(Ink.chartDim)
-                default:
-                    Color(Ink.hullLine).opacity(0.3)
-                }
-            }
+            SightingRemoteImage(url: url)
             .frame(width: 40, height: 40)
             .clipShape(.rect(cornerRadius: 8))
             .overlay(
@@ -457,6 +472,51 @@ private struct SightingRow: View {
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(Ink.hullLine, lineWidth: 0.5)
                 )
+        }
+    }
+}
+
+private struct SightingRemoteImage: View {
+    let url: URL
+
+    @State private var image: UIImage?
+    @State private var isLoading = true
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else if isLoading {
+                ProgressView()
+                    .controlSize(.mini)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(Ink.hullLine).opacity(0.3))
+            } else {
+                Image(systemName: "fish")
+                    .foregroundStyle(Ink.chartDim)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(Ink.hullLine).opacity(0.3))
+            }
+        }
+        .task(id: url) {
+            image = nil
+            isLoading = true
+            defer { isLoading = false }
+
+            do {
+                let request = INaturalistClient.imageRequest(for: url)
+                let (data, response) = try await URLSession.shared.data(for: request)
+                try HTTPStatusError.validate(response)
+                guard data.count <= 5_000_000 else {
+                    throw URLError(.dataLengthExceedsMaximum)
+                }
+                try Task.checkCancellation()
+                image = UIImage(data: data)
+            } catch {
+                image = nil
+            }
         }
     }
 }

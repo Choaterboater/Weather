@@ -11,9 +11,19 @@ struct SpeciesSighting: Identifiable, Equatable {
     let latitude: Double
     let longitude: Double
     let placeGuess: String?
-    let thumbnailURL: URL?
+    let creator: String
+    let observationURL: URL
+    let photo: SpeciesSightingPhoto?
 
     var location: CLLocation { CLLocation(latitude: latitude, longitude: longitude) }
+    var thumbnailURL: URL? { photo?.thumbnailURL }
+}
+
+struct SpeciesSightingPhoto: Equatable {
+    let thumbnailURL: URL
+    let licenseCode: String
+    let licenseURL: URL
+    let attribution: String
 }
 
 /// Fetches recent research-grade observations of a given species near a
@@ -68,54 +78,146 @@ final class INaturalistClient {
     }
 
     private func fetch(taxonName: String, near location: CLLocation, radiusMiles: Double) async throws -> [SpeciesSighting] {
+        let request = try Self.request(
+            taxonName: taxonName,
+            near: location,
+            radiusMiles: radiusMiles,
+            now: .now
+        )
+        let (data, urlResponse) = try await URLSession.shared.data(for: request)
+        // iNat throttles at ~60 req/min; surface a 429 as "busy", not a decode error.
+        try HTTPStatusError.validate(urlResponse)
+        return try Self.sightings(from: data)
+    }
+
+    nonisolated static func request(
+        taxonName: String,
+        near location: CLLocation,
+        radiusMiles: Double,
+        now: Date
+    ) throws -> URLRequest {
         let radiusKm = radiusMiles * 1.609
         var components = URLComponents(string: "https://api.inaturalist.org/v1/observations")!
-        let calendar = Calendar.current
-        let oneYearAgo = calendar.date(byAdding: .year, value: -1, to: .now) ?? .now
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let oneYearAgo = calendar.date(byAdding: .year, value: -1, to: now) ?? now
         let isoFormatter = ISO8601DateFormatter()
         isoFormatter.formatOptions = [.withFullDate]
+        let coordinate = ExternalRequestPrivacy.coordinateComponents(
+            location,
+            decimalPlaces: 2
+        )
 
         components.queryItems = [
             URLQueryItem(name: "taxon_name", value: taxonName),
-            // 2 decimals ≈ 1.1 km — plenty for a 50 mi radius, and it keeps
-            // precise user coordinates out of a third party's request logs.
-            URLQueryItem(name: "lat", value: String(format: "%.2f", location.coordinate.latitude)),
-            URLQueryItem(name: "lng", value: String(format: "%.2f", location.coordinate.longitude)),
-            URLQueryItem(name: "radius", value: String(radiusKm)),
+            URLQueryItem(name: "lat", value: coordinate.latitude),
+            URLQueryItem(name: "lng", value: coordinate.longitude),
+            URLQueryItem(
+                name: "radius",
+                value: String(
+                    format: "%.1f",
+                    locale: Locale(identifier: "en_US_POSIX"),
+                    radiusKm
+                )
+            ),
             URLQueryItem(name: "order_by", value: "observed_on"),
             URLQueryItem(name: "order", value: "desc"),
             URLQueryItem(name: "quality_grade", value: "research"),
             URLQueryItem(name: "geo", value: "true"),
             URLQueryItem(name: "per_page", value: "8"),
+            URLQueryItem(name: "photo_license", value: "cc0,cc-by,pd"),
             URLQueryItem(name: "d1", value: isoFormatter.string(from: oneYearAgo))
         ]
-        var request = URLRequest(url: components.url!)
-        request.setValue("BiteCast/0.1", forHTTPHeaderField: "User-Agent")
-        let (data, urlResponse) = try await URLSession.shared.data(for: request)
-        // iNat throttles at ~60 req/min; surface a 429 as "busy", not a decode error.
-        try HTTPStatusError.validate(urlResponse)
+        guard let url = components.url else { throw URLError(.badURL) }
+        var request = URLRequest(url: url)
+        request.setValue(AppIdentity.userAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        return request
+    }
+
+    nonisolated static func imageRequest(for url: URL) -> URLRequest {
+        var request = URLRequest(url: url)
+        request.setValue(AppIdentity.userAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("image/*", forHTTPHeaderField: "Accept")
+        return request
+    }
+
+    nonisolated static func sightings(from data: Data) throws -> [SpeciesSighting] {
         let response = try JSONDecoder().decode(Response.self, from: data)
         let dateFmt = DateFormatter()
         dateFmt.dateFormat = "yyyy-MM-dd"
         dateFmt.timeZone = TimeZone(secondsFromGMT: 0)
+        dateFmt.locale = Locale(identifier: "en_US_POSIX")
 
         return response.results.compactMap { result in
             guard let date = result.observed_on.flatMap(dateFmt.date(from:)),
-                  let location = result.location else { return nil }
+                  let location = result.location,
+                  let creator = cleaned(result.user?.name) ?? cleaned(result.user?.login),
+                  let observationURL = URL(
+                    string: "https://www.inaturalist.org/observations/\(result.id)"
+                  )
+            else { return nil }
             let parts = location.split(separator: ",")
             guard parts.count == 2,
                   let lat = Double(parts[0]),
                   let lon = Double(parts[1]) else { return nil }
-            let thumb = result.taxon?.default_photo?.square_url.flatMap(URL.init(string:))
             return SpeciesSighting(
                 id: result.id,
                 observedOn: date,
                 latitude: lat,
                 longitude: lon,
                 placeGuess: result.place_guess,
-                thumbnailURL: thumb
+                creator: creator,
+                observationURL: observationURL,
+                photo: result.photos?.lazy.compactMap(safePhoto).first
             )
         }
+    }
+
+    private nonisolated static func safePhoto(_ value: PhotoDTO) -> SpeciesSightingPhoto? {
+        guard let rawURL = cleaned(value.url ?? value.square_url),
+              let thumbnailURL = URL(string: rawURL),
+              thumbnailURL.scheme?.lowercased() == "https",
+              let rawLicense = cleaned(value.license_code)?.lowercased(),
+              let license = allowedLicense(rawLicense),
+              let attribution = cleaned(value.attribution)
+        else { return nil }
+
+        return SpeciesSightingPhoto(
+            thumbnailURL: thumbnailURL,
+            licenseCode: license.code,
+            licenseURL: license.url,
+            attribution: attribution
+        )
+    }
+
+    private nonisolated static func allowedLicense(
+        _ value: String
+    ) -> (code: String, url: URL)? {
+        switch value {
+        case "cc0":
+            return (
+                "CC0",
+                URL(string: "https://creativecommons.org/publicdomain/zero/1.0/")!
+            )
+        case "pd", "public-domain":
+            return (
+                "Public Domain",
+                URL(string: "https://creativecommons.org/publicdomain/mark/1.0/")!
+            )
+        case "cc-by":
+            return (
+                "CC BY",
+                URL(string: "https://creativecommons.org/licenses/by/4.0/")!
+            )
+        default:
+            return nil
+        }
+    }
+
+    private nonisolated static func cleaned(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private static func cacheKey(species: Species, location: CLLocation) -> String {
@@ -135,14 +237,19 @@ final class INaturalistClient {
         let observed_on: String?
         let location: String?            // "lat,lon"
         let place_guess: String?
-        let taxon: TaxonDTO?
+        let user: UserDTO?
+        let photos: [PhotoDTO]?
     }
 
-    private struct TaxonDTO: Decodable {
-        let default_photo: PhotoDTO?
+    private struct UserDTO: Decodable {
+        let login: String?
+        let name: String?
     }
 
     private struct PhotoDTO: Decodable {
+        let url: String?
         let square_url: String?
+        let license_code: String?
+        let attribution: String?
     }
 }
