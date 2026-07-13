@@ -91,7 +91,11 @@ final class WaterScout {
         lines.append("Target species: \(species.promptName).")
 
         if let conditions {
-            lines.append("Pressure is \(conditions.pressure.tendency.label.lowercased()).")
+            if conditions.pressure.pressure != nil {
+                lines.append("Pressure is \(conditions.pressure.tendency.label.lowercased()).")
+            } else {
+                lines.append("Pressure is unavailable.")
+            }
             lines.append("Moon: \(conditions.moonPhase.displayName) (\(conditions.moonPhase.biteRating.lowercased()) solunar).")
             if let active = conditions.activeWindow() {
                 lines.append("A \(active.period.rawValue.lowercased()) bite window is active now.")

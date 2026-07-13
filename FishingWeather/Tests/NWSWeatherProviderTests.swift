@@ -75,6 +75,7 @@ struct NWSWeatherProviderTests {
         #expect(abs((day.precipitationChance ?? 0) - 0.40) < 0.001)
         #expect(day.conditionText == "Mostly Sunny")
         #expect(day.symbolName == "cloud.sun")
+        #expect(abs((day.windMetersPerSecond ?? 0) - (17.5 * 0.44704)) < 0.001)
         #expect(abs((day.windPeakMetersPerSecond ?? 0) - (20 * 0.44704)) < 0.001)
     }
 
@@ -127,26 +128,32 @@ struct NWSWeatherProviderTests {
         #expect(alert.detailsURL?.absoluteString == "https://api.weather.gov/alerts/feature-123")
     }
 
-    @Test func usesInjectedAstronomy() async throws {
-        let sunrise = try #require(NWSFixtures.date("2026-07-12T06:00:00-05:00"))
-        let expected = AstronomySnapshot(
-            sunrise: sunrise,
-            sunset: nil,
-            moonrise: nil,
-            moonset: nil,
-            moonTransit: nil,
-            moonPhaseFraction: 0.25
-        )
+    @Test func usesInjectedAstronomyForTopLevelAndEveryDailyPoint() async throws {
         let recorder = NWSRequestRecorder(responses: NWSFixtures.minimumResponses)
         let provider = NWSWeatherProvider(
             loader: recorder.load,
             userAgent: userAgent,
-            astronomy: { _, _ in expected }
+            astronomy: { location, date, calendar in
+                #expect(location.coordinate.latitude == 30.2938)
+                #expect(location.coordinate.longitude == -86.0049)
+                #expect(calendar.timeZone.identifier == "America/Chicago")
+                return AstronomySnapshot(
+                    sunrise: date,
+                    sunset: nil,
+                    moonrise: nil,
+                    moonset: nil,
+                    moonTransit: nil,
+                    moonPhaseFraction: 0.25
+                )
+            }
         )
 
         let value = try await provider.forecast(for: location)
 
-        #expect(value.astronomy == expected)
+        #expect(value.astronomy.sunrise != nil)
+        let day = try #require(value.daily.first)
+        #expect(day.astronomy?.sunrise == day.date)
+        #expect(day.astronomy?.moonPhaseFraction == 0.25)
     }
 
     @Test func absentObservationFallsBackToFirstHourWithoutPressure() async throws {
@@ -360,7 +367,7 @@ struct NWSWeatherProviderTests {
         NWSWeatherProvider(
             loader: recorder.load,
             userAgent: userAgent,
-            astronomy: { _, _ in .empty }
+            astronomy: { _, _, _ in .empty }
         )
     }
 

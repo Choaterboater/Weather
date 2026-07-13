@@ -10,7 +10,7 @@ import Foundation
 enum TripPlanner {
     static func outlook(
         days: [DayForecastInput],
-        hourly: [HourSample],
+        hourly: [HourlyWeatherPoint],
         tidesByDay: [Date: [TideEvent]],
         species: Species,
         locationName: String,
@@ -74,7 +74,7 @@ enum TripPlanner {
     /// nil when `date` falls outside the hourly horizon (caller then uses the
     /// daily wind and marks the window low confidence).
     static func conditions(
-        at date: Date, hourly: [HourSample]
+        at date: Date, hourly: [HourlyWeatherPoint]
     ) -> (windMph: Double, tendency: PressureTendency, changePerHour: Double?)? {
         guard let first = hourly.first, let last = hourly.last,
               date >= first.date, date <= last.date else { return nil }
@@ -83,15 +83,37 @@ enum TripPlanner {
             abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
         } ?? first
 
-        // Pressure change over the ~3 hours from the window's time.
-        let before = hourly.last { $0.date <= date } ?? first
-        let after = hourly.first { $0.date >= date.addingTimeInterval(3 * 3600) } ?? last
-        let hours = max(1, after.date.timeIntervalSince(before.date) / 3600)
-        let changePerHour = (after.pressureHPa - before.pressureHPa) / hours
-        let tendency: PressureTendency =
-            changePerHour < -0.2 ? .falling : (changePerHour > 0.2 ? .rising : .steady)
+        let windMph = Measurement(
+            value: nearest.wind.speedMetersPerSecond,
+            unit: UnitSpeed.metersPerSecond
+        ).converted(to: .milesPerHour).value
 
-        return (nearest.windSpeedMph, tendency, changePerHour)
+        // Pressure is independently optional. Wind can still make this a
+        // high-confidence hourly window when NWS has no pressure series.
+        let before = hourly.last {
+            $0.date <= date && $0.pressureHPa != nil
+        }
+        let after = hourly.first {
+            $0.date >= date.addingTimeInterval(3 * 3_600)
+                && $0.pressureHPa != nil
+        } ?? hourly.last(where: { $0.pressureHPa != nil })
+
+        guard let before,
+              let after,
+              let beforeHPa = before.pressureHPa,
+              let afterHPa = after.pressureHPa,
+              after.date > before.date
+        else {
+            return (windMph, .steady, nil)
+        }
+
+        let hours = after.date.timeIntervalSince(before.date) / 3_600
+        let changePerHour = (afterHPa - beforeHPa) / hours
+        let tendency: PressureTendency = changePerHour < -0.2
+            ? .falling
+            : (changePerHour > 0.2 ? .rising : .steady)
+
+        return (windMph, tendency, changePerHour)
     }
 
     /// The window's period plus its most favorable non-solunar driver, as short

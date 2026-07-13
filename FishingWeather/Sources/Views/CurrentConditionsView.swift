@@ -1,20 +1,49 @@
 import SwiftUI
-import WeatherKit
 
 struct CurrentConditionsView: View {
-    let current: CurrentWeather
+    let current: CurrentConditionsSnapshot
 
     private var temperature: String {
-        current.temperature.formatted(.measurement(width: .narrow, usage: .weather))
+        WeatherUnits.wholeTemperature(celsius: current.temperatureCelsius)
     }
 
     private var feelsLike: String {
-        current.apparentTemperature.formatted(.measurement(width: .narrow, usage: .weather))
+        WeatherUnits.wholeTemperature(celsius: current.apparentTemperatureCelsius)
     }
 
     private var wind: String {
-        let speed = current.wind.speed.formatted(.measurement(width: .abbreviated, usage: .general))
-        return "\(current.wind.compassDirection.abbreviation) \(speed)"
+        let compass = WeatherUnits.compassAbbreviation(degrees: current.wind.directionDegrees)
+        let speed = Measurement(
+            value: WeatherUnits.milesPerHour(
+                metersPerSecond: current.wind.speedMetersPerSecond
+            ),
+            unit: UnitSpeed.milesPerHour
+        )
+        .formatted(.measurement(width: .abbreviated, usage: .asProvided))
+        return "\(compass) \(speed)"
+    }
+
+    private var humidity: String {
+        current.humidityFraction?.formatted(
+            .percent.precision(.fractionLength(0))
+        ) ?? "—"
+    }
+
+    private var dewPoint: String {
+        current.dewPointCelsius.map {
+            WeatherUnits.wholeTemperature(celsius: $0)
+        } ?? "—"
+    }
+
+    private var visibility: String {
+        current.visibilityMeters.map {
+            Measurement(value: $0, unit: UnitLength.meters)
+                .formatted(.measurement(width: .abbreviated, usage: .general))
+        } ?? "—"
+    }
+
+    private var uvIndex: String {
+        current.uvIndex.map { String($0) } ?? "—"
     }
 
     var body: some View {
@@ -37,7 +66,7 @@ struct CurrentConditionsView: View {
                         .accessibilityHidden(true)
                 }
 
-                Text(current.condition.description)
+                Text(current.conditionText)
                     .font(.system(size: 20, weight: .bold, design: .monospaced))
                     .foregroundStyle(Ink.chart)
 
@@ -49,22 +78,16 @@ struct CurrentConditionsView: View {
 
                 HStack(spacing: 16) {
                     Metric(label: "Wind", value: wind, systemImage: "wind")
-                    Metric(label: "Humidity",
-                           value: current.humidity.formatted(.percent.precision(.fractionLength(0))),
-                           systemImage: "humidity")
-                    Metric(label: "Dew Point",
-                           value: current.dewPoint.formatted(.measurement(width: .narrow, usage: .weather)),
-                           systemImage: "drop.fill")
-                    Metric(label: "Visibility",
-                           value: current.visibility.formatted(.measurement(width: .abbreviated, usage: .general)),
-                           systemImage: "eye")
-                    Metric(label: "UV", value: "\(current.uvIndex.value)", systemImage: "sun.max")
+                    Metric(label: "Humidity", value: humidity, systemImage: "humidity")
+                    Metric(label: "Dew Point", value: dewPoint, systemImage: "drop.fill")
+                    Metric(label: "Visibility", value: visibility, systemImage: "eye")
+                    Metric(label: "UV", value: uvIndex, systemImage: "sun.max")
                 }
             }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Current conditions")
-        .accessibilityValue("\(temperature), \(current.condition.description). Feels like \(feelsLike). Wind \(wind). Humidity \(current.humidity.formatted(.percent.precision(.fractionLength(0)))). UV index \(current.uvIndex.value).")
+        .accessibilityValue("\(temperature), \(current.conditionText). Feels like \(feelsLike). Wind \(wind). Humidity \(humidity). UV index \(uvIndex).")
     }
 }
 

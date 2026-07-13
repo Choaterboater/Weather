@@ -1,6 +1,5 @@
 import Charts
 import SwiftUI
-import WeatherKit
 
 /// Barometric pressure over the next hours, with a "now" marker. Pressure trend
 /// matters more to the bite than the absolute value, so the shape is the point.
@@ -8,62 +7,90 @@ struct PressureTrendChart: View {
     let samples: [HourSample]
     let now: Date
 
-    private var range: ClosedRange<Double> {
-        let values = samples.map(\.pressureHPa)
-        guard let lo = values.min(), let hi = values.max() else { return 1000...1020 }
+    private var pressureSamples: [HourSample] {
+        samples.filter { $0.pressureHPa != nil }
+    }
+
+    private var range: ClosedRange<Double>? {
+        let values = pressureSamples.compactMap(\.pressureHPa)
+        guard let lo = values.min(), let hi = values.max() else { return nil }
         let pad = max((hi - lo) * 0.25, 1.5)
         return (lo - pad)...(hi + pad)
     }
 
     var body: some View {
-        Chart(samples) { sample in
-            AreaMark(
-                x: .value("Time", sample.date),
-                yStart: .value("min", range.lowerBound),
-                yEnd: .value("Pressure", sample.pressureHPa)
-            )
-            .interpolationMethod(.catmullRom)
-            .foregroundStyle(.linearGradient(
-                colors: [Ink.brass.opacity(0.42), Ink.brass.opacity(0.02)],
-                startPoint: .top, endPoint: .bottom
-            ))
+        Group {
+            if let range {
+                Chart {
+                    ForEach(pressureSamples) { sample in
+                        if let pressure = sample.pressureHPa {
+                            AreaMark(
+                                x: .value("Time", sample.date),
+                                yStart: .value("min", range.lowerBound),
+                                yEnd: .value("Pressure", pressure)
+                            )
+                            .interpolationMethod(.catmullRom)
+                            .foregroundStyle(.linearGradient(
+                                colors: [Ink.brass.opacity(0.42), Ink.brass.opacity(0.02)],
+                                startPoint: .top, endPoint: .bottom
+                            ))
 
-            LineMark(x: .value("Time", sample.date), y: .value("Pressure", sample.pressureHPa))
-                .interpolationMethod(.catmullRom)
-                .lineStyle(.init(lineWidth: 2.5))
-                .foregroundStyle(Ink.brass)
+                            LineMark(
+                                x: .value("Time", sample.date),
+                                y: .value("Pressure", pressure)
+                            )
+                            .interpolationMethod(.catmullRom)
+                            .lineStyle(.init(lineWidth: 2.5))
+                            .foregroundStyle(Ink.brass)
+                        }
+                    }
 
-            RuleMark(x: .value("Now", now))
-                .lineStyle(.init(lineWidth: 1, dash: [4, 4]))
-                .foregroundStyle(.secondary.opacity(0.7))
-        }
-        .chartYScale(domain: range)
-        .chartYAxis {
-            AxisMarks(position: .leading) { value in
-                AxisGridLine().foregroundStyle(Ink.hullLine.opacity(0.3))
-                AxisValueLabel {
-                    if let v = value.as(Double.self) {
-                        Text("\(Int(v))")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundStyle(Ink.chartDim)
+                    RuleMark(x: .value("Now", now))
+                        .lineStyle(.init(lineWidth: 1, dash: [4, 4]))
+                        .foregroundStyle(.secondary.opacity(0.7))
+                }
+                .chartYScale(domain: range)
+                .chartYAxis {
+                    AxisMarks(position: .leading) { value in
+                        AxisGridLine().foregroundStyle(Ink.hullLine.opacity(0.3))
+                        AxisValueLabel {
+                            if let v = value.as(Double.self) {
+                                Text("\(Int(v))")
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(Ink.chartDim)
+                            }
+                        }
                     }
                 }
-            }
-        }
-        .chartXAxis {
-            AxisMarks(values: .stride(by: .hour, count: 6)) { value in
-                AxisGridLine().foregroundStyle(Ink.hullLine.opacity(0.3))
-                AxisValueLabel {
-                    if let d = value.as(Date.self) {
-                        Text(d, format: .dateTime.hour())
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundStyle(Ink.chartDim)
+                .chartXAxis {
+                    AxisMarks(values: .stride(by: .hour, count: 6)) { value in
+                        AxisGridLine().foregroundStyle(Ink.hullLine.opacity(0.3))
+                        AxisValueLabel {
+                            if let d = value.as(Date.self) {
+                                Text(d, format: .dateTime.hour())
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(Ink.chartDim)
+                            }
+                        }
                     }
                 }
+            } else {
+                VStack(spacing: 6) {
+                    Image(systemName: "barometer")
+                        .foregroundStyle(Ink.chartDim)
+                    Text("Pressure unavailable")
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Ink.chartDim)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .frame(height: 130)
-        .accessibilityLabel("Pressure trend chart for the next 24 hours")
+        .accessibilityLabel(
+            pressureSamples.isEmpty
+                ? "Pressure trend unavailable"
+                : "Pressure trend chart for the next 24 hours"
+        )
     }
 }
 
@@ -73,14 +100,20 @@ struct TemperatureChart: View {
 
     var body: some View {
         Chart(samples) { sample in
-            AreaMark(x: .value("Time", sample.date), y: .value("Temp", sample.temperature))
+            AreaMark(
+                x: .value("Time", sample.date),
+                y: .value("Temp", sample.temperatureCelsius)
+            )
                 .interpolationMethod(.monotone)
                 .foregroundStyle(.linearGradient(
                     colors: [Ink.brass.opacity(0.28), .clear],
                     startPoint: .top, endPoint: .bottom
                 ))
 
-            LineMark(x: .value("Time", sample.date), y: .value("Temp", sample.temperature))
+            LineMark(
+                x: .value("Time", sample.date),
+                y: .value("Temp", sample.temperatureCelsius)
+            )
                 .interpolationMethod(.monotone)
                 .lineStyle(.init(lineWidth: 3, lineCap: .round))
                 .foregroundStyle(.linearGradient(
@@ -93,7 +126,7 @@ struct TemperatureChart: View {
                 AxisGridLine().foregroundStyle(Ink.hullLine.opacity(0.3))
                 AxisValueLabel {
                     if let v = value.as(Double.self) {
-                        Text("\(Int(v))°")
+                        Text(WeatherUnits.wholeTemperature(celsius: v))
                             .font(.system(size: 10, weight: .bold, design: .monospaced))
                             .foregroundStyle(Ink.chartDim)
                     }
@@ -258,7 +291,7 @@ struct BiteWindowsTimeline: View {
 
 /// Moon illumination as a circular gauge.
 struct MoonArc: View {
-    let phase: MoonPhase
+    let phase: LunarPhase
 
     var body: some View {
         Gauge(value: phase.illuminationFraction) {

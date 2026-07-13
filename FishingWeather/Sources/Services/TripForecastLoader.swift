@@ -1,40 +1,43 @@
 import CoreLocation
 import Foundation
 import Observation
-import WeatherKit
 
-/// Fetches the extended forecast for the Weekly Trip Planner and feeds it to
-/// `TripPlanner`. Kept separate from `WeatherStore` so the everyday dashboard
-/// fetch stays lean — the planner pulls a wider hourly window on demand.
+/// Builds a weekly outlook from the canonical snapshot already loaded for the
+/// active location. No provider-specific service crosses this boundary.
 @MainActor
 @Observable
 final class TripForecastLoader {
-    typealias Worker = @MainActor (CLLocation, Species, String) async throws -> WeekOutlook
+    typealias Worker = @MainActor (
+        CLLocation,
+        Species,
+        String
+    ) async throws -> WeekOutlook
 
     private(set) var outlook: WeekOutlook?
     private(set) var isLoading = false
     private(set) var errorMessage: String?
 
-    private let service = WeatherService.shared
     private let worker: Worker?
     private var lastKey: String?
     private var loadID = 0
-
-    /// Hours of hourly forecast to request — defines the high-confidence
-    /// horizon. Beyond this, days score from the daily forecast (low confidence).
-    private let hourlyHorizon: TimeInterval = 60 * 3600
 
     init(worker: Worker? = nil) {
         self.worker = worker
     }
 
-    func load(for location: CLLocation, species: Species, locationName: String,
-              tides: (CLLocation) async -> [Date: [TideEvent]] = { _ in [:] },
-              force: Bool = false) async -> WeekOutlook? {
+    func load(
+        for location: CLLocation,
+        species: Species,
+        locationName: String,
+        snapshot: WeatherSnapshot? = nil,
+        tides: (CLLocation) async -> [Date: [TideEvent]] = { _ in [:] },
+        force: Bool = false
+    ) async -> WeekOutlook? {
         let key = Self.requestKey(
             location: location,
             species: species,
-            locationName: locationName
+            locationName: locationName,
+            snapshot: snapshot
         )
         if !force, outlook != nil, lastKey == key { return outlook }
 
@@ -52,29 +55,17 @@ final class TripForecastLoader {
             if let worker {
                 result = try await worker(location, species, locationName)
             } else {
+                guard let snapshot else {
+                    throw WeatherProviderError.serviceUnavailable
+                }
                 let now = Date.now
-                let (daily, hourly) = try await service.weather(
-                    for: location,
-                    including: .daily,
-                    .hourly(startDate: now, endDate: now.addingTimeInterval(hourlyHorizon))
-                )
+                let days = snapshot.daily.prefix(7).map(Self.dayInput)
+
                 guard id == loadID, !Task.isCancelled else {
                     if id == loadID { isLoading = false }
                     return nil
                 }
 
-                let days: [DayForecastInput] = daily.forecast.prefix(7).map { day in
-                    DayForecastInput(
-                        date: day.date,
-                        moonrise: day.moon.moonrise,
-                        moonset: day.moon.moonset,
-                        moonPhase: day.moon.phase,
-                        dailyWindMph: day.wind.speed.converted(to: .milesPerHour).value
-                    )
-                }
-
-                // A week of NOAA hi/lo predictions grouped by day; empty for inland
-                // spots (the scorer then drops the tide factor).
                 let tidesByDay = await tides(location)
                 guard id == loadID, !Task.isCancelled else {
                     if id == loadID { isLoading = false }
@@ -83,7 +74,7 @@ final class TripForecastLoader {
 
                 result = TripPlanner.outlook(
                     days: days,
-                    hourly: hourly.samples(72, now: now),
+                    hourly: snapshot.hourly,
                     tidesByDay: tidesByDay,
                     species: species,
                     locationName: locationName,
@@ -103,19 +94,46 @@ final class TripForecastLoader {
         } catch {
             guard id == loadID else { return nil }
             isLoading = false
-            if error is CancellationError || (error as? URLError)?.code == .cancelled { return nil }
+            if error is CancellationError
+                || (error as? URLError)?.code == .cancelled
+                || Task.isCancelled {
+                return nil
+            }
             errorMessage = error.localizedDescription
             return nil
         }
     }
 
+    nonisolated static func dayInput(
+        from day: DailyWeatherPoint
+    ) -> DayForecastInput {
+        let astronomy = day.astronomy
+        let dailyWind = day.windMetersPerSecond
+            ?? day.windPeakMetersPerSecond
+        return DayForecastInput(
+            date: day.date,
+            moonrise: astronomy?.moonrise,
+            moonset: astronomy?.moonset,
+            moonPhase: LunarPhase(
+                cycleFraction: astronomy?.moonPhaseFraction
+            ),
+            dailyWindMph: dailyWind.map {
+                WeatherUnits.milesPerHour(metersPerSecond: $0)
+            }
+        )
+    }
+
     nonisolated static func requestKey(
         location: CLLocation,
         species: Species,
-        locationName: String
+        locationName: String,
+        snapshot: WeatherSnapshot? = nil
     ) -> String {
         let lat = (location.coordinate.latitude * 100).rounded() / 100
         let lon = (location.coordinate.longitude * 100).rounded() / 100
-        return "\(species.rawValue)|\(lat),\(lon)|\(locationName)"
+        let revision = snapshot.map {
+            "\($0.provenance.source.rawValue):\($0.provenance.fetchedAt.timeIntervalSinceReferenceDate)"
+        } ?? "none"
+        return "\(species.rawValue)|\(lat),\(lon)|\(locationName)|weather:\(revision)"
     }
 }

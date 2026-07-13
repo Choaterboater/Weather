@@ -50,6 +50,21 @@ struct WeatherProviderChainTests {
         }
     }
 
+    @Test func urlCancellationDoesNotFallThrough() async {
+        let canceled = StubProvider(result: .failure(URLError(.cancelled)))
+        let fallback = StubProvider(result: .success(.fixture(source: .nws)))
+
+        do {
+            _ = try await WeatherProviderChain(providers: [canceled, fallback])
+                .forecast(for: CLLocation(latitude: 30.29, longitude: -86.00))
+            Issue.record("Expected URL cancellation")
+        } catch let error as URLError {
+            #expect(error.code == .cancelled)
+        } catch {
+            Issue.record("Expected URLError.cancelled, got \(error)")
+        }
+    }
+
     @Test func aggregatesFailuresInAttemptOrder() async {
         let typedFailure = StubProvider(result: .failure(WeatherProviderError.authentication))
         let genericFailure = StubProvider(result: .failure(FixtureError.offline))
@@ -83,6 +98,9 @@ struct WeatherProviderChainTests {
         let decoded = try JSONDecoder().decode(WeatherSnapshot.self, from: encoded)
 
         #expect(decoded == snapshot)
+        #expect(decoded.daily.first?.astronomy == snapshot.astronomy)
+        #expect(decoded.daily.first?.windMetersPerSecond == 5)
+        #expect(decoded.daily.first?.windPeakMetersPerSecond == 8)
     }
 }
 
@@ -148,7 +166,16 @@ private extension WeatherSnapshot {
             precipitationChance: 0.2,
             conditionText: "Partly Cloudy",
             symbolName: "cloud.sun",
-            windPeakMetersPerSecond: 8
+            windMetersPerSecond: 5,
+            windPeakMetersPerSecond: 8,
+            astronomy: AstronomySnapshot(
+                sunrise: .fixture.addingTimeInterval(-6 * 3_600),
+                sunset: .fixture.addingTimeInterval(6 * 3_600),
+                moonrise: .fixture.addingTimeInterval(-3 * 3_600),
+                moonset: .fixture.addingTimeInterval(9 * 3_600),
+                moonTransit: .fixture.addingTimeInterval(3 * 3_600),
+                moonPhaseFraction: 0.25
+            )
         )
         let alert = WeatherAlertSnapshot(
             id: "alert-1",

@@ -1,11 +1,10 @@
 import SwiftUI
-import WeatherKit
 
 struct DailyForecastView: View {
-    let daily: Forecast<DayWeather>
+    let daily: [DailyWeatherPoint]
 
-    private var days: [DayWeather] {
-        daily.forecast.prefix(10).map { $0 }
+    private var days: [DailyWeatherPoint] {
+        daily.prefix(10).map { $0 }
     }
 
     var body: some View {
@@ -26,7 +25,7 @@ struct DailyForecastView: View {
 }
 
 private struct DayRow: View {
-    let day: DayWeather
+    let day: DailyWeatherPoint
     let isFirst: Bool
 
     @ScaledMetric private var dayColumnWidth: CGFloat = 56
@@ -49,8 +48,9 @@ private struct DayRow: View {
                 .symbolRenderingMode(.multicolor)
                 .frame(width: iconColumnWidth)
 
-            if day.precipitationChance > 0 {
-                Text(day.precipitationChance.formatted(.percent.precision(.fractionLength(0))))
+            if let precipitationChance = day.precipitationChance,
+               precipitationChance > 0 {
+                Text(precipitationChance.formatted(.percent.precision(.fractionLength(0))))
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
                     .foregroundStyle(Ink.tide)
                     .frame(width: precipColumnWidth, alignment: .leading)
@@ -60,10 +60,10 @@ private struct DayRow: View {
 
             Spacer()
 
-            Text(day.lowTemperature.formatted(.measurement(width: .narrow, usage: .weather)))
+            Text(WeatherUnits.wholeTemperature(celsius: day.lowCelsius))
                 .font(.system(size: 14, weight: .medium, design: .monospaced))
                 .foregroundStyle(Ink.chartDim)
-            Text(day.highTemperature.formatted(.measurement(width: .narrow, usage: .weather)))
+            Text(WeatherUnits.wholeTemperature(celsius: day.highCelsius))
                 .font(.system(size: 14, weight: .bold, design: .monospaced))
                 .foregroundStyle(Ink.chart)
         }

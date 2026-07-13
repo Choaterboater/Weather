@@ -175,12 +175,21 @@ final class BaitEngine {
         lines.append("Species focus: \(species.promptName)")
 
         let pressure = conditions.pressure
-        let hpa = pressure.pressure.converted(to: .hectopascals).value
-        lines.append("Pressure: \(Int(hpa)) hPa, \(pressure.tendency.label.lowercased())")
+        if let measurement = pressure.pressure {
+            let hpa = measurement.converted(to: .hectopascals).value
+            lines.append("Pressure: \(Int(hpa.rounded())) hPa, \(pressure.tendency.label.lowercased())")
+        } else {
+            lines.append("Pressure: unavailable")
+        }
 
-        let windSpeed = conditions.wind.speed.formatted(.measurement(width: .abbreviated, usage: .general))
-        lines.append("Wind: \(conditions.wind.compassDirection.abbreviation) \(windSpeed)")
-        lines.append("UV index: \(conditions.uvIndex.value)")
+        let windSpeed = WeatherUnits.milesPerHour(
+            metersPerSecond: conditions.wind.speedMetersPerSecond
+        )
+        let windDirection = WeatherUnits.compassAbbreviation(
+            degrees: conditions.wind.directionDegrees
+        )
+        lines.append("Wind: \(windDirection) \(Int(windSpeed.rounded())) mph")
+        lines.append("UV index: \(conditions.uvIndex.map(String.init) ?? "unavailable")")
         lines.append("Moon: \(conditions.moonPhase.displayName) (\(conditions.moonPhase.biteRating.lowercased()) solunar)")
 
         if let active = conditions.activeWindow() {

@@ -1,7 +1,6 @@
 import Foundation
 import CoreLocation
 import SwiftUI
-import WeatherKit
 
 struct FishingView: View {
     @Environment(WeatherStore.self) private var weather
@@ -85,14 +84,11 @@ struct FishingView: View {
                     }
                     PressureCard(reading: conditions.pressure, samples: hourlySamples)
                     SolunarDetailsCard(conditions: conditions)
-                } else if weather.isLoading || (activeLocation != nil && weather.current == nil && weather.errorMessage == nil) {
+                } else if weather.isLoading || (activeLocation != nil && weather.snapshot == nil && weather.errorMessage == nil) {
                     ProgressView("Reading conditions…")
                         .padding(.top, 80)
                 } else if weather.errorMessage != nil {
                     SpeciesFocusCard(species: species)
-                    if let loc = activeLocation, let cachedPressure = WeatherSnapshots.cachedPressure(for: loc) {
-                        CachedPressureCard(reading: cachedPressure, samples: hourlySamples)
-                    }
                     ContentUnavailableView {
                         Label("Conditions unavailable", systemImage: "wifi.slash")
                     } description: {
@@ -108,15 +104,6 @@ struct FishingView: View {
                         .buttonStyle(.glassProminent)
                         .controlSize(.large)
                     }
-                    .padding(.top, 8)
-                } else if let loc = activeLocation, let cachedPressure = WeatherSnapshots.cachedPressure(for: loc) {
-                    SpeciesFocusCard(species: species)
-                    CachedPressureCard(reading: cachedPressure, samples: hourlySamples)
-                    ContentUnavailableView(
-                        "Live weather unavailable",
-                        systemImage: "cloud.slash",
-                        description: Text("Showing cached conditions from your last session.")
-                    )
                     .padding(.top, 8)
                 } else {
                     SpeciesFocusCard(species: species)
@@ -187,8 +174,11 @@ struct FishingView: View {
 
     /// Only present weather that belongs to the active location.
     private var liveConditions: FishingConditions? {
-        guard let activeLocation, weather.hasData(for: activeLocation) else { return nil }
-        return weather.conditions
+        guard let activeLocation,
+              weather.hasData(for: activeLocation),
+              let snapshot = weather.snapshot
+        else { return nil }
+        return FishingConditions.make(snapshot: snapshot)
     }
 
     /// Re-keys the tide task whenever the active spot or GPS coordinate changes.
@@ -198,14 +188,11 @@ struct FishingView: View {
     }
 
     private var hourlySamples: [HourSample] {
-        if let loc = activeLocation, weather.hasData(for: loc),
-           let live = weather.hourly?.samples(), !live.isEmpty {
-            return live
-        }
-        if let loc = activeLocation {
-            return WeatherSnapshots.cachedSamples(for: loc)
-        }
-        return []
+        guard let activeLocation,
+              weather.hasData(for: activeLocation),
+              let snapshot = weather.snapshot
+        else { return [] }
+        return snapshot.hourly.samples()
     }
 }
 
@@ -213,42 +200,6 @@ private extension Double {
     func rounded(toPlaces places: Int) -> Double {
         let multiplier = pow(10.0, Double(places))
         return (self * multiplier).rounded() / multiplier
-    }
-}
-
-// MARK: - Cached pressure fallback
-
-/// Shown when live weather is unavailable but an offline snapshot exists.
-private struct CachedPressureCard: View {
-    let reading: PressureReading
-    var samples: [HourSample] = []
-
-    var body: some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text(reading.pressure.formatted(.measurement(width: .abbreviated, usage: .barometric)))
-                        .font(.system(size: 24, weight: .bold, design: .monospaced))
-                        .foregroundStyle(Ink.chart)
-                        .contentTransition(.numericText())
-                    Label(reading.tendency.label, systemImage: reading.tendency.symbolName)
-                        .font(.system(size: 14, weight: .bold, design: .monospaced))
-                        .foregroundStyle(reading.tendency == .falling ? Ink.bite : Ink.chartDim)
-                    if let perHour = reading.changePerHour, abs(perHour) >= 0.1 {
-                        Text(String(format: "%+.1f hPa/hr", perHour))
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
-                            .foregroundStyle(Ink.chartDim)
-                    }
-                }
-                Text(reading.tendency.fishingNote)
-                    .font(.system(size: 14, weight: .medium, design: .monospaced))
-                    .foregroundStyle(Ink.chartDim)
-                if !samples.isEmpty {
-                    PressureTrendChart(samples: samples, now: .now)
-                        .padding(.top, 4)
-                }
-            }
-        }
     }
 }
 
@@ -430,7 +381,9 @@ private struct PressureCard: View {
     var samples: [HourSample] = []
 
     private var pressureText: String {
-        reading.pressure.formatted(.measurement(width: .abbreviated, usage: .barometric))
+        reading.pressure?.formatted(
+            .measurement(width: .abbreviated, usage: .barometric)
+        ) ?? "Unavailable"
     }
 
     private var changeText: String? {
@@ -448,19 +401,25 @@ private struct PressureCard: View {
                             .font(.system(size: 24, weight: .bold, design: .monospaced))
                             .foregroundStyle(Ink.chart)
                             .contentTransition(.numericText())
-                        Label(reading.tendency.label, systemImage: reading.tendency.symbolName)
-                            .font(.system(size: 14, weight: .bold, design: .monospaced))
-                            .foregroundStyle(reading.tendency == .falling ? Ink.bite : Ink.chartDim)
-                        if let changeText {
-                            Text(changeText)
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundStyle(Ink.chartDim)
+                        if reading.pressure != nil {
+                            Label(reading.tendency.label, systemImage: reading.tendency.symbolName)
+                                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                .foregroundStyle(reading.tendency == .falling ? Ink.bite : Ink.chartDim)
+                            if let changeText {
+                                Text(changeText)
+                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(Ink.chartDim)
+                            }
                         }
                     }
-                    Text(reading.tendency.fishingNote)
+                    Text(
+                        reading.pressure == nil
+                            ? "Barometric pressure isn't available from this weather source."
+                            : reading.tendency.fishingNote
+                    )
                         .font(.system(size: 14, weight: .medium, design: .monospaced))
                         .foregroundStyle(Ink.chartDim)
-                    if samples.count > 1 {
+                    if samples.compactMap(\.pressureHPa).count > 1 {
                         PressureTrendChart(samples: samples, now: .now)
                             .padding(.top, 4)
                     }

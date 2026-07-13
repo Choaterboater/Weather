@@ -3,7 +3,7 @@ import SwiftUI
 @main
 struct BiteCastApp: App {
     @State private var locationManager = LocationManager()
-    @State private var weatherStore = WeatherStore()
+    @State private var weatherStore: WeatherStore
     @State private var spotStore = SpotStore()
     @State private var catchLog = CatchLog()
     @State private var regulationStore = RegulationStore()
@@ -12,6 +12,29 @@ struct BiteCastApp: App {
     @State private var osmClient = OpenStreetMapClient()
     @State private var inaturalist = INaturalistClient()
     @State private var alertSettings = AlertSettings()
+
+    init() {
+        let cache = WeatherSnapshots()
+        let astronomy = LocalAstronomyProvider()
+        let provider = WeatherProviderChain(providers: [
+            WeatherKitProvider(),
+            NWSWeatherProvider(
+                userAgent: "BiteCast/0.1 (app.choatelabs.bitecast)",
+                astronomy: { location, date, calendar in
+                    astronomy.snapshot(
+                        for: location,
+                        date: date,
+                        calendar: calendar
+                    )
+                }
+            ),
+            CachedWeatherProvider(cache: cache),
+        ])
+        _weatherStore = State(initialValue: WeatherStore(
+            provider: provider,
+            cache: cache
+        ))
+    }
 
     var body: some Scene {
         WindowGroup {
