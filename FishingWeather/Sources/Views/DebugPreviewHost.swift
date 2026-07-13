@@ -8,9 +8,30 @@ struct DebugPreviewHost: View {
     @State private var weatherStore = WeatherStore(worker: { _, _ in
         throw WeatherProviderError.serviceUnavailable
     })
+    @State private var locationManager = LocationManager()
+    @State private var spotStore = SpotStore()
+    @State private var catchLog = CatchLog()
+    @State private var tideService = TideService()
+    @State private var spotCatalog = CuratedSpotCatalog()
+    @State private var osmClient = OpenStreetMapClient()
+    @State private var inaturalist = INaturalistClient()
+    @State private var alertSettings = AlertSettings()
+    @State private var regulationStore = RegulationStore()
 
     var body: some View {
-        if CommandLine.arguments.contains("guide") {
+        if CommandLine.arguments.contains("shell") {
+            MainTabView()
+                .environment(locationManager)
+                .environment(weatherStore)
+                .environment(spotStore)
+                .environment(catchLog)
+                .environment(regulationStore)
+                .environment(tideService)
+                .environment(spotCatalog)
+                .environment(osmClient)
+                .environment(inaturalist)
+                .environment(alertSettings)
+        } else if CommandLine.arguments.contains("guide") {
             NavigationStack { SpeciesGuideView() }
                 .environment(SpotStore())
         } else if CommandLine.arguments.contains("scout") {

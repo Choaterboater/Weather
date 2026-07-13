@@ -1,16 +1,69 @@
 import CoreLocation
 import SwiftUI
 
+enum AppDestination: String, CaseIterable, Hashable, Sendable {
+    case community
+    case map
+    case biteTime
+    case you
+
+    static let defaultDestination = AppDestination.biteTime
+
+    static func migrating(storedValue: String) -> AppDestination {
+        if let destination = AppDestination(rawValue: storedValue) {
+            return destination
+        }
+
+        return switch storedValue {
+        case "weather", "fishing": .biteTime
+        case "spots": .map
+        case "guide", "log", "scout": .you
+        default: defaultDestination
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .community: "Community"
+        case .map: "Map"
+        case .biteTime: "BiteTime"
+        case .you: "You"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .community: "person.3.fill"
+        case .map: "map.fill"
+        case .biteTime: "clock.badge.fill"
+        case .you: "person.crop.circle.fill"
+        }
+    }
+
+    var accessibilityIdentifier: String {
+        "tab.\(rawValue)"
+    }
+}
+
 struct MainTabView: View {
     @Environment(LocationManager.self) private var location
     @Environment(SpotStore.self) private var spots
     @Environment(WeatherStore.self) private var weather
     @Environment(TideService.self) private var tides
-    @AppStorage("selectedTab") private var selectedTab: String = "weather"
-    @State private var showSettings = false
 
-    private var locationTitle: String {
-        spots.selectedSpot?.name ?? location.descriptor.displayName
+    @AppStorage("selectedTab") private var storedSelection = AppDestination.defaultDestination.rawValue
+    @State private var showsLogCatch = false
+
+    private var selectedDestination: AppDestination {
+        AppDestination.migrating(storedValue: storedSelection)
+    }
+
+    private var destinationSelection: Binding<AppDestination> {
+        Binding {
+            selectedDestination
+        } set: { destination in
+            storedSelection = destination.rawValue
+        }
     }
 
     /// Pull-to-refresh must bypass the stores' caches — a location nudge alone
@@ -23,58 +76,91 @@ struct MainTabView: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            Tab("Weather", systemImage: "cloud.sun.fill", value: "weather") {
+        TabView(selection: destinationSelection) {
+            Tab(value: AppDestination.community) {
                 NavigationStack {
-                    WeatherDashboardView()
-                        .navigationTitle(locationTitle)
-                        .navigationBarTitleDisplayMode(.inline)
-                        .refreshable { await refresh() }
+                    CommunityPlaceholderView {
+                        storedSelection = AppDestination.map.rawValue
+                    }
+                    .navigationTitle(AppDestination.community.title)
+                    .navigationBarTitleDisplayMode(.large)
                 }
+            } label: {
+                destinationLabel(.community)
             }
-            Tab("Fishing", systemImage: "fish.fill", value: "fishing") {
-                NavigationStack {
-                    FishingView()
-                        .navigationTitle("Fishing")
-                        .navigationBarTitleDisplayMode(.inline)
-                        .refreshable { await refresh() }
-                        .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) {
-                                Button { showSettings = true } label: {
-                                    Image(systemName: "gearshape")
-                                }
-                                .accessibilityLabel("Settings")
-                            }
-                        }
-                        .sheet(isPresented: $showSettings) { SettingsView() }
-                }
-            }
-            Tab("Spots", systemImage: "mappin.and.ellipse", value: "spots") {
+
+            Tab(value: AppDestination.map) {
                 NavigationStack {
                     SpotsView()
-                        .navigationTitle("Spots")
+                        .navigationTitle(AppDestination.map.title)
                 }
+            } label: {
+                destinationLabel(.map)
             }
-            Tab("Guide", systemImage: "book.pages.fill", value: "guide") {
+
+            Tab(value: AppDestination.biteTime) {
                 NavigationStack {
-                    SpeciesGuideView()
-                        .navigationTitle("Species Guide")
+                    FishingView()
+                        .navigationTitle(AppDestination.biteTime.title)
                         .navigationBarTitleDisplayMode(.inline)
+                        .refreshable { await refresh() }
                 }
+            } label: {
+                destinationLabel(.biteTime)
             }
-            Tab("Log", systemImage: "book.closed.fill", value: "log") {
+
+            Tab(value: AppDestination.you) {
                 NavigationStack {
-                    CatchLogView()
-                        .navigationTitle("Catch Log")
+                    YouView()
+                        .navigationTitle(AppDestination.you.title)
+                        .navigationBarTitleDisplayMode(.large)
                 }
-            }
-            Tab("Scout", systemImage: "camera.viewfinder", value: "scout") {
-                NavigationStack {
-                    ScoutView()
-                        .navigationTitle("Scout the Water")
-                        .navigationBarTitleDisplayMode(.inline)
-                }
+            } label: {
+                destinationLabel(.you)
             }
         }
+        .overlay(alignment: .bottom) {
+            logCatchAction
+                .padding(.bottom, 20)
+                .zIndex(1)
+        }
+        .sheet(isPresented: $showsLogCatch) {
+            LogCatchView()
+        }
+        .onAppear(perform: migrateStoredSelection)
+    }
+
+    private func destinationLabel(_ destination: AppDestination) -> some View {
+        Label(destination.title, systemImage: destination.systemImage)
+            .accessibilityIdentifier(destination.accessibilityIdentifier)
+    }
+
+    private var logCatchAction: some View {
+        Button {
+            showsLogCatch = true
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: "plus")
+                    .font(.system(size: 21, weight: .bold, design: .rounded))
+                    .foregroundStyle(Ink.abyss)
+                    .frame(width: 54, height: 54)
+                    .glassEffect(.regular.tint(Ink.brass).interactive(), in: .circle)
+                Text("Log")
+                    .font(.system(.caption2, design: .rounded, weight: .semibold))
+                    .foregroundStyle(Ink.chart)
+            }
+            .frame(minWidth: 64, minHeight: 68)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Log Catch")
+        .accessibilityHint("Opens a form without leaving \(selectedDestination.title)")
+        .accessibilityIdentifier("action.logCatch")
+    }
+
+    private func migrateStoredSelection() {
+        let migrated = AppDestination.migrating(storedValue: storedSelection).rawValue
+        guard migrated != storedSelection else { return }
+        storedSelection = migrated
     }
 }

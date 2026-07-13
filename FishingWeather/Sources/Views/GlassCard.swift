@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// A reusable Liquid Glass container card. Wraps content in padding and applies
-/// the system glass effect with a rounded-rectangle shape.
+/// A calm content card. Liquid Glass is intentionally reserved for floating
+/// controls and selected chips rather than applied to every scrolling surface.
 struct GlassCard<Content: View>: View {
     @ViewBuilder var content: Content
 
@@ -9,39 +9,26 @@ struct GlassCard<Content: View>: View {
         content
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                LinearGradient(colors: [Ink.hull, Ink.abyss],
-                               startPoint: .top, endPoint: .bottom),
-                in: .rect(cornerRadius: 20)
-            )
+            .background(Ink.card.opacity(0.96), in: .rect(cornerRadius: 20))
             .overlay(
-                RoundedRectangle(cornerRadius: 20).stroke(Ink.hullLine, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(Ink.hullLine.opacity(0.8), lineWidth: 1)
             )
-            .scrollTransition { view, phase in
-                view
-                    .opacity(phase.isIdentity ? 1 : 0.5)
-                    .scaleEffect(phase.isIdentity ? 1 : 0.96)
-            }
+            .shadow(color: .black.opacity(0.12), radius: 14, y: 6)
     }
 }
 
-/// Wraps a screen's card stack in a GlassEffectContainer so sibling glass
-/// shapes blend/morph correctly and never sample each other. Glass cannot
-/// sample glass, so this must wrap SIBLING cards — it can't live inside
-/// GlassCard itself.
+/// Keeps legacy call sites consistently spaced. `mergeSpacing` remains source
+/// compatible but no longer merges card surfaces into a global glass layer.
 struct GlassCardStack<Content: View>: View {
     var spacing: CGFloat = 20
-    /// Distance at which sibling glass shapes start to visually merge.
-    /// Defaults to the layout spacing; pass something smaller when content
-    /// inside the stack packs glass shapes tighter than `spacing` (e.g. a
-    /// grid), or adjacent shapes weld together.
+    /// Retained for source compatibility with pre-shell call sites. Card
+    /// surfaces no longer merge, so this value has no visual effect.
     var mergeSpacing: CGFloat? = nil
     @ViewBuilder var content: Content
 
     var body: some View {
-        GlassEffectContainer(spacing: mergeSpacing ?? spacing) {
-            VStack(spacing: spacing) { content }
-        }
+        VStack(spacing: spacing) { content }
     }
 }
 
@@ -58,9 +45,7 @@ struct SectionHeader: View {
                 Image(systemName: systemImage)
             }
         }
-        .font(.system(size: 11, weight: .semibold, design: .monospaced))
-        .tracking(1.5)
-        .textCase(.uppercase)
+        .font(.system(.subheadline, design: .rounded, weight: .semibold))
         .foregroundStyle(Ink.chartDim)
         .padding(.horizontal, 4)
     }
