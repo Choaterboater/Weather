@@ -34,8 +34,6 @@
 	<string>Choose a catch photo for your private log or a water photo for on-device fishing guidance.</string>
 	<key>TackleWarehouseAffiliateTemplate</key>
 	<string>$(TACKLEWAREHOUSE_AFFILIATE_TEMPLATE)</string>
-	<key>YouTubeAPIKey</key>
-	<string>$(YOUTUBE_API_KEY)</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
