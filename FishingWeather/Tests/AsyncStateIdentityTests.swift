@@ -370,6 +370,336 @@ struct AsyncStateIdentityTests {
         #expect(!engine.isAnswering)
     }
 
+    @MainActor
+    @Test("Same-key best-bait requests coalesce into one model call")
+    func sameKeyBaitRequestsCoalesce() async throws {
+        let started = AsyncStartSignal()
+        let calls = AsyncCounter()
+        let context = try #require(Self.baitContext(locationOffset: 0))
+        let engine = BaitEngine(
+            modelAvailability: { .available },
+            recommendationWorker: { _ in
+                await calls.increment()
+                await started.markStarted()
+                try await Task.sleep(for: .milliseconds(80))
+                return Self.baitRecommendation("Coalesced bait")
+            }
+        )
+
+        let first = Task {
+            await engine.generateBestBait(for: .bass, context: context)
+        }
+        await started.wait()
+        let second = Task {
+            await engine.generateBestBait(for: .bass, context: context)
+        }
+        await first.value
+        await second.value
+
+        #expect(await calls.value == 1)
+        #expect(engine.result?.recommendation.topBait == "Coalesced bait")
+    }
+
+    @MainActor
+    @Test("A stale best-bait success cannot replace a newer context")
+    func staleBaitSuccessDoesNotCommit() async throws {
+        let oldStarted = AsyncStartSignal()
+        let oldContext = try #require(Self.baitContext(locationOffset: 0))
+        let newContext = try #require(Self.baitContext(locationOffset: 1))
+        let engine = BaitEngine(
+            modelAvailability: { .available },
+            recommendationWorker: { context in
+                if context.key == oldContext.key {
+                    await oldStarted.markStarted()
+                    try? await Task.sleep(for: .milliseconds(100))
+                    return Self.baitRecommendation("Old bait")
+                }
+                return Self.baitRecommendation("New bait")
+            }
+        )
+
+        let old = Task {
+            await engine.generateBestBait(for: .bass, context: oldContext)
+        }
+        await oldStarted.wait()
+        await engine.generateBestBait(for: .bass, context: newContext)
+        await old.value
+
+        #expect(engine.result?.key == newContext.key)
+        #expect(engine.result?.recommendation.topBait == "New bait")
+        #expect(engine.result?.sourceLabel == "On-device Apple Intelligence")
+    }
+
+    @MainActor
+    @Test("A stale model failure fallback cannot replace a newer success")
+    func staleBaitFailureFallbackDoesNotCommit() async throws {
+        let oldStarted = AsyncStartSignal()
+        let oldContext = try #require(Self.baitContext(locationOffset: 0))
+        let newContext = try #require(Self.baitContext(locationOffset: 1))
+        let engine = BaitEngine(
+            modelAvailability: { .available },
+            recommendationWorker: { context in
+                if context.key == oldContext.key {
+                    await oldStarted.markStarted()
+                    try? await Task.sleep(for: .milliseconds(100))
+                    throw AsyncBaitError.failed
+                }
+                return Self.baitRecommendation("New bait")
+            }
+        )
+
+        let old = Task {
+            await engine.generateBestBait(for: .bass, context: oldContext)
+        }
+        await oldStarted.wait()
+        await engine.generateBestBait(for: .bass, context: newContext)
+        await old.value
+
+        #expect(engine.result?.key == newContext.key)
+        #expect(engine.result?.recommendation.topBait == "New bait")
+        #expect(engine.result?.sourceLabel == "On-device Apple Intelligence")
+    }
+
+    @MainActor
+    @Test("A new unavailable attempt wins over stale model work")
+    func unavailableBaitAttemptInvalidatesInflightWork() async throws {
+        let oldStarted = AsyncStartSignal()
+        let oldContext = try #require(Self.baitContext(locationOffset: 0))
+        let newContext = try #require(Self.baitContext(locationOffset: 1))
+        let availability = BaitAvailabilityBox(.available)
+        let engine = BaitEngine(
+            modelAvailability: { availability.value },
+            recommendationWorker: { context in
+                if context.key == oldContext.key {
+                    await oldStarted.markStarted()
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+                return Self.baitRecommendation("Old bait")
+            }
+        )
+
+        let old = Task {
+            await engine.generateBestBait(for: .bass, context: oldContext)
+        }
+        await oldStarted.wait()
+        availability.value = .unavailable("Disabled")
+        await engine.generateBestBait(for: .bass, context: newContext)
+        await old.value
+
+        #expect(engine.result?.key == newContext.key)
+        #expect(
+            engine.result?.sourceLabel
+                == "General species guidance — not adjusted for today"
+        )
+        #expect(engine.result?.recommendation.topBait != "Old bait")
+    }
+
+    @MainActor
+    @Test("Same-key unavailability invalidates in-flight model work")
+    func sameKeyUnavailabilityInvalidatesInflightWork() async throws {
+        let oldStarted = AsyncStartSignal()
+        let context = try #require(Self.baitContext(locationOffset: 0))
+        let availability = BaitAvailabilityBox(.available)
+        let engine = BaitEngine(
+            modelAvailability: { availability.value },
+            recommendationWorker: { _ in
+                await oldStarted.markStarted()
+                try? await Task.sleep(for: .milliseconds(100))
+                return Self.baitRecommendation("Old bait")
+            }
+        )
+
+        let old = Task {
+            await engine.generateBestBait(for: .bass, context: context)
+        }
+        await oldStarted.wait()
+        availability.value = .unavailable("Disabled")
+        await engine.generateBestBait(for: .bass, context: context)
+        await old.value
+
+        #expect(engine.result?.key == context.key)
+        #expect(
+            engine.result?.sourceLabel
+                == "General species guidance — not adjusted for today"
+        )
+        #expect(engine.result?.recommendation.topBait != "Old bait")
+    }
+
+    @MainActor
+    @Test("All-species attempt invalidates in-flight best-bait work")
+    func allSpeciesInvalidatesInflightBait() async throws {
+        let started = AsyncStartSignal()
+        let context = try #require(Self.baitContext(locationOffset: 0))
+        let engine = BaitEngine(
+            modelAvailability: { .available },
+            recommendationWorker: { _ in
+                await started.markStarted()
+                try? await Task.sleep(for: .milliseconds(100))
+                return Self.baitRecommendation("Old bait")
+            }
+        )
+
+        let old = Task {
+            await engine.generateBestBait(for: .bass, context: context)
+        }
+        await started.wait()
+        await engine.generateBestBait(for: .all, context: nil)
+        await old.value
+
+        #expect(engine.status == .chooseSpecies)
+        #expect(engine.result == nil)
+        #expect(engine.answers.isEmpty)
+        #expect(!engine.isAnswering)
+    }
+
+    @MainActor
+    @Test("A new best-bait context drops an old Q and A response")
+    func newBaitContextDropsInflightAnswer() async throws {
+        let answerStarted = AsyncStartSignal()
+        let oldContext = try #require(Self.baitContext(locationOffset: 0))
+        let newContext = try #require(Self.baitContext(locationOffset: 1))
+        let engine = BaitEngine(
+            modelAvailability: { .available },
+            recommendationWorker: { context in
+                Self.baitRecommendation(
+                    context.key == oldContext.key ? "Old bait" : "New bait"
+                )
+            },
+            answerWorker: { _ in
+                await answerStarted.markStarted()
+                try? await Task.sleep(for: .milliseconds(100))
+                return "Stale answer"
+            }
+        )
+
+        await engine.generateBestBait(for: .bass, context: oldContext)
+        let answer = Task { await engine.ask("old question") }
+        await answerStarted.wait()
+        await engine.generateBestBait(
+            for: .bass,
+            context: newContext,
+            force: true
+        )
+        await answer.value
+
+        #expect(engine.result?.key == newContext.key)
+        #expect(engine.answers.isEmpty)
+        #expect(!engine.isAnswering)
+    }
+
+    @MainActor
+    @Test("Reset clears the complete best-bait session state")
+    func resetClearsBestBaitState() async throws {
+        let context = try #require(Self.baitContext(locationOffset: 0))
+        let engine = BaitEngine(
+            modelAvailability: { .available },
+            recommendationWorker: { _ in Self.baitRecommendation("Bait") },
+            answerWorker: { _ in "Answer" }
+        )
+
+        await engine.generateBestBait(for: .bass, context: context)
+        await engine.ask("Question")
+        engine.reset()
+
+        #expect(engine.status == .idle)
+        #expect(engine.result == nil)
+        #expect(engine.report == nil)
+        #expect(engine.adviceError == nil)
+        #expect(!engine.isGeneratingAdvice)
+        #expect(engine.answers.isEmpty)
+        #expect(!engine.isAnswering)
+        #expect(!engine.canAnswer)
+    }
+
+    @MainActor
+    @Test("Advice for an old context cannot return after a new bait pick")
+    func staleMoreAdviceDoesNotCommit() async throws {
+        let adviceStarted = AsyncStartSignal()
+        let oldContext = try #require(Self.baitContext(locationOffset: 0))
+        let newContext = try #require(Self.baitContext(locationOffset: 1))
+        let engine = BaitEngine(
+            modelAvailability: { .available },
+            recommendationWorker: { context in
+                Self.baitRecommendation(
+                    context.key == oldContext.key ? "Old bait" : "New bait"
+                )
+            },
+            adviceWorker: { _, _ in
+                await adviceStarted.markStarted()
+                try? await Task.sleep(for: .milliseconds(100))
+                return "Stale report"
+            }
+        )
+
+        await engine.generateBestBait(for: .bass, context: oldContext)
+        let oldAdvice = Task {
+            await engine.generateMoreAdvice(for: oldContext)
+        }
+        await adviceStarted.wait()
+        await engine.generateBestBait(
+            for: .bass,
+            context: newContext,
+            force: true
+        )
+        await oldAdvice.value
+
+        #expect(engine.result?.key == newContext.key)
+        #expect(engine.report == nil)
+    }
+
+    private static func baitContext(
+        locationOffset: Double
+    ) -> BestBaitContext? {
+        let date = Date(timeIntervalSince1970: 3_600)
+        let point = ForecastPoint(
+            weather: HourlyWeatherPoint(
+                date: date,
+                temperatureCelsius: 24,
+                apparentTemperatureCelsius: 25,
+                dewPointCelsius: 18,
+                humidityFraction: 0.7,
+                pressureHPa: 1_012,
+                visibilityMeters: 16_000,
+                uvIndex: 4,
+                cloudCoverFraction: 0.2,
+                precipitationChance: 0.1,
+                precipitationMM: 0,
+                conditionText: "Clear",
+                symbolName: "sun.max",
+                wind: WindSnapshot(
+                    directionDegrees: 180,
+                    speedMetersPerSecond: 4,
+                    gustMetersPerSecond: nil
+                )
+            ),
+            biteScore: 70,
+            tideHeightFeet: nil,
+            tidePhase: nil,
+            solunarWindow: nil
+        )
+        return BestBaitContext(
+            species: .bass,
+            coordinate: CLLocationCoordinate2D(
+                latitude: 30 + locationOffset,
+                longitude: -86
+            ),
+            weatherFetchedAt: Date(timeIntervalSince1970: 100),
+            tideFingerprint: "none",
+            forecastPoint: point
+        )
+    }
+
+    private static func baitRecommendation(_ name: String) -> BaitRecommendation {
+        BaitRecommendation(
+            topBait: name,
+            color: "Natural",
+            technique: "Slow retrieve",
+            depth: "4 ft",
+            confidence: 80,
+            whyReason: "Selected-hour conditions support this pick."
+        )
+    }
+
     private nonisolated static func snapshot(
         latitude: Double,
         longitude: Double,
@@ -459,5 +789,18 @@ private actor WeatherSourceSequence {
 
     func next() -> WeatherSource {
         values.removeFirst()
+    }
+}
+
+private enum AsyncBaitError: Error {
+    case failed
+}
+
+@MainActor
+private final class BaitAvailabilityBox {
+    var value: BaitEngine.ModelAvailability
+
+    init(_ value: BaitEngine.ModelAvailability) {
+        self.value = value
     }
 }

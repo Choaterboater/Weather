@@ -10,6 +10,7 @@ struct FishingView: View {
     @Environment(CatchLog.self) private var catchLog
     @AppStorage("selectedSpecies") private var species: Species = .all
     @State private var engine = BaitEngine()
+    @State private var selectedForecastDate: Date?
     @State private var showsPatterns = false
 
     /// Weights tuned to the angler's catch history for the active species —
@@ -62,13 +63,12 @@ struct FishingView: View {
                             onTapTuned: { showsPatterns = true }
                         )
                     }
-                    SpeciesFocusCard(species: species)
-                    BaitEngineView(
-                        conditions: conditions,
+                    BestBaitTodayView(
+                        context: bestBaitContext,
                         species: species,
-                        tideEvents: showsTides ? tides.allEvents : [],
                         engine: engine
                     )
+                    SpeciesFocusCard(species: species)
                     BiteWindowsCard(conditions: conditions)
                     if showsTides {
                         TideCard(
@@ -130,8 +130,6 @@ struct FishingView: View {
                 await tides.load(near: coordinate)
             }
         }
-        .onChange(of: species) { engine.reset() }
-        .onChange(of: activeLocationKey) { engine.reset() }
         .sensoryFeedback(.selection, trigger: species)
     }
 
@@ -174,11 +172,65 @@ struct FishingView: View {
 
     /// Only present weather that belongs to the active location.
     private var liveConditions: FishingConditions? {
+        guard let snapshot = matchingSnapshot else { return nil }
+        return FishingConditions.make(snapshot: snapshot)
+    }
+
+    /// The provider-neutral weather snapshot owned by the active location.
+    private var matchingSnapshot: WeatherSnapshot? {
         guard let activeLocation,
               weather.hasData(for: activeLocation),
-              let snapshot = weather.snapshot
-        else { return nil }
-        return FishingConditions.make(snapshot: snapshot)
+              let snapshot = weather.snapshot else { return nil }
+        return snapshot
+    }
+
+    /// Task 11 will bind this date to Timeline and Pro Forecast. Until then,
+    /// the provider's nearest explicit hour is the selected forecast point.
+    private var selectedForecastPoint: ForecastPoint? {
+        guard let snapshot = matchingSnapshot else { return nil }
+        let points = ForecastSeriesBuilder.build(
+            weather: snapshot,
+            tideSamples: committedTideSamples(for: snapshot),
+            species: species,
+            weights: personalWeights,
+            now: snapshot.current.date
+        )
+        return ForecastSelection.nearest(
+            to: selectedForecastDate ?? snapshot.current.date,
+            in: points
+        )
+    }
+
+    private var bestBaitContext: BestBaitContext? {
+        guard let activeLocation,
+              let snapshot = matchingSnapshot,
+              let selectedForecastPoint else { return nil }
+        let committed = hasCommittedTides(for: snapshot)
+        let fingerprint = BaitContextKey.tideFingerprint(
+            events: committed ? tides.allEvents : [],
+            samples: committed ? tides.samples : []
+        )
+        return BestBaitContext(
+            species: species,
+            coordinate: activeLocation.coordinate,
+            weatherFetchedAt: snapshot.provenance.fetchedAt,
+            tideFingerprint: fingerprint,
+            forecastPoint: selectedForecastPoint
+        )
+    }
+
+    private func hasCommittedTides(for snapshot: WeatherSnapshot) -> Bool {
+        guard let activeLocation else { return false }
+        return tides.hasData(
+            for: activeLocation,
+            on: snapshot.current.date
+        )
+    }
+
+    private func committedTideSamples(
+        for snapshot: WeatherSnapshot
+    ) -> [TideSample] {
+        hasCommittedTides(for: snapshot) ? tides.samples : []
     }
 
     /// Re-keys the tide task whenever the active spot or GPS coordinate changes.
@@ -188,10 +240,7 @@ struct FishingView: View {
     }
 
     private var hourlySamples: [HourSample] {
-        guard let activeLocation,
-              weather.hasData(for: activeLocation),
-              let snapshot = weather.snapshot
-        else { return [] }
+        guard let snapshot = matchingSnapshot else { return [] }
         return snapshot.hourly.samples()
     }
 }
