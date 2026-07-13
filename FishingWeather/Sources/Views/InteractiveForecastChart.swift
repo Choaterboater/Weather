@@ -3,6 +3,54 @@ import Charts
 import Foundation
 import SwiftUI
 
+struct ForecastChartValue: Identifiable, Equatable, Sendable {
+    enum Series: String, CaseIterable, Identifiable, Sendable {
+        case primary
+        case gust
+
+        var id: Self { self }
+
+        func label(for metric: ForecastMetric) -> String {
+            switch self {
+            case .primary:
+                metric == .wind ? "Sustained wind" : metric.title
+            case .gust:
+                "Wind gust"
+            }
+        }
+    }
+
+    var id: Series { series }
+    let series: Series
+    let value: Double
+}
+
+/// Pure presentation contract shared by the view and focused tests. Selected
+/// context remains available even when the chosen metric has no plottable data.
+struct ForecastChartContent {
+    let selectedPoint: ForecastPoint?
+    let metricValues: [ForecastChartValue]
+
+    var showsPinnedDetail: Bool { selectedPoint != nil }
+
+    static func resolve(
+        points: [ForecastPoint],
+        selectedDate: Date?,
+        metric: ForecastMetric,
+        locale: Locale
+    ) -> ForecastChartContent {
+        let selectedPoint = selectedDate.flatMap {
+            ForecastSelection.nearest(to: $0, in: points)
+        } ?? points.first
+        return ForecastChartContent(
+            selectedPoint: selectedPoint,
+            metricValues: points.flatMap {
+                metric.chartValues(for: $0, locale: locale)
+            }
+        )
+    }
+}
+
 /// A shared, scrubbable forecast timeline. Raw drag positions are kept local;
 /// only snapped provider hours are written to the cross-screen selection.
 struct InteractiveForecastChart: View {
@@ -30,13 +78,21 @@ struct InteractiveForecastChart: View {
         _scrollDate = State(initialValue: start)
     }
 
+    private var content: ForecastChartContent {
+        ForecastChartContent.resolve(
+            points: points,
+            selectedDate: selectedDate,
+            metric: metric,
+            locale: locale
+        )
+    }
+
     private var selectedPoint: ForecastPoint? {
-        selectedDate.flatMap { ForecastSelection.nearest(to: $0, in: points) }
-            ?? points.first
+        content.selectedPoint
     }
 
     private var plottableValues: [Double] {
-        points.compactMap { metric.plotValue(for: $0, locale: locale) }
+        content.metricValues.map(\.value)
     }
 
     private var yDomain: ClosedRange<Double> {
@@ -65,8 +121,9 @@ struct InteractiveForecastChart: View {
                 .frame(maxWidth: .infinity, minHeight: 220)
             } else {
                 chart
-                detailStrip
             }
+
+            detailStrip
         }
         .onChange(of: rawSelection) { _, newValue in
             let snapped = ForecastSelection.snappedDate(
@@ -131,13 +188,23 @@ struct InteractiveForecastChart: View {
                     .foregroundStyle(Ink.chartDim)
             }
 
+            if metric == .wind {
+                Text("Solid sustained · dashed gust")
+                    .font(.system(.caption2, design: .rounded, weight: .medium))
+                    .foregroundStyle(Ink.chartDim)
+                    .accessibilityLabel("Solid line sustained wind, dashed line wind gust")
+            }
+
             Chart {
                 ForEach(points) { point in
-                    if let value = metric.plotValue(for: point, locale: locale) {
+                    if let primary = metric.chartValues(
+                        for: point,
+                        locale: locale
+                    ).first(where: { $0.series == .primary }) {
                         AreaMark(
                             x: .value("Time", point.date),
                             yStart: .value("Baseline", yDomain.lowerBound),
-                            yEnd: .value(metric.title, value)
+                            yEnd: .value(metric.title, primary.value)
                         )
                         .interpolationMethod(.catmullRom)
                         .foregroundStyle(
@@ -148,38 +215,57 @@ struct InteractiveForecastChart: View {
                             )
                         )
                         .accessibilityHidden(true)
+                    }
 
+                    ForEach(
+                        metric.chartValues(for: point, locale: locale)
+                    ) { chartValue in
                         LineMark(
                             x: .value("Time", point.date),
-                            y: .value(metric.title, value)
+                            y: .value(chartValue.series.label(for: metric), chartValue.value),
+                            series: .value("Series", chartValue.series.rawValue)
                         )
                         .interpolationMethod(.catmullRom)
-                        .lineStyle(.init(lineWidth: 3, lineCap: .round))
-                        .foregroundStyle(metric.tint)
+                        .lineStyle(
+                            chartValue.series == .gust
+                                ? StrokeStyle(lineWidth: 2, dash: [6, 4])
+                                : StrokeStyle(lineWidth: 3, lineCap: .round)
+                        )
+                        .foregroundStyle(
+                            chartValue.series == .gust ? Ink.chartDim : metric.tint
+                        )
                         .accessibilityLabel(
-                            formattedDateTime(point.date)
+                            "\(chartValue.series.label(for: metric)), "
+                                + formattedDateTime(point.date)
                         )
                         .accessibilityValue(
-                            metric.formattedValue(for: point, locale: locale)
-                                ?? "Unavailable"
+                            metric.formattedChartValue(
+                                chartValue.value,
+                                locale: locale
+                            )
                         )
                     }
                 }
 
-                if let selectedPoint,
-                   let value = metric.plotValue(for: selectedPoint, locale: locale) {
+                if let selectedPoint {
                     RuleMark(x: .value("Selected hour", selectedPoint.date))
                         .lineStyle(.init(lineWidth: 1.5, dash: [4, 3]))
                         .foregroundStyle(Ink.chart.opacity(0.8))
                         .accessibilityHidden(true)
 
-                    PointMark(
-                        x: .value("Selected hour", selectedPoint.date),
-                        y: .value(metric.title, value)
-                    )
-                    .symbolSize(90)
-                    .foregroundStyle(Ink.chart)
-                    .accessibilityHidden(true)
+                    ForEach(
+                        metric.chartValues(for: selectedPoint, locale: locale)
+                    ) { chartValue in
+                        PointMark(
+                            x: .value("Selected hour", selectedPoint.date),
+                            y: .value(chartValue.series.label(for: metric), chartValue.value)
+                        )
+                        .symbolSize(chartValue.series == .gust ? 70 : 90)
+                        .foregroundStyle(
+                            chartValue.series == .gust ? Ink.chartDim : Ink.chart
+                        )
+                        .accessibilityHidden(true)
+                    }
                 }
             }
             .chartYScale(domain: yDomain)
@@ -428,11 +514,13 @@ private struct ForecastChartAccessibilityDescriptor: AXChartDescriptorRepresenta
     let timeZone: TimeZone
 
     func makeChartDescriptor() -> AXChartDescriptor {
-        let values = points.compactMap { point -> (ForecastPoint, Double)? in
-            metric.plotValue(for: point, locale: locale).map { (point, $0) }
+        let values = points.flatMap { point in
+            metric.chartValues(for: point, locale: locale).map {
+                (point: point, chartValue: $0)
+            }
         }
-        let first = values.first?.0.date.timeIntervalSince1970 ?? 0
-        let last = values.last?.0.date.timeIntervalSince1970 ?? first
+        let first = values.first?.point.date.timeIntervalSince1970 ?? 0
+        let last = values.last?.point.date.timeIntervalSince1970 ?? first
         let xRange = first == last
             ? (first - 1_800)...(last + 1_800)
             : first...last
@@ -457,29 +545,35 @@ private struct ForecastChartAccessibilityDescriptor: AXChartDescriptorRepresenta
                 metric.accessibilityAxisLabel(value, locale: locale)
             }
         )
-        let dataPoints = values.map { point, value in
-            AXDataPoint(
-                x: point.date.timeIntervalSince1970,
-                y: value,
-                label: ForecastDateFormatting.string(
-                    from: point.date,
-                    presentation: .dateTime,
-                    timeZone: timeZone,
-                    locale: locale
+        let series: [AXDataSeriesDescriptor] =
+            ForecastChartValue.Series.allCases.compactMap {
+                series -> AXDataSeriesDescriptor? in
+                let dataPoints = values.compactMap { item -> AXDataPoint? in
+                    guard item.chartValue.series == series else { return nil }
+                    return AXDataPoint(
+                        x: item.point.date.timeIntervalSince1970,
+                        y: item.chartValue.value,
+                        label: ForecastDateFormatting.string(
+                            from: item.point.date,
+                            presentation: .dateTime,
+                            timeZone: timeZone,
+                            locale: locale
+                        )
+                    )
+                }
+                guard !dataPoints.isEmpty else { return nil }
+                return AXDataSeriesDescriptor(
+                    name: series.label(for: metric),
+                    isContinuous: true,
+                    dataPoints: dataPoints
                 )
-            )
-        }
-        let series = AXDataSeriesDescriptor(
-            name: metric.title,
-            isContinuous: true,
-            dataPoints: dataPoints
-        )
+            }
         return AXChartDescriptor(
             title: "Hourly \(metric.title)",
             summary: "Hourly \(metric.title.lowercased()) forecast with \(values.count) time and value pairs.",
             xAxis: xAxis,
             yAxis: yAxis,
-            series: [series]
+            series: series
         )
     }
 }
@@ -519,7 +613,7 @@ enum ForecastDateFormatting {
     }
 }
 
-private extension ForecastMetric {
+extension ForecastMetric {
     var title: String {
         switch self {
         case .temperature: "Temperature"
@@ -560,7 +654,25 @@ private extension ForecastMetric {
         }
     }
 
-    func plotValue(for point: ForecastPoint, locale: Locale) -> Double? {
+    func chartValues(
+        for point: ForecastPoint,
+        locale: Locale
+    ) -> [ForecastChartValue] {
+        guard let primary = plotValue(for: point, locale: locale) else {
+            return []
+        }
+        var values = [ForecastChartValue(series: .primary, value: primary)]
+        if self == .wind,
+           let gust = point.weather.wind.gustMetersPerSecond {
+            let gustMPH = WeatherUnits.milesPerHour(metersPerSecond: gust)
+            if gustMPH.isFinite {
+                values.append(ForecastChartValue(series: .gust, value: gustMPH))
+            }
+        }
+        return values
+    }
+
+    private func plotValue(for point: ForecastPoint, locale: Locale) -> Double? {
         switch self {
         case .temperature:
             let unit = preferredTemperatureUnit(locale: locale)
@@ -598,7 +710,16 @@ private extension ForecastMetric {
     }
 
     func formattedValue(for point: ForecastPoint, locale: Locale) -> String? {
-        guard let value = plotValue(for: point, locale: locale) else { return nil }
+        let values = chartValues(for: point, locale: locale)
+        guard let value = values.first?.value else { return nil }
+        if self == .wind,
+           let gust = values.first(where: { $0.series == .gust })?.value {
+            return "\(Int(value.rounded())) mph · gust \(Int(gust.rounded())) mph"
+        }
+        return formattedChartValue(value, locale: locale)
+    }
+
+    func formattedChartValue(_ value: Double, locale: Locale) -> String {
         switch self {
         case .temperature:
             return "\(Int(value.rounded()))\(unitLabel(locale: locale))"

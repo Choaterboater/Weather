@@ -73,6 +73,36 @@ struct ForecastSelectionTests {
         #expect(value == nil)
     }
 
+    @Test func windChartIncludesSustainedAndGustSeries() {
+        let point = ForecastPoint.fixture(
+            windSpeedMetersPerSecond: 4,
+            windGustMetersPerSecond: 8
+        )
+
+        let values = ForecastMetric.wind.chartValues(
+            for: point,
+            locale: Locale(identifier: "en_US")
+        )
+
+        #expect(values.map(\.series) == [.primary, .gust])
+        #expect(values[1].value > values[0].value)
+    }
+
+    @Test func unavailableMetricKeepsPinnedDetailContract() {
+        let point = ForecastPoint.fixture(pressureHPa: nil)
+
+        let content = ForecastChartContent.resolve(
+            points: [point],
+            selectedDate: point.date,
+            metric: .pressure,
+            locale: Locale(identifier: "en_US")
+        )
+
+        #expect(content.metricValues.isEmpty)
+        #expect(content.selectedPoint == point)
+        #expect(content.showsPinnedDetail)
+    }
+
     @Test func builderUsesFutureProviderHoursWithoutMutatingSnapshot() throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let hours = (-2..<52).map {
@@ -151,6 +181,107 @@ struct ForecastSelectionTests {
         #expect(point.solunarWindow?.period == .minor)
         #expect(point.solunarWindow?.cause == "Moonrise")
         #expect(point.biteScore != nil)
+    }
+
+    @Test func builderKeepsPriorDayWindowActiveAcrossMidnight() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .gmt
+        let previousDay = try #require(calendar.date(
+            from: DateComponents(year: 2030, month: 1, day: 1, hour: 12)
+        ))
+        let peak = try #require(calendar.date(
+            from: DateComponents(year: 2030, month: 1, day: 1, hour: 23, minute: 45)
+        ))
+        let selectedHour = try #require(calendar.date(
+            from: DateComponents(year: 2030, month: 1, day: 2, hour: 0)
+        ))
+        let snapshot = WeatherSnapshot.fixture(
+            now: selectedHour,
+            hourly: [.fixture(date: selectedHour)],
+            astronomy: .empty,
+            daily: [
+                .fixture(
+                    date: previousDay,
+                    astronomy: AstronomySnapshot(
+                        sunrise: nil,
+                        sunset: nil,
+                        moonrise: peak,
+                        moonset: nil,
+                        moonTransit: nil,
+                        moonPhaseFraction: nil
+                    )
+                ),
+                .fixture(date: selectedHour, astronomy: .empty),
+            ],
+            timeZoneIdentifier: "UTC"
+        )
+
+        let point = try #require(ForecastSeriesBuilder.build(
+            weather: snapshot,
+            tideSamples: [],
+            species: .bass,
+            now: selectedHour
+        ).first)
+
+        #expect(point.solunarWindow?.peak == peak)
+        #expect(point.solunarWindow?.cause == "Moonrise")
+    }
+
+    @Test func nextDayWindowChangesLateDayScore() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .gmt
+        let selectedHour = try #require(calendar.date(
+            from: DateComponents(year: 2030, month: 1, day: 1, hour: 23, minute: 15)
+        ))
+        let nextDay = try #require(calendar.date(
+            from: DateComponents(year: 2030, month: 1, day: 2, hour: 12)
+        ))
+        let nextPeak = try #require(calendar.date(
+            from: DateComponents(year: 2030, month: 1, day: 2, hour: 0, minute: 15)
+        ))
+        let nextAstronomy = AstronomySnapshot(
+            sunrise: nil,
+            sunset: nil,
+            moonrise: nextPeak,
+            moonset: nil,
+            moonTransit: nil,
+            moonPhaseFraction: nil
+        )
+        let withUpcoming = WeatherSnapshot.fixture(
+            now: selectedHour,
+            hourly: [.fixture(date: selectedHour)],
+            astronomy: .empty,
+            daily: [
+                .fixture(date: selectedHour, astronomy: .empty),
+                .fixture(date: nextDay, astronomy: nextAstronomy),
+            ],
+            timeZoneIdentifier: "UTC"
+        )
+        let withoutUpcoming = WeatherSnapshot.fixture(
+            now: selectedHour,
+            hourly: [.fixture(date: selectedHour)],
+            astronomy: .empty,
+            daily: [
+                .fixture(date: selectedHour, astronomy: .empty),
+                .fixture(date: nextDay, astronomy: .empty),
+            ],
+            timeZoneIdentifier: "UTC"
+        )
+
+        let withPoint = try #require(ForecastSeriesBuilder.build(
+            weather: withUpcoming,
+            tideSamples: [],
+            species: .bass,
+            now: selectedHour
+        ).first)
+        let withoutPoint = try #require(ForecastSeriesBuilder.build(
+            weather: withoutUpcoming,
+            tideSamples: [],
+            species: .bass,
+            now: selectedHour
+        ).first)
+
+        #expect(withPoint.biteScore != withoutPoint.biteScore)
     }
 
     @Test func builderUsesAstronomyForEachForecastDay() throws {
@@ -344,6 +475,7 @@ private extension ForecastPoint {
         visibilityMeters: Double? = 16_000,
         precipitationChance: Double? = 0,
         windSpeedMetersPerSecond: Double = 3,
+        windGustMetersPerSecond: Double? = nil,
         biteScore: Int? = 50,
         tideHeightFeet: Double? = nil,
         tidePhase: String? = nil,
@@ -362,7 +494,8 @@ private extension ForecastPoint {
                 pressureHPa: pressureHPa,
                 visibilityMeters: visibilityMeters,
                 precipitationChance: precipitationChance,
-                windSpeedMetersPerSecond: windSpeedMetersPerSecond
+                windSpeedMetersPerSecond: windSpeedMetersPerSecond,
+                windGustMetersPerSecond: windGustMetersPerSecond
             ),
             biteScore: biteScore,
             tideHeightFeet: tideHeightFeet,
@@ -385,7 +518,8 @@ private extension HourlyWeatherPoint {
         pressureHPa: Double? = 1_013,
         visibilityMeters: Double? = 16_000,
         precipitationChance: Double? = 0,
-        windSpeedMetersPerSecond: Double = 3
+        windSpeedMetersPerSecond: Double = 3,
+        windGustMetersPerSecond: Double? = nil
     ) -> HourlyWeatherPoint {
         HourlyWeatherPoint(
             date: date,
@@ -404,7 +538,7 @@ private extension HourlyWeatherPoint {
             wind: WindSnapshot(
                 directionDegrees: 180,
                 speedMetersPerSecond: windSpeedMetersPerSecond,
-                gustMetersPerSecond: nil
+                gustMetersPerSecond: windGustMetersPerSecond
             )
         )
     }

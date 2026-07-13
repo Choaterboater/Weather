@@ -26,7 +26,11 @@ struct HourlyForecastView: View {
 
     /// Compatibility initializer for the existing Weather dashboard. It still
     /// creates provider-neutral forecast points and owns a real local binding.
-    init(hourly: [HourlyWeatherPoint], now: Date = .now) {
+    init(
+        hourly: [HourlyWeatherPoint],
+        now: Date = .now,
+        timeZone: TimeZone = .current
+    ) {
         var dates = Set<Date>()
         points = hourly
             .filter { $0.date >= now }
@@ -43,7 +47,7 @@ struct HourlyForecastView: View {
                 )
             }
         sharedSelectedDate = nil
-        timeZone = .current
+        self.timeZone = timeZone
         _internalSelectedDate = State(initialValue: points.first?.date)
         _cellScrollDate = State(initialValue: points.first?.date)
     }
