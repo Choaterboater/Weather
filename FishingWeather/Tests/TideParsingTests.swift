@@ -176,6 +176,116 @@ struct TideParsingTests {
         ))
     }
 
+    @Test("Incomplete successful hourly responses are retried for the same day")
+    @MainActor
+    func incompleteSuccessfulResponseIsNotCached() async throws {
+        let date = try #require(Self.gmtCalendar.date(
+            from: DateComponents(year: 2030, month: 7, day: 14, hour: 12)
+        ))
+        let location = CLLocation(latitude: 27.7634, longitude: -82.6403)
+        let station = TideStation(
+            id: "8726520",
+            name: "St. Petersburg, Tampa Bay",
+            latitude: location.coordinate.latitude,
+            longitude: location.coordinate.longitude
+        )
+        let recorder = TidePredictionRecorder(
+            highLow: [TidePoint(time: date, heightFeet: 3.2, kind: .high)],
+            hourly: [TidePoint(time: date, heightFeet: 1.4, kind: nil)]
+        )
+        let service = TideService(
+            stationLoader: { [station] },
+            predictionLoader: { stationID, requestRange, interval in
+                await recorder.response(
+                    stationID: stationID,
+                    requestRange: requestRange,
+                    interval: interval
+                )
+            }
+        )
+
+        await service.load(
+            near: location,
+            on: date,
+            calendar: Self.gmtCalendar
+        )
+
+        #expect(service.events.isEmpty)
+        #expect(service.allEvents.isEmpty)
+        #expect(service.samples.isEmpty)
+        #expect(service.allSamples.isEmpty)
+        #expect(service.lastError == "Tide data was incomplete. Please try again.")
+        #expect(!service.hasData(
+            for: location,
+            on: date,
+            calendar: Self.gmtCalendar
+        ))
+
+        await service.load(
+            near: location,
+            on: date,
+            calendar: Self.gmtCalendar
+        )
+
+        let requestCount = await recorder.requestCount
+        #expect(requestCount == 4)
+    }
+
+    @Test("A complete hourly day is cached without requiring high-low events")
+    @MainActor
+    func completeHourlyResponseIsCachedWithoutEvents() async throws {
+        let dayStart = try #require(Self.gmtCalendar.date(
+            from: DateComponents(year: 2030, month: 7, day: 14)
+        ))
+        let location = CLLocation(latitude: 27.7634, longitude: -82.6403)
+        let station = TideStation(
+            id: "8726520",
+            name: "St. Petersburg, Tampa Bay",
+            latitude: location.coordinate.latitude,
+            longitude: location.coordinate.longitude
+        )
+        let hourly = try (0..<24).map { hour in
+            let time = try #require(Self.gmtCalendar.date(
+                byAdding: .hour,
+                value: hour,
+                to: dayStart
+            ))
+            return TidePoint(time: time, heightFeet: Double(hour) / 10, kind: nil)
+        }
+        let recorder = TidePredictionRecorder(highLow: [], hourly: hourly)
+        let service = TideService(
+            stationLoader: { [station] },
+            predictionLoader: { stationID, requestRange, interval in
+                await recorder.response(
+                    stationID: stationID,
+                    requestRange: requestRange,
+                    interval: interval
+                )
+            }
+        )
+
+        await service.load(
+            near: location,
+            on: dayStart,
+            calendar: Self.gmtCalendar
+        )
+
+        #expect(service.hasData(
+            for: location,
+            on: dayStart,
+            calendar: Self.gmtCalendar
+        ))
+
+        await service.load(
+            near: location,
+            on: dayStart,
+            calendar: Self.gmtCalendar
+        )
+
+        let requestCount = await recorder.requestCount
+        #expect(requestCount == 2)
+    }
+
     @Test("Tide data keys include the forecast timezone and local day")
     func dataKeysUseForecastCalendar() throws {
         let location = CLLocation(latitude: 27.7634, longitude: -82.6403)
@@ -257,5 +367,25 @@ struct TideParsingTests {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: timeZoneIdentifier)!
         return calendar
+    }
+}
+
+private actor TidePredictionRecorder {
+    private let highLow: [TidePoint]
+    private let hourly: [TidePoint]
+    private(set) var requestCount = 0
+
+    init(highLow: [TidePoint], hourly: [TidePoint]) {
+        self.highLow = highLow
+        self.hourly = hourly
+    }
+
+    func response(
+        stationID: String,
+        requestRange: TideRequestDateRange,
+        interval: String
+    ) -> [TidePoint] {
+        requestCount += 1
+        return interval == "hilo" ? highLow : hourly
     }
 }

@@ -30,6 +30,10 @@ struct FishingDetailDayBounds: Equatable, Sendable {
     let end: Date
 
     var range: ClosedRange<Date> { start...end }
+
+    func intersects(_ window: BiteWindow) -> Bool {
+        window.end >= start && window.start < end
+    }
 }
 
 /// Explicit formatting for selected forecast facts. SwiftUI's timezone
@@ -173,23 +177,31 @@ private struct BiteWindowsCard: View {
 
     private enum ReminderState { case none, scheduled, tooLate }
 
+    private var visibleWindows: [BiteWindow] {
+        let bounds = FishingDetailDateFormatting.dayBounds(
+            containing: referenceDate,
+            timeZone: forecastTimeZone
+        )
+        return conditions.windows.filter(bounds.intersects)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: "Bite Windows", systemImage: "timer")
             GlassCard {
                 VStack(alignment: .leading, spacing: 14) {
                     headline(at: referenceDate)
-                    if conditions.windows.isEmpty {
+                    if visibleWindows.isEmpty {
                         Text("No solunar windows for this forecast day (moonrise/moonset unavailable).")
                             .font(.system(.body, design: .rounded))
                             .foregroundStyle(Ink.chartDim)
                     } else {
                         BiteWindowsTimeline(
-                            windows: conditions.windows,
+                            windows: visibleWindows,
                             referenceDate: referenceDate,
                             timeZone: forecastTimeZone
                         )
-                        ForEach(conditions.windows) { window in
+                        ForEach(visibleWindows) { window in
                             BiteWindowRow(
                                 window: window,
                                 referenceDate: referenceDate,

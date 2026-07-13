@@ -68,6 +68,38 @@ final class TideService {
     private var loadedCoverage: Range<Date>?
     private var loadID = 0
 
+    @ObservationIgnored
+    private let stationLoader: @MainActor () async throws -> [TideStation]
+    @ObservationIgnored
+    private let predictionLoader: @MainActor (
+        _ stationID: String,
+        _ requestRange: TideRequestDateRange,
+        _ interval: String
+    ) async throws -> [TidePoint]
+
+    init() {
+        stationLoader = { try await Self.loadStations() }
+        predictionLoader = { stationID, requestRange, interval in
+            try await Self.fetchPredictions(
+                stationId: stationID,
+                requestRange: requestRange,
+                interval: interval
+            )
+        }
+    }
+
+    init(
+        stationLoader: @escaping @MainActor () async throws -> [TideStation],
+        predictionLoader: @escaping @MainActor (
+            _ stationID: String,
+            _ requestRange: TideRequestDateRange,
+            _ interval: String
+        ) async throws -> [TidePoint]
+    ) {
+        self.stationLoader = stationLoader
+        self.predictionLoader = predictionLoader
+    }
+
     func load(
         near location: CLLocation,
         on date: Date = .now,
@@ -79,7 +111,17 @@ final class TideService {
         loadID += 1
         let id = loadID
 
-        if !force, key == lastKey {
+        if !force,
+           key == lastKey,
+           station == nil || (
+               loadedLocationKey == locationKey
+                   && Self.hasCompletePredictionCoverage(
+                       loadedCoverage,
+                       samples: allSamples,
+                       on: date,
+                       calendar: calendar
+                   )
+           ) {
             isLoading = false
             return
         }
@@ -89,11 +131,8 @@ final class TideService {
         if !force,
            loadedLocationKey == locationKey,
            station != nil,
-           loadedCoverage.map({
-               Self.coversFullDay($0, containing: date, calendar: calendar)
-           }) == true,
-           Self.hasPredictions(
-               events: allEvents,
+           Self.hasCompletePredictionCoverage(
+               loadedCoverage,
                samples: allSamples,
                on: date,
                calendar: calendar
@@ -116,7 +155,7 @@ final class TideService {
 
         do {
             if stations.isEmpty {
-                let fetched = try await Self.loadStations()
+                let fetched = try await stationLoader()
                 guard id == loadID else { return }
                 stations = fetched
             }
@@ -135,16 +174,8 @@ final class TideService {
                 containing: date,
                 calendar: calendar
             )
-            async let hilo = Self.fetchPredictions(
-                stationId: nearest.id,
-                requestRange: requestRange,
-                interval: "hilo"
-            )
-            async let hourly = Self.fetchPredictions(
-                stationId: nearest.id,
-                requestRange: requestRange,
-                interval: "h"
-            )
+            async let hilo = predictionLoader(nearest.id, requestRange, "hilo")
+            async let hourly = predictionLoader(nearest.id, requestRange, "h")
             let (hiloResults, hourlyResults) = try await (hilo, hourly)
             guard id == loadID else { return }
 
@@ -156,11 +187,21 @@ final class TideService {
             }
             events = Self.events(in: allEvents, on: date, calendar: calendar)
             samples = Self.samples(in: allSamples, on: date, calendar: calendar)
-            // Only a successful load suppresses a reload; failures must retry
-            // the next time the tab appears.
-            lastKey = key
-            loadedLocationKey = locationKey
-            loadedCoverage = requestRange.coverage
+            // NOAA can return HTTP 200 with an empty or truncated prediction
+            // array. Never present or cache that partial curve as tide data.
+            if Self.hasCompletePredictionCoverage(
+                requestRange.coverage,
+                samples: allSamples,
+                on: date,
+                calendar: calendar
+            ) {
+                lastKey = key
+                loadedLocationKey = locationKey
+                loadedCoverage = requestRange.coverage
+            } else {
+                clear()
+                lastError = "Tide data was incomplete. Please try again."
+            }
             isLoading = false
         } catch {
             guard id == loadID else { return }
@@ -183,7 +224,7 @@ final class TideService {
     ) async -> [Date: [TideEvent]] {
         do {
             if stations.isEmpty {
-                stations = try await Self.loadStations()
+                stations = try await stationLoader()
             }
             guard let nearest = nearestStation(to: location) else { return [:] }
             let miles = location.distance(from: CLLocation(
@@ -212,11 +253,8 @@ final class TideService {
     ) -> Bool {
         loadedLocationKey == Self.locationKey(location)
             && station != nil
-            && loadedCoverage.map {
-                Self.coversFullDay($0, containing: date, calendar: calendar)
-            } == true
-            && Self.hasPredictions(
-                events: allEvents,
+            && Self.hasCompletePredictionCoverage(
+                loadedCoverage,
                 samples: allSamples,
                 on: date,
                 calendar: calendar
@@ -399,6 +437,58 @@ final class TideService {
     ) -> Bool {
         events.contains { calendar.isDate($0.time, inSameDayAs: date) }
             || samples.contains { calendar.isDate($0.time, inSameDayAs: date) }
+    }
+
+    /// NOAA hourly predictions are cacheable only when they span the entire
+    /// forecast-local day at an approximately hourly cadence. The start/end
+    /// tolerance accommodates local zones whose midnight is offset from GMT's
+    /// whole-hour sample timestamps; DST-short and DST-long days derive their
+    /// expected count from their actual absolute duration.
+    nonisolated static func hasCompleteHourlyCoverage(
+        _ samples: [TideSample],
+        on date: Date,
+        calendar: Calendar
+    ) -> Bool {
+        let dayStart = calendar.startOfDay(for: date)
+        let nextDay = calendar.date(byAdding: .day, value: 1, to: dayStart)
+            ?? dayStart.addingTimeInterval(86_400)
+        let daySamples = samples
+            .filter { $0.time >= dayStart && $0.time < nextDay }
+            .sorted { $0.time < $1.time }
+        guard let first = daySamples.first, let last = daySamples.last else {
+            return false
+        }
+
+        let hour: TimeInterval = 3_600
+        let expectedCount = Int((nextDay.timeIntervalSince(dayStart) / hour).rounded(.down))
+        guard daySamples.count >= expectedCount,
+              first.time.timeIntervalSince(dayStart) <= hour,
+              nextDay.timeIntervalSince(last.time) <= hour
+        else {
+            return false
+        }
+
+        let maximumGap: TimeInterval = 90 * 60
+        return zip(daySamples, daySamples.dropFirst()).allSatisfy { current, next in
+            next.time.timeIntervalSince(current.time) <= maximumGap
+        }
+    }
+
+    /// Combines the nominal NOAA request interval with verified payload
+    /// completeness. A full date range alone is not proof that NOAA returned
+    /// a full selected-day curve.
+    nonisolated static func hasCompletePredictionCoverage(
+        _ coverage: Range<Date>?,
+        samples: [TideSample],
+        on date: Date,
+        calendar: Calendar
+    ) -> Bool {
+        guard let coverage,
+              coversFullDay(coverage, containing: date, calendar: calendar)
+        else {
+            return false
+        }
+        return hasCompleteHourlyCoverage(samples, on: date, calendar: calendar)
     }
 
     /// True only when NOAA's absolute response interval contains the complete

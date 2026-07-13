@@ -32,7 +32,8 @@ enum FishingScorer {
         tideEvents: [TideEvent] = [],
         weights: FactorWeights = .standard,
         now: Date = .now,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        locale: Locale = .current
     ) -> FishingScore {
         score(
             moonPhase: conditions.moonPhase,
@@ -50,7 +51,8 @@ enum FishingScorer {
             tideEvents: tideEvents,
             weights: weights,
             now: now,
-            calendar: calendar
+            calendar: calendar,
+            locale: locale
         )
     }
 
@@ -68,7 +70,8 @@ enum FishingScorer {
         tideEvents: [TideEvent] = [],
         weights: FactorWeights = .standard,
         now: Date = .now,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        locale: Locale = .current
     ) -> FishingScore {
         // `.all` has no water type — include tide whenever events were supplied
         // (caller already gated on saltwater/brackish spots). Only an explicit
@@ -97,7 +100,14 @@ enum FishingScorer {
         assert(abs(__sum - 1.0) < 0.0001, "FishingScorer: weights must sum to 1.0 (got \(__sum))")
         #endif
 
-        let solunar = scoreSolunar(moonPhase: moonPhase, activeWindow: activeWindow, nextWindow: nextWindow, now: now)
+        let solunar = scoreSolunar(
+            moonPhase: moonPhase,
+            activeWindow: activeWindow,
+            nextWindow: nextWindow,
+            now: now,
+            calendar: calendar,
+            locale: locale
+        )
         let pressure = scorePressure(tendency: pressureTendency, changePerHour: pressureChangePerHour)
         let wind = scoreWind(mph: windMph)
         let season = scoreSeason(
@@ -144,7 +154,9 @@ enum FishingScorer {
         moonPhase: LunarPhase,
         activeWindow: BiteWindow?,
         nextWindow: BiteWindow?,
-        now: Date
+        now: Date,
+        calendar: Calendar,
+        locale: Locale
     ) -> Subscore {
         // Phase contribution: coarse but stable.
         let phaseScore: Double
@@ -160,10 +172,15 @@ enum FishingScorer {
         let windowDetail: String
         if let active = activeWindow {
             windowScore = solunarProximity(window: active, now: now)
+            let endTime = formattedTime(
+                active.end,
+                calendar: calendar,
+                locale: locale
+            )
             if active.period == .major {
-                windowDetail = "Major bite window active until \(active.end.formatted(date: .omitted, time: .shortened))"
+                windowDetail = "Major bite window active until \(endTime)"
             } else {
-                windowDetail = "Minor bite window active until \(active.end.formatted(date: .omitted, time: .shortened))"
+                windowDetail = "Minor bite window active until \(endTime)"
             }
         } else if let next = nextWindow {
             windowScore = solunarProximity(window: next, now: now)
@@ -185,6 +202,20 @@ enum FishingScorer {
         let raw = Self.solunarPhaseWeight * phaseScore + Self.solunarWindowWeight * windowScore
         let detail = "\(moonPhase.displayName) — \(windowDetail)"
         return Subscore(raw: raw, detail: detail)
+    }
+
+    private static func formattedTime(
+        _ date: Date,
+        calendar: Calendar,
+        locale: Locale
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.locale = locale
+        formatter.timeZone = calendar.timeZone
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
     }
 
     private static func scorePressure(tendency: PressureTendency?, changePerHour: Double?) -> Subscore {
