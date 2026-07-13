@@ -62,7 +62,23 @@ The Map destination is the primary discovery surface. It uses MapKit and support
 
 Top controls provide search, species filters, map style, and layer selection. A bottom sheet moves between a compact summary and a browsable results list. Selecting a pin or cluster updates the sheet rather than immediately pushing a full-screen card.
 
-BiteCast will not claim proprietary depth contours, navigation charts, private property boundaries, or live vessel information unless a licensed source is added later.
+The layer catalog includes:
+
+- **Apple Standard, Hybrid, and Imagery:** native MapKit base maps
+- **USGS Topo:** current topography, hydrography, place names, transportation, and contours
+- **USGS Shaded Relief:** terrain context from The National Map elevation products
+- **USGS Hydrography:** streams, waterbodies, dams, gauges, and related public hydrologic features
+- **NOAA Nautical Charts:** coastal U.S. chart imagery from NOAA Chart Display Services
+- **GEBCO Bathymetric Relief:** global seafloor terrain derived from the current GEBCO grid
+- **Catch and fishing overlays:** BiteCast’s private/public catches, heatmap, spots, ramps, weather, tide, and bite layers
+
+External raster layers use a `LayeredMapView` backed by `MKMapView` and `MKTileOverlay`/standards-compliant tile services while app-owned annotations remain native MapKit overlays. Every `MapLayerDescriptor` defines coverage, source, attribution, freshness, opacity, online/offline support, and any safety disclaimer. A failed overlay never takes down the base map.
+
+NOAA-provided regional MBTiles are offered as explicit offline coastal chart downloads for supported U.S. regions. Other sources remain online-only unless their published service and storage terms explicitly allow regional caching. Downloads show size, coverage, update date, and a delete action.
+
+GEBCO and NOAA display layers are informational. GEBCO must be attributed and labeled **Not for navigation**. NOAA display services must also state that the in-app presentation does not replace required navigation charts or carriage requirements.
+
+BiteCast will not copy proprietary commercial overlays or claim certified navigation capability, authoritative private-property boundaries, or live vessel information unless an appropriate licensed source and separate safety design are added later.
 
 ### Central Log Catch action
 
@@ -173,6 +189,26 @@ The primary forecast chart supports:
 Tide selection uses the same interaction pattern and reports height, rising/falling/slack state, rate, and time until the next high/low. Bite-window bands expose reason, peak time, duration, and an alert action.
 
 Daily rows show high/low, precipitation, wind peak, bite score, and best window. Selecting a day expands it or opens a detailed day plan.
+
+### Pro Forecast matrix
+
+BiteTime offers **Timeline** and **Pro Forecast** presentation modes over the same provider-neutral data. Timeline remains the default. Pro Forecast is a horizontally scrollable hourly matrix for anglers who want to compare all factors without opening multiple cards.
+
+The matrix has a sticky factor column, a highlighted current/selected hour, synchronized horizontal scrolling, and tappable cells. Rows appear only when the active providers supply trustworthy values:
+
+- Deterministic bite score and rating
+- Condition and precipitation probability/amount
+- Air temperature and feels-like temperature
+- Dew point, humidity, visibility, cloud cover, and UV
+- Barometric pressure and trend
+- Wind direction, sustained speed, and gusts
+- Moon phase and solunar window
+- Tide height, movement, and next turn for coastal locations
+- Sunrise and sunset
+
+Users can collapse and reorder factor groups. Color encodes documented ranges and always has a legend; color alone never carries meaning. Selecting an hour updates the compact detail strip, chart rule, matrix column, and fishing interpretation everywhere in BiteTime.
+
+The date control offers day and week navigation only within the provider’s supported horizon. BiteCast will not present a precise monthly forecast when the source cannot support one. Longer-range planning uses daily forecasts, forecast confidence, seasonal guidance, and historical catch patterns instead of fabricated hourly precision.
 
 ## Bite scoring and Best Bait Today
 
@@ -318,13 +354,14 @@ System-framework console noise is not treated as an app defect unless correlated
 - Location descriptor and consistent unit formatting
 - New typography and surface system
 - Five-destination navigation shell with central Log Catch action
-- BiteTime hero, interactive charts, daily expansion, and Best Bait Today
+- BiteTime hero, interactive charts, Pro Forecast matrix, daily expansion, and Best Bait Today
 - Existing features rehomed without data loss
 - Focused unit/UI tests and device verification
 
 ### Phase 2 — Map and private catches
 
-- Full-screen map with layers, filters, clusters, and bottom sheet
+- Full-screen map with filters, clusters, bottom sheet, and pluggable Apple/USGS/NOAA/GEBCO layers
+- Layer attribution, safety disclosures, graceful overlay failure, and supported NOAA offline chart regions
 - Photo-forward catch composer and personal catch cards
 - Safe catch schema migration and repository boundary
 - Personal heatmap, statistics, patterns, alerts, and saved content
@@ -357,12 +394,14 @@ The redesign is complete when:
 - Visible locations use saved-spot names or `City, ST`, never raw coordinates as the primary label.
 - All displayed temperatures are rounded consistently and chart units match adjacent labels.
 - Hourly weather, tide, pressure, and bite charts support tap/drag detail and accessible inspection.
+- Pro Forecast exposes the available hourly factors in a selectable, synchronized, accessible matrix without inventing unsupported monthly precision.
 - Best Bait Today appears prominently, identifies Apple on-device AI, invalidates stale context, and has an honest deterministic fallback.
 - WeatherKit failure automatically falls back to NWS for supported US locations and then to a labeled cache.
 - A catch can be logged with a photo in seconds and remains safe offline.
 - Publishing is optional, exact location is private by default, and public deletion does not erase private history.
 - Community supports feeds, profiles, comments, reactions, groups, sharing, reporting, blocking, and content/account deletion.
 - The map supports useful local and community layers without claiming unavailable proprietary data.
+- USGS, NOAA, and GEBCO overlays display attribution, coverage/freshness information, and required non-navigation disclaimers.
 - Debug and Release builds, automated tests, real-device smoke tests, accessibility checks, and secret/entitlement audits pass.
 
 ## Explicit non-goals for this delivery
