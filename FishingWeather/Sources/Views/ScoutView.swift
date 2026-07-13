@@ -14,12 +14,12 @@ struct ScoutView: View {
     @State private var pickerItem: PhotosPickerItem?
     @State private var showCamera = false
 
-    private var liveConditions: FishingConditions? {
+    private var liveSnapshot: WeatherSnapshot? {
         guard let loc = spots.selectedSpot?.location ?? location.location,
               weather.hasData(for: loc),
               let snapshot = weather.snapshot
         else { return nil }
-        return FishingConditions.make(snapshot: snapshot)
+        return snapshot
     }
 
     var body: some View {
@@ -62,6 +62,22 @@ struct ScoutView: View {
         .onChange(of: species) {
             scout.reset()
             if let image { analyze(image) }
+        }
+        .task(id: scout.reportProvenance?.expiresAt) {
+            guard let provenance = scout.reportProvenance,
+                  let delay = WeatherDerivedContentPolicy.secondsUntilExpiry(
+                    provenance
+                  ) else {
+                scout.expireWeatherDerivedReportIfNeeded()
+                return
+            }
+            do {
+                try await Task.sleep(for: .seconds(max(delay, 0.01)))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            scout.expireWeatherDerivedReportIfNeeded()
         }
     }
 
@@ -155,13 +171,29 @@ struct ScoutView: View {
             }
         case .ready:
             if let report = scout.report {
-                ScoutReportCard(report: report)
+                VStack(spacing: 14) {
+                    if let attribution = scout.reportProvenance?.providerAttribution {
+                        WeatherSourceAttributionView(attribution: attribution)
+                        ModifiedWeatherDataNotice(attribution: attribution)
+                        ForecastSafetyNotice()
+                    }
+                    ScoutReportCard(report: report)
+                }
             }
         }
     }
 
     private func analyze(_ image: UIImage) {
-        Task { await scout.analyze(image: image, species: species, conditions: liveConditions) }
+        let snapshot = liveSnapshot
+        let conditions = snapshot.map { FishingConditions.make(snapshot: $0) }
+        Task {
+            await scout.analyze(
+                image: image,
+                species: species,
+                conditions: conditions,
+                provenance: snapshot?.provenance
+            )
+        }
     }
 }
 

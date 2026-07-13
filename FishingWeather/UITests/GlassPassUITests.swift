@@ -20,6 +20,13 @@ final class GlassPassUITests: XCTestCase {
         XCTAssertTrue(source.waitForExistence(timeout: 5), "Forecast provenance is missing")
         XCTAssertEqual(source.label, "National Weather Service fallback")
         XCTAssertEqual(source.value as? String, "Updated 8 min ago")
+        let attribution = app.descendants(matching: .any)["weather.source.attribution"]
+        let safetyNotice = app.descendants(matching: .any)["forecast.safetyNotice"]
+        reveal(attribution, in: app)
+        XCTAssertTrue(attribution.exists, "NWS source attribution is missing")
+        XCTAssertEqual(attribution.label, "Weather source, National Weather Service")
+        reveal(safetyNotice, in: app)
+        XCTAssertTrue(safetyNotice.exists, "Forecast safety notice is missing")
         let heroSummary = hero.value as? String ?? ""
         XCTAssertTrue(
             heroSummary.contains("81"),
@@ -108,8 +115,33 @@ final class GlassPassUITests: XCTestCase {
         assertContainedHorizontally(hero, in: screen)
         snap(name: "task-11-bite-time-live-accessibility-top")
 
-        // Best Bait intentionally sits between the hero and provenance. At
-        // accessibility XXXL, reveal the lazy source content before reading it.
+        // Compliance content is intentionally first. Verify it before moving
+        // down to the detailed source status at accessibility XXXL.
+        let modifiedNotice = app.descendants(matching: .any)["weather.modifiedDataNotice"]
+        let safetyNotice = app.descendants(matching: .any)["forecast.safetyNotice"]
+        let appleMarkLink = app.descendants(matching: .any)[
+            "weather.source.apple.link"
+        ]
+        reveal(appleMarkLink, in: app)
+        XCTAssertTrue(
+            appleMarkLink.exists,
+            "The provider-supplied Apple Weather combined mark is missing"
+        )
+        XCTAssertEqual(
+            appleMarkLink.label,
+            "Apple Weather legal attribution"
+        )
+        XCTAssertGreaterThan(appleMarkLink.frame.width, 60)
+        XCTAssertGreaterThanOrEqual(appleMarkLink.frame.height, 44)
+        XCTAssertTrue(appleMarkLink.isHittable)
+        reveal(modifiedNotice, in: app)
+        XCTAssertTrue(
+            modifiedNotice.exists,
+            "Apple-derived fishing guidance does not disclose modified weather data"
+        )
+        reveal(safetyNotice, in: app)
+        XCTAssertTrue(safetyNotice.exists, "Forecast safety notice is missing")
+
         reveal(source, in: app)
         XCTAssertTrue(source.waitForExistence(timeout: 5))
         XCTAssertEqual(source.label, "Apple Weather")

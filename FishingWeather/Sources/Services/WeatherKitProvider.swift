@@ -15,15 +15,23 @@ struct WeatherKitProvider: WeatherProvider {
         _ hourlyStartDate: Date,
         _ hourlyEndDate: Date
     ) async throws -> WeatherKitPayload
+    typealias AttributionWorker = @Sendable () async throws -> WeatherProviderAttribution?
+    typealias MarkWorker = @Sendable (
+        WeatherProviderAttribution
+    ) async throws -> WeatherProviderAttribution
     typealias Clock = @Sendable () -> Date
     typealias TimeZoneIdentifier = @Sendable (CLLocation) -> String
 
     private let worker: ServiceWorker
+    private let attributionWorker: AttributionWorker
+    private let markWorker: MarkWorker
     private let now: Clock
     private let timeZoneIdentifier: TimeZoneIdentifier
 
     init(
         worker: @escaping ServiceWorker = WeatherKitProvider.liveWeather,
+        attributionWorker: @escaping AttributionWorker = WeatherKitProvider.liveAttribution,
+        markWorker: @escaping MarkWorker = WeatherKitProvider.liveMarks,
         now: @escaping Clock = { .now },
         // The public WeatherKit request tuple does not expose forecast-zone
         // metadata. Default to the device zone, while keeping this injectable
@@ -33,6 +41,8 @@ struct WeatherKitProvider: WeatherProvider {
         }
     ) {
         self.worker = worker
+        self.attributionWorker = attributionWorker
+        self.markWorker = markWorker
         self.now = now
         self.timeZoneIdentifier = timeZoneIdentifier
     }
@@ -43,7 +53,33 @@ struct WeatherKitProvider: WeatherProvider {
         let zoneIdentifier = timeZoneIdentifier(location)
 
         do {
+            guard let attribution = try await attributionWorker() else {
+                throw WeatherProviderError.decoding(
+                    "WeatherKit attribution was unavailable"
+                )
+            }
             let payload = try await worker(location, requestWindow.start, requestWindow.end)
+            let providerExpirations = [
+                payload.current.metadata.expirationDate,
+                payload.hourly.metadata.expirationDate,
+                payload.daily.metadata.expirationDate,
+            ] + payload.alerts.map(\.metadata.expirationDate)
+            guard let expiresAt = WeatherKitAdapter.expirationDate(
+                fetchedAt: fetchedAt,
+                providerExpirations: providerExpirations
+            ) else {
+                throw WeatherProviderError.decoding(
+                    "WeatherKit returned expired forecast metadata"
+                )
+            }
+            let hydratedAttribution = try await markWorker(attribution)
+            guard WeatherAttributionMarkLoader.hasUsableAppleMarks(
+                hydratedAttribution
+            ) else {
+                throw WeatherProviderError.decoding(
+                    "WeatherKit combined mark was unavailable"
+                )
+            }
             let astronomy = WeatherKitAdapter.astronomy(
                 for: payload.daily.forecast,
                 on: fetchedAt,
@@ -65,7 +101,9 @@ struct WeatherKitProvider: WeatherProvider {
                     source: .weatherKit,
                     fetchedAt: fetchedAt,
                     isFallback: false,
-                    attribution: nil
+                    attribution: hydratedAttribution.serviceName,
+                    providerAttribution: hydratedAttribution,
+                    expiresAt: expiresAt
                 )
             )
         } catch let cancellation as CancellationError {
@@ -75,6 +113,23 @@ struct WeatherKitProvider: WeatherProvider {
         } catch {
             throw WeatherKitAdapter.providerError(error)
         }
+    }
+
+    private static func liveAttribution() async throws -> WeatherProviderAttribution? {
+        let value = try await WeatherService.shared.attribution
+        return WeatherKitAdapter.attribution(
+            serviceName: value.serviceName,
+            legalPageURL: value.legalPageURL,
+            combinedMarkLightURL: value.combinedMarkLightURL,
+            combinedMarkDarkURL: value.combinedMarkDarkURL,
+            legalText: value.legalAttributionText
+        )
+    }
+
+    private static func liveMarks(
+        _ attribution: WeatherProviderAttribution
+    ) async throws -> WeatherProviderAttribution {
+        try await WeatherAttributionMarkLoader().hydrate(attribution)
     }
 
     private static func liveWeather(
@@ -100,6 +155,48 @@ struct WeatherKitProvider: WeatherProvider {
 }
 
 enum WeatherKitAdapter {
+    static func attribution(
+        serviceName: String,
+        legalPageURL: URL,
+        combinedMarkLightURL: URL,
+        combinedMarkDarkURL: URL,
+        legalText: String
+    ) -> WeatherProviderAttribution? {
+        let name = serviceName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = legalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty,
+              !text.isEmpty,
+              validWebURL(legalPageURL),
+              validWebURL(combinedMarkLightURL),
+              validWebURL(combinedMarkDarkURL)
+        else { return nil }
+
+        return WeatherProviderAttribution(
+            providerKind: .appleWeather,
+            serviceName: name,
+            legalPageURL: legalPageURL,
+            combinedMarkLightURL: combinedMarkLightURL,
+            combinedMarkDarkURL: combinedMarkDarkURL,
+            legalText: text
+        )
+    }
+
+    static func expirationDate(
+        fetchedAt: Date,
+        providerExpirations: [Date]
+    ) -> Date? {
+        guard fetchedAt.timeIntervalSinceReferenceDate.isFinite,
+              !providerExpirations.isEmpty,
+              providerExpirations.allSatisfy({
+                  $0.timeIntervalSinceReferenceDate.isFinite
+              }),
+              let providerExpiry = providerExpirations.min(),
+              providerExpiry > fetchedAt
+        else { return nil }
+
+        return min(providerExpiry, fetchedAt.addingTimeInterval(3_600))
+    }
+
     static func fraction(_ value: Double) -> Double {
         min(max(value, 0), 1)
     }
@@ -310,5 +407,15 @@ enum WeatherKitAdapter {
             speedMetersPerSecond: metersPerSecond(wind.speed),
             gustMetersPerSecond: wind.gust.map(metersPerSecond)
         )
+    }
+
+    private static func validWebURL(_ url: URL) -> Bool {
+        url.scheme?.lowercased() == "https"
+            && url.host != nil
+            && url.user == nil
+            && url.password == nil
+            && url.port == nil
+            && url.query == nil
+            && url.fragment == nil
     }
 }

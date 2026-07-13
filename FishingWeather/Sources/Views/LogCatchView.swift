@@ -63,8 +63,20 @@ struct LogCatchView: View {
                         .lineLimit(2...5)
                 }
 
-                if let snapshot = conditionsSnapshot {
-                    Section("Conditions (auto)") {
+                if let snapshot = conditionsSnapshot,
+                   let attribution = weatherSnapshot?.provenance.providerAttribution {
+                    Section("Conditions (live)") {
+                        WeatherSourceAttributionView(attribution: attribution)
+                        ModifiedWeatherDataNotice(attribution: attribution)
+                        if attribution.providerKind == .nationalWeatherService {
+                            Label(
+                                "Moon phase calculated on device",
+                                systemImage: "moon.stars"
+                            )
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        }
+                        ForecastSafetyNotice()
                         ForEach(snapshot, id: \.label) { item in
                             LabeledContent(item.label, value: item.value)
                         }
@@ -178,9 +190,11 @@ struct LogCatchView: View {
     /// Only snapshot weather that belongs to the active location.
     private var weatherSnapshot: WeatherSnapshot? {
         guard let activeCLLocation,
-              weather.hasData(for: activeCLLocation)
+              weather.hasData(for: activeCLLocation),
+              let snapshot = weather.snapshot,
+              snapshot.provenance.providerAttribution != nil
         else { return nil }
-        return weather.snapshot
+        return snapshot
     }
 
     private var conditions: FishingConditions? {
@@ -272,7 +286,20 @@ struct LogCatchView: View {
     }
 
     private func save() {
+        let savedAt = Date.now
+        let conditionSource = weatherSnapshot.flatMap {
+            CatchConditionSource(weatherProvenance: $0.provenance, at: savedAt)
+        }
+        let canPersistConditions = conditionSource != nil
+        let astronomySource = conditionSource.map { _ in
+            CatchAstronomySource()
+        }
+        let savedTidePhase = tidePhase
+        let tideSource = savedTidePhase.flatMap { _ in
+            tides.station.map { CatchTideSource(stationID: $0.id) }
+        }
         let entry = CatchEntry(
+            date: savedAt,
             species: species,
             bait: bait.trimmingCharacters(in: .whitespacesAndNewlines),
             lengthInches: parseMeasurement(length),
@@ -281,21 +308,24 @@ struct LogCatchView: View {
             latitude: activeLocation?.latitude,
             longitude: activeLocation?.longitude,
             spotName: spots.selectedSpot?.name ?? location.descriptor.displayName,
-            pressureTendency: conditions.flatMap {
+            pressureTendency: canPersistConditions ? conditions.flatMap {
                 $0.pressure.pressure == nil ? nil : $0.pressure.tendency.label
-            },
-            moonPhase: conditions?.moonPhase.displayName,
-            airTempF: airTempF,
-            dewPointF: dewPointF,
-            windMph: conditions.map {
+            } : nil,
+            moonPhase: astronomySource == nil ? nil : conditions?.moonPhase.displayName,
+            airTempF: canPersistConditions ? airTempF : nil,
+            dewPointF: canPersistConditions ? dewPointF : nil,
+            windMph: canPersistConditions ? conditions.map {
                 WeatherUnits.milesPerHour(
                     metersPerSecond: $0.wind.speedMetersPerSecond
                 )
-            },
-            tidePhase: tidePhase
+            } : nil,
+            tidePhase: tideSource == nil ? nil : savedTidePhase,
+            conditionSource: conditionSource,
+            tideSource: tideSource,
+            astronomySource: astronomySource
         )
         let operation = CatchOperationUIState.perform {
-            try log.add(entry, photo: photo)
+            try log.add(entry, photo: photo, now: savedAt)
         }
         if operation.committed {
             dismiss()

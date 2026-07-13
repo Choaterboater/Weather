@@ -12,17 +12,24 @@ final class TripForecastLoader {
         Species,
         String
     ) async throws -> WeekOutlook
+    typealias Clock = @MainActor () -> Date
 
     private(set) var outlook: WeekOutlook?
+    private(set) var provenance: WeatherProvenance?
     private(set) var isLoading = false
     private(set) var errorMessage: String?
 
     private let worker: Worker?
+    private let now: Clock
     private var lastKey: String?
     private var loadID = 0
 
-    init(worker: Worker? = nil) {
+    init(
+        worker: Worker? = nil,
+        now: @escaping Clock = { .now }
+    ) {
         self.worker = worker
+        self.now = now
     }
 
     func load(
@@ -45,6 +52,7 @@ final class TripForecastLoader {
         let id = loadID
         if lastKey != key {
             outlook = nil
+            provenance = nil
             lastKey = nil
         }
 
@@ -89,7 +97,13 @@ final class TripForecastLoader {
                 return nil
             }
 
+            if let source = snapshot?.provenance,
+               !WeatherDerivedContentPolicy.canDisplay(source, at: now()) {
+                throw WeatherProviderError.serviceUnavailable
+            }
+
             outlook = result
+            provenance = snapshot?.provenance
             lastKey = key
             isLoading = false
             return result

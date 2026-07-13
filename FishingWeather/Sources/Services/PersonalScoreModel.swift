@@ -48,15 +48,22 @@ enum PersonalScoreModel {
         let shift = maxShift * confidence
         guard shift > 0 else { return base }
 
-        // Affinities we can measure from the snapshot (mean over catches that
-        // carry the data). Wind/tide aren't captured yet — omitted here, so they
-        // sit at the reference below and keep their base weight.
+        // Affinities we can measure from durably attributed catch fields. Any
+        // missing factor sits at the reference below and keeps its base weight.
         var affinity: [ScoreFactor.Kind: Double] = [:]
-        if let a = mean(sample.map(pressureAffinity)) { affinity[.pressure] = a }
-        if let a = mean(sample.map(moonAffinity)) { affinity[.solunar] = a }
+        if let a = mean(sample.map(pressureAffinity)) {
+            affinity[.pressure] = a
+        }
+        if let a = mean(sample.map(moonAffinity)) {
+            affinity[.solunar] = a
+        }
         if let a = mean(sample.map { seasonAffinity($0, species: species) }) { affinity[.season] = a }
-        if let a = mean(sample.map(windAffinity)) { affinity[.wind] = a }
-        if let a = mean(sample.map(tideAffinity)) { affinity[.tide] = a }
+        if let a = mean(sample.map(windAffinity)) {
+            affinity[.wind] = a
+        }
+        if let a = mean(sample.map(tideAffinity)) {
+            affinity[.tide] = a
+        }
 
         guard !affinity.isEmpty else { return base }
         let reference = affinity.values.reduce(0, +) / Double(affinity.count)
@@ -86,7 +93,8 @@ enum PersonalScoreModel {
     // MARK: - Per-factor affinity from the catch snapshot (0…1; nil if unknown)
 
     static func pressureAffinity(_ entry: CatchEntry) -> Double? {
-        guard let t = entry.pressureTendency?.lowercased() else { return nil }
+        guard let t = entry.attributedPressureTendency?.lowercased()
+        else { return nil }
         if t.contains("fall") { return 1.0 }
         if t.contains("stead") { return 0.65 }
         if t.contains("ris") { return 0.45 }
@@ -94,7 +102,8 @@ enum PersonalScoreModel {
     }
 
     static func moonAffinity(_ entry: CatchEntry) -> Double? {
-        guard let m = entry.moonPhase?.lowercased() else { return nil }
+        guard let m = entry.attributedMoonPhase?.lowercased()
+        else { return nil }
         if m.contains("full") || m.contains("new") { return 1.0 }
         if m.contains("gibbous") || m.contains("crescent") { return 0.7 }
         if m.contains("quarter") { return 0.5 }
@@ -104,7 +113,7 @@ enum PersonalScoreModel {
     /// Wind favorability, mirroring the scorer's piecewise wind curve. Only set
     /// on catches logged with live weather (older catches have no wind).
     static func windAffinity(_ entry: CatchEntry) -> Double? {
-        guard let mph = entry.windMph else { return nil }
+        guard let mph = entry.attributedWindMph else { return nil }
         switch mph {
         case ..<2: return 0.55
         case 2..<6: return 0.85
@@ -118,7 +127,8 @@ enum PersonalScoreModel {
     /// Tide favorability — moving water is prime, slack is poor. Set only on
     /// catches logged at a coastal spot with loaded tide data.
     static func tideAffinity(_ entry: CatchEntry) -> Double? {
-        guard let phase = entry.tidePhase?.lowercased() else { return nil }
+        guard let phase = entry.attributedTidePhase?.lowercased()
+        else { return nil }
         if phase.contains("slack") { return 0.4 }
         if phase.contains("rising") || phase.contains("falling") { return 1.0 }
         return nil

@@ -258,7 +258,7 @@ struct TripPlannerTests {
             day: referenceDate
         )
         let calendar = TripForecastLoader.forecastCalendar(for: snapshot)
-        let loader = TripForecastLoader()
+        let loader = TripForecastLoader(now: { referenceDate })
 
         let outlook = await loader.load(
             for: CLLocation(latitude: 1.8721, longitude: -157.4278),

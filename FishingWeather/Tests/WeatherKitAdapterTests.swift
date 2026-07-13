@@ -6,6 +6,167 @@ import WeatherKit
 
 @Suite("WeatherKit adapter")
 struct WeatherKitAdapterTests {
+    private let legalURL = URL(string: "https://weatherkit.apple.com/legal-attribution.html")!
+    private let lightMarkURL = URL(string: "https://weatherkit.apple.com/assets/branding/en/Apple_Weather_wht_en_3X_090122.png")!
+    private let darkMarkURL = URL(string: "https://weatherkit.apple.com/assets/branding/en/Apple_Weather_blk_en_3X_090122.png")!
+
+    @Test("WeatherKit attribution maps every required provider field")
+    func mapsRequiredAttribution() throws {
+        let value = try #require(WeatherKitAdapter.attribution(
+            serviceName: "Apple Weather",
+            legalPageURL: legalURL,
+            combinedMarkLightURL: lightMarkURL,
+            combinedMarkDarkURL: darkMarkURL,
+            legalText: "Weather data sources and legal attribution"
+        ))
+
+        #expect(value.providerKind == .appleWeather)
+        #expect(value.serviceName == "Apple Weather")
+        #expect(value.legalPageURL == legalURL)
+        #expect(value.combinedMarkLightURL == lightMarkURL)
+        #expect(value.combinedMarkDarkURL == darkMarkURL)
+        #expect(value.legalText == "Weather data sources and legal attribution")
+    }
+
+    @Test("WeatherKit attribution rejects insecure provider destinations")
+    func rejectsInsecureAttributionURLs() {
+        let insecureLegal = WeatherKitAdapter.attribution(
+            serviceName: "Apple Weather",
+            legalPageURL: URL(string: "http://weatherkit.apple.com/legal-attribution.html")!,
+            combinedMarkLightURL: lightMarkURL,
+            combinedMarkDarkURL: darkMarkURL,
+            legalText: "Weather data sources and legal attribution"
+        )
+        let insecureMark = WeatherKitAdapter.attribution(
+            serviceName: "Apple Weather",
+            legalPageURL: legalURL,
+            combinedMarkLightURL: URL(string: "http://weatherkit.apple.com/light.png")!,
+            combinedMarkDarkURL: darkMarkURL,
+            legalText: "Weather data sources and legal attribution"
+        )
+
+        #expect(insecureLegal == nil)
+        #expect(insecureMark == nil)
+    }
+
+    @Test("WeatherKit attribution rejects non-canonical HTTPS URLs")
+    func rejectsNonCanonicalAttributionURLs() {
+        let unsafeURLs = [
+            URL(string: "https://user:secret@weatherkit.apple.com/legal")!,
+            URL(string: "https://weatherkit.apple.com:443/legal")!,
+            URL(string: "https://weatherkit.apple.com/legal?redirect=1")!,
+            URL(string: "https://weatherkit.apple.com/legal#fragment")!,
+        ]
+
+        for unsafeURL in unsafeURLs {
+            #expect(WeatherKitAdapter.attribution(
+                serviceName: "Apple Weather",
+                legalPageURL: unsafeURL,
+                combinedMarkLightURL: lightMarkURL,
+                combinedMarkDarkURL: darkMarkURL,
+                legalText: "Weather data sources and legal attribution"
+            ) == nil)
+        }
+    }
+
+    @Test("Missing required WeatherKit attribution fails before weather can be displayed")
+    func missingRequiredAttributionFailsProvider() async {
+        let provider = WeatherKitProvider(
+            worker: { _, _, _ in
+                Issue.record("Weather payload must not be displayed without required attribution")
+                throw WeatherKitFixtureError.unknown
+            },
+            attributionWorker: { nil }
+        )
+
+        await #expect(throws: WeatherProviderError.decoding("WeatherKit attribution was unavailable")) {
+            _ = try await provider.forecast(
+                for: CLLocation(latitude: 30.29, longitude: -86)
+            )
+        }
+    }
+
+    @Test("Apple expiry uses the earliest metadata date and never exceeds one hour")
+    func selectsEarliestFiniteExpiryWithCap() {
+        let fetchedAt = Date(timeIntervalSince1970: 1_800_000_000)
+
+        #expect(WeatherKitAdapter.expirationDate(
+            fetchedAt: fetchedAt,
+            providerExpirations: [
+                fetchedAt.addingTimeInterval(3_600),
+                fetchedAt.addingTimeInterval(1_200),
+                fetchedAt.addingTimeInterval(7_200),
+            ]
+        ) == fetchedAt.addingTimeInterval(1_200))
+        #expect(WeatherKitAdapter.expirationDate(
+            fetchedAt: fetchedAt,
+            providerExpirations: [fetchedAt.addingTimeInterval(7_200)]
+        ) == fetchedAt.addingTimeInterval(3_600))
+        #expect(WeatherKitAdapter.expirationDate(
+            fetchedAt: fetchedAt,
+            providerExpirations: [fetchedAt]
+        ) == nil)
+    }
+
+    @Test("Combined-mark requests use app identity and hydrate both provider images")
+    func combinedMarksUseIdentifiedRequests() async throws {
+        let recorder = WeatherMarkRequestRecorder(data: Self.validPNG)
+        let loader = WeatherAttributionMarkLoader(loader: recorder.load)
+
+        let value = try await loader.hydrate(Self.validAttribution)
+        let requests = await recorder.requests
+
+        #expect(requests.count == 2)
+        #expect(requests.allSatisfy {
+            $0.value(forHTTPHeaderField: "User-Agent") == AppIdentity.userAgent
+        })
+        #expect(requests.allSatisfy {
+            $0.value(forHTTPHeaderField: "Accept") == "image/*"
+        })
+        #expect(value.combinedMarkLightData == Self.validPNG)
+        #expect(value.combinedMarkDarkData == Self.validPNG)
+        #expect(WeatherAttributionMarkLoader.hasUsableAppleMarks(value))
+    }
+
+    @Test("Invalid combined-mark bytes fail closed instead of showing unbranded Apple data")
+    func invalidCombinedMarkFailsClosed() async {
+        let recorder = WeatherMarkRequestRecorder(
+            data: Data("not-an-image".utf8),
+            contentType: "text/plain"
+        )
+        let loader = WeatherAttributionMarkLoader(loader: recorder.load)
+
+        await #expect(throws: WeatherProviderError.decoding(
+            "WeatherKit combined mark was unavailable"
+        )) {
+            _ = try await loader.hydrate(Self.validAttribution)
+        }
+    }
+
+    @Test("Combined-mark downloads reject an insecure final redirect URL")
+    func combinedMarkRejectsInsecureFinalURL() async {
+        let recorder = WeatherMarkRequestRecorder(
+            data: Self.validPNG,
+            responseURL: URL(string: "http://weatherkit.apple.com/assets/mark.png")!
+        )
+        let loader = WeatherAttributionMarkLoader(loader: recorder.load)
+
+        await #expect(throws: WeatherProviderError.decoding(
+            "WeatherKit combined mark was unavailable"
+        )) {
+            _ = try await loader.hydrate(Self.validAttribution)
+        }
+    }
+
+    @Test("Live combined-mark downloads reject known oversized bodies before reading")
+    func combinedMarkExpectedLengthCap() {
+        #expect(WeatherAttributionMarkLoader.acceptsExpectedContentLength(-1))
+        #expect(WeatherAttributionMarkLoader.acceptsExpectedContentLength(2 * 1_024 * 1_024))
+        #expect(!WeatherAttributionMarkLoader.acceptsExpectedContentLength(
+            (2 * 1_024 * 1_024) + 1
+        ))
+    }
+
     @Test func canonicalWind() {
         let wind = WeatherKitAdapter.wind(
             directionDegrees: 225,
@@ -107,9 +268,10 @@ struct WeatherKitAdapterTests {
     }
 
     @Test func providerPreservesCancellation() async {
-        let provider = WeatherKitProvider(worker: { _, _, _ in
-            throw CancellationError()
-        })
+        let provider = WeatherKitProvider(
+            worker: { _, _, _ in throw CancellationError() },
+            attributionWorker: { Self.validAttribution }
+        )
 
         await #expect(throws: CancellationError.self) {
             _ = try await provider.forecast(
@@ -119,9 +281,10 @@ struct WeatherKitAdapterTests {
     }
 
     @Test func providerPreservesURLCancellation() async {
-        let provider = WeatherKitProvider(worker: { _, _, _ in
-            throw URLError(.cancelled)
-        })
+        let provider = WeatherKitProvider(
+            worker: { _, _, _ in throw URLError(.cancelled) },
+            attributionWorker: { Self.validAttribution }
+        )
 
         do {
             _ = try await provider.forecast(
@@ -133,6 +296,47 @@ struct WeatherKitAdapterTests {
         } catch {
             Issue.record("Expected URLError.cancelled, got \(error)")
         }
+    }
+
+    private static let validAttribution = WeatherProviderAttribution(
+        providerKind: .appleWeather,
+        serviceName: "Apple Weather",
+        legalPageURL: URL(string: "https://weatherkit.apple.com/legal-attribution.html")!,
+        combinedMarkLightURL: URL(string: "https://weatherkit.apple.com/assets/light.png")!,
+        combinedMarkDarkURL: URL(string: "https://weatherkit.apple.com/assets/dark.png")!,
+        legalText: "Weather data sources and legal attribution"
+    )
+
+    private static let validPNG = Data(base64Encoded:
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9WQAAAABJRU5ErkJggg=="
+    )!
+}
+
+private actor WeatherMarkRequestRecorder {
+    private(set) var requests: [URLRequest] = []
+    private let data: Data
+    private let contentType: String
+    private let responseURL: URL?
+
+    init(
+        data: Data,
+        contentType: String = "image/png",
+        responseURL: URL? = nil
+    ) {
+        self.data = data
+        self.contentType = contentType
+        self.responseURL = responseURL
+    }
+
+    func load(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        requests.append(request)
+        let response = HTTPURLResponse(
+            url: responseURL ?? request.url!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: ["Content-Type": contentType]
+        )!
+        return (data, response)
     }
 }
 

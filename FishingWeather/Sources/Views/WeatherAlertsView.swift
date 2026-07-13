@@ -10,18 +10,26 @@ struct WeatherAlertsView: View {
                 GlassCard {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(alert.summary)
-                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .font(.system(.headline, design: .monospaced, weight: .bold))
                             .foregroundStyle(Ink.chart)
+                            .fixedSize(horizontal: false, vertical: true)
                         Text(alert.source)
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .font(.system(.caption, design: .monospaced, weight: .medium))
                             .foregroundStyle(Ink.chartDim)
+                            .fixedSize(horizontal: false, vertical: true)
                         if let detailsURL = alert.detailsURL {
-                            Link("Details", destination: detailsURL)
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            Link("Official alert details", destination: detailsURL)
+                                .font(.system(.caption, design: .monospaced, weight: .bold))
+                                .frame(minHeight: 44, alignment: .leading)
+                                .contentShape(Rectangle())
+                                .accessibilityLabel("Official alert details from \(alert.source)")
+                                .accessibilityIdentifier("weather.alert.\(alert.id).details")
                         }
                     }
                 }
                 .tint(.orange)
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("\(alert.summary), issued by \(alert.source)")
             }
         }
     }

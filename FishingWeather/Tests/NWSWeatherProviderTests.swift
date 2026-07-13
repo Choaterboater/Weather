@@ -7,6 +7,7 @@ import Testing
 struct NWSWeatherProviderTests {
     private let location = CLLocation(latitude: 30.2938, longitude: -86.0049)
     private let userAgent = "BiteCastTests/1.0 (app.choatelabs.bitecast.tests)"
+    private let fixtureNow = NWSFixtures.date("2026-07-12T11:00:00-05:00")!
 
     @Test func sendsRequiredHeadersOnEveryRequest() async throws {
         let recorder = NWSRequestRecorder(responses: NWSFixtures.minimumResponses)
@@ -23,6 +24,90 @@ struct NWSWeatherProviderTests {
             $0.value(forHTTPHeaderField: "Accept") == "application/geo+json"
         })
         #expect(Set(requests.compactMap(NWSRequestRecorder.key)) == Set(NWSFixtures.minimumResponses.keys))
+    }
+
+    @Test("Rejects foreign point links before sending a follow-up request")
+    func rejectsForeignPointLinks() async {
+        let recorder = NWSRequestRecorder(
+            responses: NWSFixtures.pointWithForecastHourly(
+                "https://example.com/gridpoints/TAE/50,50/forecast/hourly"
+            )
+        )
+        let provider = makeProvider(recorder: recorder)
+
+        await #expect(throws: WeatherProviderError.serviceUnavailable) {
+            _ = try await provider.forecast(for: location)
+        }
+        let requests = await recorder.requests
+        #expect(requests.allSatisfy { $0.url?.host == "api.weather.gov" })
+    }
+
+    @Test("Rejects noncanonical station links before sending a follow-up request")
+    func rejectsNoncanonicalStationLinks() async {
+        let recorder = NWSRequestRecorder(
+            responses: NWSFixtures.stationLink(
+                "https://api.weather.gov:443/stations/KPAM"
+            )
+        )
+        let provider = makeProvider(recorder: recorder)
+
+        await #expect(throws: WeatherProviderError.serviceUnavailable) {
+            _ = try await provider.forecast(for: location)
+        }
+        let requests = await recorder.requests
+        #expect(!requests.contains {
+            $0.url?.absoluteString.contains(":443/stations/KPAM") == true
+        })
+    }
+
+    @Test("Rejects a request whose final response URL crossed the NWS boundary")
+    func rejectsForeignFinalResponseURL() async {
+        let recorder = NWSRequestRecorder(
+            responses: NWSFixtures.pointResponseRedirected(
+                to: URL(string: "https://example.com/points/redirected")!
+            )
+        )
+        let provider = makeProvider(recorder: recorder)
+
+        await #expect(throws: WeatherProviderError.serviceUnavailable) {
+            _ = try await provider.forecast(for: location)
+        }
+        #expect(await recorder.requests.count == 1)
+    }
+
+    @Test("Drops alerts without canonical official detail links")
+    func dropsAlertsWithForeignDetails() async throws {
+        let provider = makeProvider(
+            recorder: NWSRequestRecorder(
+                responses: NWSFixtures.alertDetailsLink("https://example.com/alert/123")
+            )
+        )
+
+        let value = try await provider.forecast(for: location)
+
+        #expect(value.alerts.isEmpty)
+    }
+
+    @Test("Drops alerts without a named official source")
+    func dropsAlertsWithoutSource() async throws {
+        let provider = makeProvider(
+            recorder: NWSRequestRecorder(responses: NWSFixtures.alertSource(""))
+        )
+
+        let value = try await provider.forecast(for: location)
+
+        #expect(value.alerts.isEmpty)
+    }
+
+    @Test("Drops alerts without a displayable official summary")
+    func dropsAlertsWithoutSummary() async throws {
+        let provider = makeProvider(
+            recorder: NWSRequestRecorder(responses: NWSFixtures.alertWithoutSummary)
+        )
+
+        let value = try await provider.forecast(for: location)
+
+        #expect(value.alerts.isEmpty)
     }
 
     @Test func defaultIdentityIsVersionedAndContactable() async throws {
@@ -52,6 +137,8 @@ struct NWSWeatherProviderTests {
         #expect(value.provenance.source == .nws)
         #expect(value.provenance.isFallback == false)
         #expect(value.provenance.attribution == "National Weather Service")
+        #expect(value.provenance.providerAttribution == .nationalWeatherService)
+        #expect(value.provenance.expiresAt.timeIntervalSince(value.provenance.fetchedAt) == 30 * 60)
 
         #expect(abs(value.current.temperatureCelsius - 28) < 0.001)
         #expect(abs(value.current.apparentTemperatureCelsius - 30) < 0.001)
@@ -75,6 +162,54 @@ struct NWSWeatherProviderTests {
         #expect(first.precipitationMM == nil)
         #expect(first.symbolName == "cloud.bolt.rain")
         #expect(abs(first.wind.speedMetersPerSecond - (7.5 * 0.44704)) < 0.001)
+    }
+
+    @Test("NWS snapshots use a deterministic conservative finite expiry")
+    func conservativeFiniteExpiry() async throws {
+        let fetchedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let recorder = NWSRequestRecorder(responses: NWSFixtures.minimumResponses)
+        let provider = NWSWeatherProvider(
+            loader: recorder.load,
+            userAgent: userAgent,
+            astronomy: { _, _, _ in .empty },
+            now: { fetchedAt }
+        )
+
+        let value = try await provider.forecast(for: location)
+
+        #expect(value.provenance.fetchedAt == fetchedAt)
+        #expect(value.provenance.expiresAt == fetchedAt.addingTimeInterval(30 * 60))
+        #expect(value.provenance.expiresAt.timeIntervalSinceReferenceDate.isFinite)
+    }
+
+    @Test("Active alert end time shortens the snapshot validity boundary")
+    func activeAlertShortensSnapshotExpiry() async throws {
+        let provider = makeProvider(
+            recorder: NWSRequestRecorder(
+                responses: NWSFixtures.alertEnd("2026-07-12T11:05:00-05:00")
+            )
+        )
+
+        let value = try await provider.forecast(for: location)
+
+        #expect(value.alerts.count == 1)
+        #expect(value.provenance.expiresAt == NWSFixtures.date(
+            "2026-07-12T11:05:00-05:00"
+        ))
+    }
+
+    @Test("Already ended alerts are not displayed or allowed to shorten new data")
+    func endedAlertIsDropped() async throws {
+        let provider = makeProvider(
+            recorder: NWSRequestRecorder(
+                responses: NWSFixtures.alertEnd("2026-07-12T10:55:00-05:00")
+            )
+        )
+
+        let value = try await provider.forecast(for: location)
+
+        #expect(value.alerts.isEmpty)
+        #expect(value.provenance.expiresAt == fixtureNow.addingTimeInterval(30 * 60))
     }
 
     @Test func usesUpperWindRangeForDailyPeak() async throws {
@@ -412,10 +547,12 @@ struct NWSWeatherProviderTests {
     }
 
     private func makeProvider(recorder: NWSRequestRecorder) -> NWSWeatherProvider {
-        NWSWeatherProvider(
+        let now = fixtureNow
+        return NWSWeatherProvider(
             loader: recorder.load,
             userAgent: userAgent,
-            astronomy: { _, _, _ in .empty }
+            astronomy: { _, _, _ in .empty },
+            now: { now }
         )
     }
 
@@ -531,17 +668,29 @@ private actor NWSRequestRecorder {
         let data: Data
         let statusCode: Int
         let headers: [String: String]
+        let responseURL: URL?
 
         static func json(
             _ json: String,
             statusCode: Int = 200,
-            headers: [String: String] = [:]
+            headers: [String: String] = [:],
+            responseURL: URL? = nil
         ) -> Self {
-            Self(data: Data(json.utf8), statusCode: statusCode, headers: headers)
+            Self(
+                data: Data(json.utf8),
+                statusCode: statusCode,
+                headers: headers,
+                responseURL: responseURL
+            )
         }
 
         static func status(_ statusCode: Int, headers: [String: String] = [:]) -> Self {
-            Self(data: Data(), statusCode: statusCode, headers: headers)
+            Self(
+                data: Data(),
+                statusCode: statusCode,
+                headers: headers,
+                responseURL: nil
+            )
         }
     }
 
@@ -558,7 +707,9 @@ private actor NWSRequestRecorder {
             throw URLError(.resourceUnavailable)
         }
         let response = try #require(HTTPURLResponse(
-            url: request.url ?? URL(string: "https://api.weather.gov")!,
+            url: stub.responseURL
+                ?? request.url
+                ?? URL(string: "https://api.weather.gov")!,
             statusCode: stub.statusCode,
             httpVersion: "HTTP/1.1",
             headerFields: stub.headers
@@ -593,6 +744,88 @@ private enum NWSFixtures {
             "/stations/KPAM/observations/latest": .json(observation),
             "/alerts/active?point=30.294,-86.005": .json(alerts),
         ]
+    }
+
+    static func pointWithForecastHourly(_ url: String) -> [String: Response] {
+        var responses = minimumResponses
+        responses[pointKey] = .json(
+            point.replacingOccurrences(
+                of: "https://api.weather.gov/gridpoints/TAE/50,50/forecast/hourly",
+                with: url
+            )
+        )
+        return responses
+    }
+
+    static func stationLink(_ url: String) -> [String: Response] {
+        var responses = minimumResponses
+        responses["/gridpoints/TAE/50,50/stations"] = .json(
+            stations.replacingOccurrences(
+                of: "https://api.weather.gov/stations/KPAM",
+                with: url
+            )
+        )
+        return responses
+    }
+
+    static func pointResponseRedirected(to url: URL) -> [String: Response] {
+        [
+            pointKey: .json(point, responseURL: url),
+        ]
+    }
+
+    static func alertDetailsLink(_ url: String) -> [String: Response] {
+        var responses = minimumResponses
+        responses["/alerts/active?point=30.294,-86.005"] = .json(
+            alerts
+                .replacingOccurrences(
+                    of: "https://api.weather.gov/alerts/urn:oid:123",
+                    with: url
+                )
+                .replacingOccurrences(
+                    of: "https://api.weather.gov/alerts/feature-123",
+                    with: url
+                )
+        )
+        return responses
+    }
+
+    static func alertSource(_ value: String) -> [String: Response] {
+        var responses = minimumResponses
+        responses["/alerts/active?point=30.294,-86.005"] = .json(
+            alerts.replacingOccurrences(
+                of: #""senderName": "NWS Tallahassee FL""#,
+                with: "\"senderName\": \"\(value)\""
+            )
+        )
+        return responses
+    }
+
+    static var alertWithoutSummary: [String: Response] {
+        var responses = minimumResponses
+        responses["/alerts/active?point=30.294,-86.005"] = .json(
+            alerts
+                .replacingOccurrences(
+                    of: #""event": "Severe Thunderstorm Warning""#,
+                    with: #""event": """#
+                )
+                .replacingOccurrences(
+                    of: #""headline": "Severe Thunderstorm Warning issued July 12","#,
+                    with: ""
+                )
+        )
+        return responses
+    }
+
+    static func alertEnd(_ value: String) -> [String: Response] {
+        var responses = minimumResponses
+        responses["/alerts/active?point=30.294,-86.005"] = .json(
+            alerts.replacingOccurrences(
+                of: "2026-07-12T12:00:00-05:00",
+                with: value
+            )
+        )
+        return responses
     }
 
     static var withoutObservation: [String: Response] {

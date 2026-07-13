@@ -36,7 +36,11 @@ struct SettingsView: View {
             // Turning alerts off should clear any already-scheduled ones, even
             // if the user never re-opens the planner.
             .onChange(of: settings.preferences.enabled) { _, enabled in
-                if !enabled { Task { await BiteAlertNotifier.reschedule([]) } }
+                if !enabled {
+                    Task {
+                        await BiteAlertNotifier.clearAllWeatherDerivedNotifications()
+                    }
+                }
             }
         }
     }

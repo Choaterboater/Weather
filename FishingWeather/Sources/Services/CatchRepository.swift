@@ -104,6 +104,7 @@ final class CatchRepository {
         _ requestedEntry: CatchEntry,
         photoData: Data?,
         thumbnailData: Data?,
+        now: Date,
         to entries: [CatchEntry]
     ) throws -> [CatchEntry] {
         guard !entries.contains(where: { $0.id == requestedEntry.id }) else {
@@ -111,7 +112,7 @@ final class CatchRepository {
         }
         try prepareForMutation()
 
-        var entry = requestedEntry
+        var entry = requestedEntry.preparedForNewPersistence(at: now)
         let filename = photoData == nil ? nil : "\(entry.id.uuidString.lowercased()).jpg"
         entry.photoFilename = filename
         if let filename {

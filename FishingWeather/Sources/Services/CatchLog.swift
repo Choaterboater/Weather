@@ -56,13 +56,18 @@ final class CatchLog {
     /// not as a second persistence API for production views.
     var storagePaths: CatchRepository.Paths { repository.paths }
 
-    func add(_ requestedEntry: CatchEntry, photo: UIImage?) throws {
+    func add(
+        _ requestedEntry: CatchEntry,
+        photo: UIImage?,
+        now: Date = .now
+    ) throws {
         do {
             let photoPayload = try Self.photoPayload(for: photo)
             let updated = try repository.add(
                 requestedEntry,
                 photoData: photoPayload?.photo,
                 thumbnailData: photoPayload?.thumbnail,
+                now: now,
                 to: entries
             )
             entries = updated

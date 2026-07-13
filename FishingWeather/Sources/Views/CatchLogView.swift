@@ -200,7 +200,9 @@ private struct CatchRow: View {
 
     private var subtitle: String {
         var parts = [entry.date.formatted(date: .abbreviated, time: .shortened)]
-        if let pressure = entry.pressureTendency { parts.append("\(pressure) pressure") }
+        if let pressure = entry.attributedPressureTendency {
+            parts.append("\(pressure) pressure")
+        }
         if let spot = entry.spotName { parts.append(spot) }
         return parts.joined(separator: " · ")
     }

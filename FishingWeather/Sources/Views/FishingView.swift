@@ -71,11 +71,13 @@ struct FishingView: View {
     let species: Species
     let reference: FishingDetailReference
     let conditions: FishingConditions
+    let provenance: WeatherProvenance
     let tide: BiteTimeTideSnapshot?
     let activeLocation: CLLocation?
     let hourlySamples: [HourSample]
 
     @State private var showsPatterns = false
+    @State private var forecastExpired = false
 
     private var tunedCatchCount: Int {
         PersonalScoreModel.informingCatchCount(catchLog.entries, species: species)
@@ -83,9 +85,42 @@ struct FishingView: View {
     private var learningCatchCount: Int {
         PersonalScoreModel.sampleCount(catchLog.entries, species: species)
     }
+
     var body: some View {
+        Group {
+            if canDisplayForecast {
+                fishingContent
+            } else {
+                ContentUnavailableView(
+                    "Forecast expired",
+                    systemImage: "clock.badge.exclamationmark",
+                    description: Text("Return to BiteTime for refreshed fishing conditions.")
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding()
+            }
+        }
+        .background(Ink.backdrop)
+        .environment(\.timeZone, reference.forecastTimeZone)
+        .sheet(isPresented: $showsPatterns) {
+            YourPatternsView(
+                insights: PersonalInsightsBuilder.build(from: catchLog.entries, species: species),
+                species: species
+            )
+        }
+        .task(id: provenance.expiresAt) {
+            await enforceExpiryBoundary()
+        }
+    }
+
+    private var fishingContent: some View {
         ScrollView {
             GlassCardStack(spacing: 20) {
+                if let attribution = provenance.providerAttribution {
+                    WeatherSourceAttributionView(attribution: attribution)
+                    ModifiedWeatherDataNotice(attribution: attribution)
+                    ForecastSafetyNotice()
+                }
                 SpeciesFocusCard(species: species)
                 FishingScoreCard(
                     score: reference.score,
@@ -98,7 +133,14 @@ struct FishingView: View {
                 BiteWindowsCard(
                     conditions: conditions,
                     referenceDate: reference.biteWindowsDate,
-                    forecastTimeZone: reference.forecastTimeZone
+                    forecastTimeZone: reference.forecastTimeZone,
+                    provenance: provenance,
+                    notificationScopeKey: activeLocation.map {
+                        WeatherDerivedNotificationScope.key(
+                            latitude: $0.coordinate.latitude,
+                            longitude: $0.coordinate.longitude
+                        )
+                    }
                 )
                 if let tide {
                     TideCard(
@@ -129,14 +171,29 @@ struct FishingView: View {
             .padding(.top, 12)
             .padding(.bottom, 24)
         }
-        .background(Ink.backdrop)
-        .environment(\.timeZone, reference.forecastTimeZone)
-        .sheet(isPresented: $showsPatterns) {
-            YourPatternsView(
-                insights: PersonalInsightsBuilder.build(from: catchLog.entries, species: species),
-                species: species
-            )
+    }
+
+    private var canDisplayForecast: Bool {
+        !forecastExpired && WeatherDerivedContentPolicy.canDisplay(provenance)
+    }
+
+    @MainActor
+    private func enforceExpiryBoundary() async {
+        forecastExpired = false
+        guard let delay = WeatherDerivedContentPolicy.secondsUntilExpiry(
+            provenance
+        ) else {
+            forecastExpired = true
+            return
         }
+        do {
+            try await Task.sleep(for: .seconds(max(delay, 0.01)))
+        } catch {
+            return
+        }
+        guard !Task.isCancelled else { return }
+        forecastExpired = true
+        await BiteAlertNotifier.clearAllWeatherDerivedNotifications()
     }
 }
 
@@ -171,6 +228,8 @@ private struct BiteWindowsCard: View {
     let conditions: FishingConditions
     let referenceDate: Date
     let forecastTimeZone: TimeZone
+    let provenance: WeatherProvenance
+    let notificationScopeKey: String?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var reminderState: ReminderState = .none
@@ -223,45 +282,63 @@ private struct BiteWindowsCard: View {
     @ViewBuilder
     private func reminderControl(at date: Date) -> some View {
         if let next = conditions.nextWindow(after: date) {
-            Group {
-                switch reminderState {
-                case .none:
-                    Button {
-                        Task {
-                            let ok = await BiteWindowNotifier.scheduleReminder(for: next)
-                            reminderState = ok ? .scheduled : .tooLate
+            if WeatherDerivedNotificationPolicy.allows(provenance) {
+                Group {
+                    switch reminderState {
+                    case .none:
+                        Button {
+                            Task {
+                                let ok: Bool
+                                if let notificationScopeKey {
+                                    ok = await BiteWindowNotifier.scheduleReminder(
+                                        for: next,
+                                        provenance: provenance,
+                                        scopeKey: notificationScopeKey
+                                    )
+                                } else {
+                                    ok = false
+                                }
+                                reminderState = ok ? .scheduled : .tooLate
+                            }
+                        } label: {
+                            Label("Remind me 30 min before", systemImage: "bell")
+                                .font(.system(.callout, design: .rounded, weight: .semibold))
                         }
-                    } label: {
-                        Label("Remind me 30 min before", systemImage: "bell")
+                        .buttonStyle(.bordered)
+                    case .scheduled:
+                        Label("Reminder set", systemImage: "bell.fill")
                             .font(.system(.callout, design: .rounded, weight: .semibold))
+                            .foregroundStyle(Ink.bite)
+                            .symbolEffect(
+                                .bounce,
+                                value: !reduceMotion && reminderState == .scheduled
+                            )
+                            .transition(
+                                reduceMotion
+                                    ? .identity
+                                    : .scale.combined(with: .opacity)
+                            )
+                    case .tooLate:
+                        Label("That window is too soon to remind", systemImage: "bell.slash")
+                            .font(.system(.caption, design: .rounded, weight: .medium))
+                            .foregroundStyle(Ink.chartDim)
                     }
-                    .buttonStyle(.bordered)
-                case .scheduled:
-                    Label("Reminder set", systemImage: "bell.fill")
-                        .font(.system(.callout, design: .rounded, weight: .semibold))
-                        .foregroundStyle(Ink.bite)
-                        .symbolEffect(
-                            .bounce,
-                            value: !reduceMotion && reminderState == .scheduled
-                        )
-                        .transition(
-                            reduceMotion
-                                ? .identity
-                                : .scale.combined(with: .opacity)
-                        )
-                case .tooLate:
-                    Label("That window is too soon to remind", systemImage: "bell.slash")
-                        .font(.system(.caption, design: .rounded, weight: .medium))
-                        .foregroundStyle(Ink.chartDim)
                 }
-            }
-            .animation(reduceMotion ? nil : .snappy, value: reminderState)
-            .sensoryFeedback(trigger: reminderState) { _, newValue in
-                switch newValue {
-                case .scheduled: .success
-                case .tooLate: .warning
-                case .none: nil
+                .animation(reduceMotion ? nil : .snappy, value: reminderState)
+                .sensoryFeedback(trigger: reminderState) { _, newValue in
+                    switch newValue {
+                    case .scheduled: .success
+                    case .tooLate: .warning
+                    case .none: nil
+                    }
                 }
+            } else {
+                Label(
+                    "Reminders are available with National Weather Service forecasts.",
+                    systemImage: "bell.slash"
+                )
+                .font(.system(.caption, design: .rounded, weight: .medium))
+                .foregroundStyle(Ink.chartDim)
             }
         }
     }

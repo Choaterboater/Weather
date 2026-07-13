@@ -8,24 +8,30 @@ struct NWSWeatherProvider: WeatherProvider {
         Date,
         Calendar
     ) -> AstronomySnapshot
+    typealias Clock = @Sendable () -> Date
+
+    static let snapshotLifetime: TimeInterval = 30 * 60
 
     private let loader: Loader
     private let userAgent: String
     private let astronomy: AstronomyWorker
+    private let now: Clock
 
     init(
         loader: @escaping Loader = NWSWeatherProvider.liveLoad,
         userAgent: String = AppIdentity.userAgent,
-        astronomy: @escaping AstronomyWorker = { _, _, _ in .empty }
+        astronomy: @escaping AstronomyWorker = { _, _, _ in .empty },
+        now: @escaping Clock = { .now }
     ) {
         self.loader = loader
         self.userAgent = userAgent
         self.astronomy = astronomy
+        self.now = now
     }
 
     func forecast(for location: CLLocation) async throws -> WeatherSnapshot {
         do {
-            let fetchedAt = Date.now
+            let fetchedAt = now()
             let point = try await loadPoint(location)
             let calendar: Calendar = {
                 var value = Calendar(identifier: .gregorian)
@@ -55,7 +61,7 @@ struct NWSWeatherProvider: WeatherProvider {
                     ))
                 }
                 group.addTask {
-                    .alerts(try await self.loadAlerts(location))
+                    .alerts(try await self.loadAlerts(location, at: fetchedAt))
                 }
 
                 do {
@@ -81,6 +87,14 @@ struct NWSWeatherProvider: WeatherProvider {
                 throw WeatherProviderError.decoding("NWS hourly forecast contained no periods")
             }
 
+            let cappedExpiry = fetchedAt.addingTimeInterval(
+                Self.snapshotLifetime
+            )
+            let earliestAlertExpiry = alertValue
+                .compactMap(\.endDate)
+                .filter { $0 > fetchedAt }
+                .min()
+
             return WeatherSnapshot(
                 coordinate: WeatherCoordinate(
                     latitude: location.coordinate.latitude,
@@ -96,7 +110,12 @@ struct NWSWeatherProvider: WeatherProvider {
                     source: .nws,
                     fetchedAt: fetchedAt,
                     isFallback: false,
-                    attribution: "National Weather Service"
+                    attribution: "National Weather Service",
+                    providerAttribution: .nationalWeatherService,
+                    expiresAt: min(
+                        cappedExpiry,
+                        earliestAlertExpiry ?? cappedExpiry
+                    )
                 )
             )
         } catch let cancellation as CancellationError {
@@ -124,6 +143,9 @@ struct NWSWeatherProvider: WeatherProvider {
     }
 
     private func loadHourly(_ url: URL) async throws -> [HourlyWeatherPoint] {
+        guard Self.isCanonicalNWSAPIURL(url, allowsQuery: false) else {
+            throw WeatherProviderError.serviceUnavailable
+        }
         let data = try await data(for: url, notFound: .serviceUnavailable)
         let response = try decode(
             NWSForecastResponse.self,
@@ -138,6 +160,9 @@ struct NWSWeatherProvider: WeatherProvider {
         location: CLLocation,
         calendar: Calendar
     ) async throws -> [DailyWeatherPoint] {
+        guard Self.isCanonicalNWSAPIURL(url, allowsQuery: false) else {
+            throw WeatherProviderError.serviceUnavailable
+        }
         let data = try await data(for: url, notFound: .serviceUnavailable)
         let response = try decode(
             NWSDailyForecastResponse.self,
@@ -153,17 +178,33 @@ struct NWSWeatherProvider: WeatherProvider {
     }
 
     private func loadObservation(_ stationsURL: URL) async throws -> NWSObservationProperties? {
+        guard Self.isCanonicalNWSAPIURL(
+            stationsURL,
+            allowsQuery: false
+        ) else {
+            throw WeatherProviderError.serviceUnavailable
+        }
         guard let stationData = try await optionalData(for: stationsURL),
               let stationURL = try decode(NWSStationCollection.self, from: stationData)
                 .features.first?.id
         else { return nil }
+
+        guard Self.isCanonicalNWSAPIURL(
+            stationURL,
+            allowsQuery: false
+        ) else {
+            throw WeatherProviderError.serviceUnavailable
+        }
 
         let latestURL = stationURL.appending(path: "observations/latest")
         guard let observationData = try await optionalData(for: latestURL) else { return nil }
         return try decode(NWSObservationResponse.self, from: observationData).properties
     }
 
-    private func loadAlerts(_ location: CLLocation) async throws -> [WeatherAlertSnapshot] {
+    private func loadAlerts(
+        _ location: CLLocation,
+        at fetchedAt: Date
+    ) async throws -> [WeatherAlertSnapshot] {
         var components = URLComponents(string: "https://api.weather.gov/alerts/active")
         components?.queryItems = [
             URLQueryItem(name: "point", value: Self.coordinateString(location)),
@@ -177,7 +218,11 @@ struct NWSWeatherProvider: WeatherProvider {
             NWSAlertCollection.self,
             from: data
         )
-        return response.features.map(Self.alert)
+        return response.features
+            .compactMap(Self.alert)
+            .filter { alert in
+                alert.endDate.map { $0 > fetchedAt } ?? true
+            }
     }
 
     private func data(
@@ -198,12 +243,17 @@ struct NWSWeatherProvider: WeatherProvider {
         for url: URL,
         notFound: WeatherProviderError?
     ) async throws -> Data? {
+        guard Self.isCanonicalNWSAPIURL(url, allowsQuery: true) else {
+            throw WeatherProviderError.serviceUnavailable
+        }
         var request = URLRequest(url: url)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("application/geo+json", forHTTPHeaderField: "Accept")
 
         let (data, response) = try await loader(request)
-        guard let httpResponse = response as? HTTPURLResponse else {
+        guard let httpResponse = response as? HTTPURLResponse,
+              let finalURL = httpResponse.url,
+              Self.isCanonicalNWSAPIURL(finalURL, allowsQuery: true) else {
             throw WeatherProviderError.serviceUnavailable
         }
 
@@ -365,9 +415,14 @@ struct NWSWeatherProvider: WeatherProvider {
             }
     }
 
-    private static func alert(_ feature: NWSAlertFeature) -> WeatherAlertSnapshot {
+    private static func alert(_ feature: NWSAlertFeature) -> WeatherAlertSnapshot? {
         let properties = feature.properties
-        let detailsURL = validHTTPURL(properties.detailsIdentifier) ?? validHTTPURL(feature.id)
+        guard let source = properties.senderName.nonEmpty,
+              let summary = properties.headline.nonEmpty
+                ?? properties.event.nonEmpty,
+              let detailsURL = canonicalNWSAPIURL(properties.detailsIdentifier)
+                ?? canonicalNWSAPIURL(feature.id)
+        else { return nil }
         let identifier = properties.id.nonEmpty
             ?? feature.id.nonEmpty
             ?? properties.detailsIdentifier.nonEmpty
@@ -377,8 +432,8 @@ struct NWSWeatherProvider: WeatherProvider {
 
         return WeatherAlertSnapshot(
             id: identifier,
-            summary: properties.headline.nonEmpty ?? properties.event,
-            source: properties.senderName,
+            summary: summary,
+            source: source,
             severity: properties.severity,
             startDate: date(properties.onset) ?? date(properties.effective),
             endDate: date(properties.ends) ?? date(properties.expires),
@@ -558,12 +613,32 @@ struct NWSWeatherProvider: WeatherProvider {
         return standard.date(from: value)
     }
 
-    private static func validHTTPURL(_ value: String?) -> URL? {
-        guard let value, let url = URL(string: value),
-              ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
-              url.host != nil
+    private static func canonicalNWSAPIURL(_ value: String?) -> URL? {
+        guard let value,
+              let url = URL(string: value),
+              isCanonicalNWSAPIURL(url, allowsQuery: false)
         else { return nil }
         return url
+    }
+
+    fileprivate static func isCanonicalNWSAPIURL(
+        _ url: URL,
+        allowsQuery: Bool
+    ) -> Bool {
+        guard let components = URLComponents(
+            url: url,
+            resolvingAgainstBaseURL: false
+        ),
+        components.scheme?.lowercased() == "https",
+        components.host?.lowercased() == "api.weather.gov",
+        components.user == nil,
+        components.password == nil,
+        components.port == nil,
+        components.fragment == nil,
+        components.path.hasPrefix("/")
+        else { return false }
+
+        return allowsQuery || components.query == nil
     }
 
     private static func retryAfter(_ value: String?) -> TimeInterval? {
@@ -579,7 +654,34 @@ struct NWSWeatherProvider: WeatherProvider {
     }
 
     private static func liveLoad(_ request: URLRequest) async throws -> (Data, URLResponse) {
-        try await URLSession.shared.data(for: request)
+        try await URLSession.shared.data(
+            for: request,
+            delegate: NWSCanonicalRedirectDelegate()
+        )
+    }
+}
+
+private final class NWSCanonicalRedirectDelegate:
+    NSObject,
+    URLSessionTaskDelegate,
+    @unchecked Sendable
+{
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        guard let url = request.url,
+              NWSWeatherProvider.isCanonicalNWSAPIURL(
+                url,
+                allowsQuery: true
+              ) else {
+            completionHandler(nil)
+            return
+        }
+        completionHandler(request)
     }
 }
 
