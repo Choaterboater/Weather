@@ -183,11 +183,11 @@ enum WeatherKitAdapter {
             }
         }
 
-        let error = error as NSError
+        let nsError = error as NSError
         let description = [
-            error.domain,
-            error.localizedDescription,
-            error.localizedFailureReason,
+            nsError.domain,
+            nsError.localizedDescription,
+            nsError.localizedFailureReason,
         ]
             .compactMap { $0 }
             .joined(separator: " ")
@@ -205,10 +205,7 @@ enum WeatherKitAdapter {
         if authenticationMarkers.contains(where: description.contains) {
             return .authentication
         }
-        if error.domain == NSURLErrorDomain {
-            return .network(error.localizedDescription)
-        }
-        return .network(error.localizedDescription)
+        return WeatherProviderError.from(error)
     }
 
     static func current(_ weather: CurrentWeather) -> CurrentConditionsSnapshot {

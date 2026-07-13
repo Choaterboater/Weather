@@ -2,6 +2,18 @@ import Foundation
 import CoreLocation
 import SwiftUI
 
+/// One immutable forecast reference shared by every Fishing Details card.
+/// Keeping the card-specific names makes accidental wall-clock regressions
+/// visible in tests and at each call site.
+struct FishingDetailReference: Equatable, Sendable {
+    let referenceDate: Date
+    let forecastTimeZone: TimeZone
+
+    var biteWindowsDate: Date { referenceDate }
+    var tideDate: Date { referenceDate }
+    var pressureDate: Date { referenceDate }
+}
+
 struct FishingView: View {
     @Environment(CatchLog.self) private var catchLog
 
@@ -11,6 +23,8 @@ struct FishingView: View {
     let tide: BiteTimeTideSnapshot?
     let activeLocation: CLLocation?
     let hourlySamples: [HourSample]
+    let referenceDate: Date
+    let forecastTimeZone: TimeZone
 
     @State private var showsPatterns = false
 
@@ -19,6 +33,12 @@ struct FishingView: View {
     }
     private var learningCatchCount: Int {
         PersonalScoreModel.sampleCount(catchLog.entries, species: species)
+    }
+    private var detailReference: FishingDetailReference {
+        FishingDetailReference(
+            referenceDate: referenceDate,
+            forecastTimeZone: forecastTimeZone
+        )
     }
 
     var body: some View {
@@ -32,7 +52,10 @@ struct FishingView: View {
                     learningThreshold: PersonalScoreModel.minCatches,
                     onTapTuned: { showsPatterns = true }
                 )
-                BiteWindowsCard(conditions: conditions)
+                BiteWindowsCard(
+                    conditions: conditions,
+                    referenceDate: detailReference.biteWindowsDate
+                )
                 if let tide {
                     TideCard(
                         events: tide.events,
@@ -40,12 +63,18 @@ struct FishingView: View {
                         stationName: tide.stationName,
                         distanceMiles: tide.distanceMiles,
                         isLoading: tide.isLoading,
-                        lastError: tide.lastError
+                        lastError: tide.lastError,
+                        referenceDate: detailReference.tideDate
                     )
+                    .environment(\.timeZone, detailReference.forecastTimeZone)
                 } else if let activeLocation {
                     WaterConditionsCard(location: activeLocation)
                 }
-                PressureCard(reading: conditions.pressure, samples: hourlySamples)
+                PressureCard(
+                    reading: conditions.pressure,
+                    samples: hourlySamples,
+                    referenceDate: detailReference.pressureDate
+                )
                 SolunarDetailsCard(conditions: conditions)
             }
             .padding(.horizontal)
@@ -53,6 +82,7 @@ struct FishingView: View {
             .padding(.bottom, 24)
         }
         .background(Ink.backdrop)
+        .environment(\.timeZone, detailReference.forecastTimeZone)
         .sheet(isPresented: $showsPatterns) {
             YourPatternsView(
                 insights: PersonalInsightsBuilder.build(from: catchLog.entries, species: species),
@@ -91,6 +121,7 @@ private struct SpeciesFocusCard: View {
 
 private struct BiteWindowsCard: View {
     let conditions: FishingConditions
+    let referenceDate: Date
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var reminderState: ReminderState = .none
@@ -101,27 +132,30 @@ private struct BiteWindowsCard: View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: "Bite Windows", systemImage: "timer")
             GlassCard {
-                TimelineView(.periodic(from: .now, by: 60)) { context in
-                    VStack(alignment: .leading, spacing: 14) {
-                        headline(at: context.date)
-                        if conditions.windows.isEmpty {
-                            Text("No solunar windows for today (moonrise/moonset unavailable).")
-                                .font(.system(.body, design: .rounded))
-                                .foregroundStyle(Ink.chartDim)
-                        } else {
-                            BiteWindowsTimeline(windows: conditions.windows, now: context.date)
-                            ForEach(conditions.windows) { window in
-                                BiteWindowRow(window: window, now: context.date)
-                            }
-                            reminderControl(at: context.date)
+                VStack(alignment: .leading, spacing: 14) {
+                    headline(at: referenceDate)
+                    if conditions.windows.isEmpty {
+                        Text("No solunar windows for this forecast day (moonrise/moonset unavailable).")
+                            .font(.system(.body, design: .rounded))
+                            .foregroundStyle(Ink.chartDim)
+                    } else {
+                        BiteWindowsTimeline(
+                            windows: conditions.windows,
+                            now: referenceDate
+                        )
+                        ForEach(conditions.windows) { window in
+                            BiteWindowRow(window: window, now: referenceDate)
                         }
+                        reminderControl(at: referenceDate)
                     }
                 }
             }
         }
         // The card outlives its windows (weather refresh, spot switch): a
         // "Reminder set" badge must not survive for a window it never covered.
-        .onChange(of: conditions.nextWindow()?.start) { reminderState = .none }
+        .onChange(of: conditions.nextWindow(after: referenceDate)?.start) {
+            reminderState = .none
+        }
     }
 
     @ViewBuilder
@@ -207,7 +241,7 @@ private struct BiteWindowsCard: View {
 
 private struct BiteWindowRow: View {
     let window: BiteWindow
-    var now: Date = .now
+    let now: Date
 
     private var isActive: Bool { window.isActive(at: now) }
 
@@ -253,6 +287,7 @@ private struct BiteWindowRow: View {
 private struct PressureCard: View {
     let reading: PressureReading
     var samples: [HourSample] = []
+    let referenceDate: Date
 
     private var pressureText: String {
         reading.pressure?.formatted(
@@ -296,7 +331,10 @@ private struct PressureCard: View {
                         .font(.system(.body, design: .rounded))
                         .foregroundStyle(Ink.chartDim)
                     if samples.compactMap(\.pressureHPa).count > 1 {
-                        PressureTrendChart(samples: samples, now: .now)
+                        PressureTrendChart(
+                            samples: samples,
+                            now: referenceDate
+                        )
                             .padding(.top, 4)
                     }
                 }

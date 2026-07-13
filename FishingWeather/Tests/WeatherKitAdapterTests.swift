@@ -91,14 +91,19 @@ struct WeatherKitAdapterTests {
         #expect(WeatherKitAdapter.providerError(listenerFailure) == .authentication)
     }
 
-    @Test func classifiesURLFailuresAsNetworkErrors() {
-        let failure = URLError(.notConnectedToInternet)
-
-        guard case let .network(message) = WeatherKitAdapter.providerError(failure) else {
-            Issue.record("Expected a network error")
-            return
-        }
-        #expect(message?.isEmpty == false)
+    @Test func classifiesOnlyPositiveConnectivityLossAsOffline() {
+        #expect(
+            WeatherKitAdapter.providerError(URLError(.notConnectedToInternet))
+                == .network("offline")
+        )
+        #expect(
+            WeatherKitAdapter.providerError(URLError(.timedOut))
+                == .serviceUnavailable
+        )
+        #expect(
+            WeatherKitAdapter.providerError(WeatherKitFixtureError.unknown)
+                == .serviceUnavailable
+        )
     }
 
     @Test func providerPreservesCancellation() async {
@@ -129,4 +134,8 @@ struct WeatherKitAdapterTests {
             Issue.record("Expected URLError.cancelled, got \(error)")
         }
     }
+}
+
+private enum WeatherKitFixtureError: Error {
+    case unknown
 }

@@ -148,12 +148,9 @@ private enum BiteTimePreviewFixture {
                         attribution: "Apple Weather"
                     )
                 case .nws:
-                    return snapshot(
-                        source: .nws,
-                        fetchedAt: now.addingTimeInterval(-8 * 60),
-                        isFallback: true,
-                        attribution: "National Weather Service"
-                    )
+                    return try await BiteTimePreviewProviderChainFixture
+                        .run()
+                        .snapshot
                 case .cache:
                     return snapshot(
                         source: .cache,
@@ -164,8 +161,8 @@ private enum BiteTimePreviewFixture {
                 case .authentication:
                     throw WeatherProviderError.authentication
                 case .network:
-                    throw WeatherProviderError.network(
-                        "The preview device is offline."
+                    throw WeatherProviderError.from(
+                        URLError(.notConnectedToInternet)
                     )
                 case .rateLimited:
                     throw WeatherProviderError.rateLimited(retryAfter: 45)
@@ -297,6 +294,67 @@ private enum BiteTimePreviewFixture {
     }
 }
 
+struct BiteTimePreviewProviderChainResult: Sendable {
+    let snapshot: WeatherSnapshot
+    let attempts: [String]
+}
+
+/// The permanent NWS preview executes the same ordered provider-chain contract
+/// as production. The attempt trace makes a direct pre-marked NWS snapshot an
+/// observable test regression instead of an equivalent-looking shortcut.
+enum BiteTimePreviewProviderChainFixture {
+    static func run() async throws -> BiteTimePreviewProviderChainResult {
+        let recorder = BiteTimePreviewProviderAttemptRecorder()
+        let fallback = BiteTimePreviewFixture.snapshot(
+            source: .nws,
+            fetchedAt: BiteTimePreviewFixture.now.addingTimeInterval(-8 * 60),
+            isFallback: false,
+            attribution: "National Weather Service"
+        )
+        let snapshot = try await WeatherProviderChain(providers: [
+            BiteTimePreviewAuthenticationProvider(recorder: recorder),
+            BiteTimePreviewNWSProvider(recorder: recorder, snapshot: fallback),
+        ]).forecast(for: BiteTimePreviewFixture.location)
+        return BiteTimePreviewProviderChainResult(
+            snapshot: snapshot,
+            attempts: await recorder.recordedAttempts()
+        )
+    }
+
+    static func nwsSnapshot() async throws -> WeatherSnapshot {
+        try await run().snapshot
+    }
+}
+
+private actor BiteTimePreviewProviderAttemptRecorder {
+    private var attempts: [String] = []
+
+    func record(_ provider: String) {
+        attempts.append(provider)
+    }
+
+    func recordedAttempts() -> [String] { attempts }
+}
+
+private struct BiteTimePreviewAuthenticationProvider: WeatherProvider {
+    let recorder: BiteTimePreviewProviderAttemptRecorder
+
+    func forecast(for location: CLLocation) async throws -> WeatherSnapshot {
+        await recorder.record("WeatherKit")
+        throw WeatherProviderError.authentication
+    }
+}
+
+private struct BiteTimePreviewNWSProvider: WeatherProvider {
+    let recorder: BiteTimePreviewProviderAttemptRecorder
+    let snapshot: WeatherSnapshot
+
+    func forecast(for location: CLLocation) async throws -> WeatherSnapshot {
+        await recorder.record("NWS")
+        return snapshot
+    }
+}
+
 private struct DebugBiteTime: View {
     private let mode: BiteTimePreviewMode
     @State private var weatherStore: WeatherStore
@@ -323,7 +381,17 @@ private struct DebugBiteTime: View {
         _locationManager = State(initialValue: locationManager)
 
         let spotStore = SpotStore()
-        spotStore.select(nil)
+        if mode == .nws {
+            spotStore.activate(FishingSpot(
+                name: "St. Petersburg Pier",
+                location: BiteTimePreviewFixture.location,
+                waterType: .saltwater,
+                kind: .pier,
+                stateCode: "FL"
+            ))
+        } else {
+            spotStore.select(nil)
+        }
         _spotStore = State(initialValue: spotStore)
 
         let catchDirectory = FileManager.default.temporaryDirectory
@@ -588,8 +656,14 @@ private struct DebugTideCard: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                TideCard(events: events, samples: samples,
-                         stationName: "Fort De Soto", distanceMiles: 3, isLoading: false)
+                TideCard(
+                    events: events,
+                    samples: samples,
+                    stationName: "Fort De Soto",
+                    distanceMiles: 3,
+                    isLoading: false,
+                    referenceDate: start
+                )
             }
             .padding(.horizontal)
             .padding(.top, 20)

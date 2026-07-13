@@ -36,8 +36,27 @@ final class GlassPassUITests: XCTestCase {
         XCTAssertFalse(location.label.contains("27.7634"), "Coordinates leaked into the location title")
         snap(name: "task-11-bite-time-nws-normal-top")
 
-        let bait = app.descendants(matching: .any)["bitetime.bestBait"]
+        let bait = app.descendants(matching: .any)
+            .matching(identifier: "bitetime.bestBait")
+            .firstMatch
+        let baitHeading = app.staticTexts["Best Bait Today"].firstMatch
         XCTAssertTrue(bait.waitForExistence(timeout: 5), "Best Bait Today is missing")
+        XCTAssertTrue(baitHeading.waitForExistence(timeout: 3))
+        XCTAssertLessThan(
+            hero.frame.maxY,
+            baitHeading.frame.minY,
+            "Best Bait Today must immediately follow the BiteTime decision"
+        )
+        XCTAssertLessThan(
+            baitHeading.frame.maxY,
+            source.frame.minY,
+            "Source/error content must follow Best Bait Today"
+        )
+        XCTAssertEqual(
+            location.value as? String,
+            "Pier · FL",
+            "VoiceOver must retain the saved spot kind and state"
+        )
         let timelineSwitch = app.buttons["bitetime.timeline"]
         let proSwitch = app.buttons["bitetime.proForecast"]
         XCTAssertTrue(timelineSwitch.waitForExistence(timeout: 5))
@@ -85,13 +104,17 @@ final class GlassPassUITests: XCTestCase {
         let hero = app.descendants(matching: .any)["bitetime.hero"]
         let source = app.descendants(matching: .any)["bitetime.source"]
         XCTAssertTrue(hero.waitForExistence(timeout: 15), "Accessibility preview did not load")
+        let screen = app.windows.firstMatch.frame
+        assertContainedHorizontally(hero, in: screen)
+        snap(name: "task-11-bite-time-live-accessibility-top")
+
+        // Best Bait intentionally sits between the hero and provenance. At
+        // accessibility XXXL, reveal the lazy source content before reading it.
+        reveal(source, in: app)
         XCTAssertTrue(source.waitForExistence(timeout: 5))
         XCTAssertEqual(source.label, "Apple Weather")
 
-        let screen = app.windows.firstMatch.frame
-        assertContainedHorizontally(hero, in: screen)
         assertContainedHorizontally(source, in: screen)
-        snap(name: "task-11-bite-time-live-accessibility-top")
 
         let timelineSwitch = app.buttons["bitetime.timeline"]
         let proSwitch = app.buttons["bitetime.proForecast"]

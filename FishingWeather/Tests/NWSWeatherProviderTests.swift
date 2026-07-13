@@ -363,6 +363,39 @@ struct NWSWeatherProviderTests {
         }
     }
 
+    @Test func mapsPositiveConnectivityLossToOffline() async {
+        let provider = NWSWeatherProvider(
+            loader: { _ in throw URLError(.notConnectedToInternet) },
+            userAgent: userAgent
+        )
+
+        await #expect(throws: WeatherProviderError.network("offline")) {
+            _ = try await provider.forecast(for: location)
+        }
+    }
+
+    @Test func mapsTimeoutToServiceUnavailable() async {
+        let provider = NWSWeatherProvider(
+            loader: { _ in throw URLError(.timedOut) },
+            userAgent: userAgent
+        )
+
+        await #expect(throws: WeatherProviderError.serviceUnavailable) {
+            _ = try await provider.forecast(for: location)
+        }
+    }
+
+    @Test func mapsGenericTransportFailureToServiceUnavailable() async {
+        let provider = NWSWeatherProvider(
+            loader: { _ in throw NWSFixtureError.unknown },
+            userAgent: userAgent
+        )
+
+        await #expect(throws: WeatherProviderError.serviceUnavailable) {
+            _ = try await provider.forecast(for: location)
+        }
+    }
+
     private func makeProvider(recorder: NWSRequestRecorder) -> NWSWeatherProvider {
         NWSWeatherProvider(
             loader: recorder.load,
@@ -386,6 +419,10 @@ struct NWSWeatherProviderTests {
             Issue.record("Expected WeatherProviderError, got \(error)")
         }
     }
+}
+
+private enum NWSFixtureError: Error {
+    case unknown
 }
 
 private struct NWSFailFastGate: Sendable {

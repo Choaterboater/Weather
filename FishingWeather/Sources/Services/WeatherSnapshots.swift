@@ -138,10 +138,34 @@ actor WeatherSnapshots {
 /// Final provider in the fallback chain. It deliberately preserves the
 /// original fetch time while identifying the delivery source as the cache.
 struct CachedWeatherProvider: WeatherProvider {
+    typealias Clock = @Sendable () -> Date
+
+    static let defaultMaxAge: TimeInterval = 24 * 3_600
+
     let cache: WeatherSnapshots
+    let maxAge: TimeInterval
+    private let now: Clock
+
+    init(
+        cache: WeatherSnapshots,
+        maxAge: TimeInterval = Self.defaultMaxAge,
+        now: @escaping Clock = { .now }
+    ) {
+        self.cache = cache
+        self.maxAge = maxAge
+        self.now = now
+    }
 
     func forecast(for location: CLLocation) async throws -> WeatherSnapshot {
         guard let persisted = await cache.load(for: location) else {
+            throw WeatherProviderError.serviceUnavailable
+        }
+
+        let age = now().timeIntervalSince(persisted.provenance.fetchedAt)
+        guard maxAge.isFinite,
+              maxAge >= 0,
+              age >= 0,
+              age <= maxAge else {
             throw WeatherProviderError.serviceUnavailable
         }
 

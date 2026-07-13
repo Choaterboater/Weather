@@ -15,11 +15,14 @@ struct TideCard: View {
     let distanceMiles: Double?
     let isLoading: Bool
     var lastError: String? = nil
-    var now: Date = .now
+    var referenceDate: Date = .now
 
     private var chartDomain: ClosedRange<Date> {
-        Self.visibleChartDomain(events: events, samples: samples, now: now)
-            ?? now...now
+        Self.visibleChartDomain(
+            events: events,
+            samples: samples,
+            referenceDate: referenceDate
+        ) ?? referenceDate...referenceDate
     }
 
     private var chartSamples: [TideSample] {
@@ -108,8 +111,8 @@ struct TideCard: View {
                         }
                     }
                 }
-                if Self.shouldShowNow(now, in: chartDomain) {
-                    RuleMark(x: .value("Now", now))
+                if Self.shouldShowReferenceDate(referenceDate, in: chartDomain) {
+                    RuleMark(x: .value("Selected time", referenceDate))
                         .foregroundStyle(Ink.hullLine.opacity(0.7))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                 }
@@ -163,19 +166,14 @@ struct TideCard: View {
             }
             details.append(eventDetails.joined(separator: "; "))
         }
-        if Self.shouldShowNow(now, in: chartDomain) {
-            details.append("Current time \(shortTime(now))")
+        if Self.shouldShowReferenceDate(referenceDate, in: chartDomain) {
+            details.append("Selected time \(shortTime(referenceDate))")
         }
         return details.joined(separator: ". ")
     }
 
     private func shortTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = locale
-        formatter.timeZone = timeZone
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+        Self.eventTimeLabel(date, locale: locale, timeZone: timeZone)
     }
 
     private func chartTimeLabel(_ date: Date) -> String {
@@ -195,10 +193,25 @@ struct TideCard: View {
         return formatter.string(from: date)
     }
 
+    /// Event rows, chart summaries, and injected preview time zones all share
+    /// this formatter so one tide instant cannot display as two local times.
+    nonisolated static func eventTimeLabel(
+        _ date: Date,
+        locale: Locale,
+        timeZone: TimeZone
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
     nonisolated static func visibleChartDomain(
         events: [TideEvent],
         samples: [TideSample],
-        now: Date
+        referenceDate: Date
     ) -> ClosedRange<Date>? {
         let eventTimes = events.map(\.time)
         if let firstEvent = eventTimes.min(),
@@ -211,8 +224,8 @@ struct TideCard: View {
 
         guard !samples.isEmpty else { return nil }
         let halfDay: TimeInterval = 12 * 3_600
-        let lowerBound = now.addingTimeInterval(-halfDay)
-        let upperBound = now.addingTimeInterval(halfDay)
+        let lowerBound = referenceDate.addingTimeInterval(-halfDay)
+        let upperBound = referenceDate.addingTimeInterval(halfDay)
         return lowerBound...upperBound
     }
 
@@ -234,11 +247,11 @@ struct TideCard: View {
         }
     }
 
-    nonisolated static func shouldShowNow(
-        _ now: Date,
+    nonisolated static func shouldShowReferenceDate(
+        _ referenceDate: Date,
         in domain: ClosedRange<Date>
     ) -> Bool {
-        domain.contains(now)
+        domain.contains(referenceDate)
     }
 
     private var eventsList: some View {
@@ -279,7 +292,7 @@ struct TideCard: View {
     }
 
     private func eventTime(_ event: TideEvent) -> some View {
-        Text(event.time.formatted(date: .omitted, time: .shortened))
+        Text(Self.eventTimeLabel(event.time, locale: locale, timeZone: timeZone))
             .font(.system(.subheadline, design: .rounded, weight: .medium))
             .monospacedDigit()
             .foregroundStyle(Ink.chart)

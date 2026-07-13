@@ -40,6 +40,50 @@ struct FishingConditions {
         )
     }
 
+    /// Builds the detail facts for the exact hour selected on BiteTime's
+    /// shared forecast timeline. The daily astronomy lookup uses the
+    /// provider's forecast calendar so a selected hour near midnight cannot
+    /// accidentally inherit today's sun and moon facts from the device clock.
+    static func make(
+        snapshot: WeatherSnapshot,
+        forecastPoint: ForecastPoint,
+        calendar: Calendar
+    ) -> FishingConditions {
+        let selectedDayAstronomy = snapshot.daily.first { day in
+            calendar.isDate(day.date, inSameDayAs: forecastPoint.date)
+        }?.astronomy
+        let astronomy = selectedDayAstronomy
+            ?? (calendar.isDate(
+                snapshot.current.date,
+                inSameDayAs: forecastPoint.date
+            ) ? snapshot.astronomy : .empty)
+        return FishingConditions(
+            pressure: PressureReading.analyze(
+                nowHPa: forecastPoint.weather.pressureHPa,
+                history: snapshot.hourly.compactMap { point in
+                    point.pressureHPa.map { (date: point.date, hPa: $0) }
+                },
+                now: forecastPoint.date,
+                fallback: .steady
+            ),
+            windows: SolunarCalculator.windows(
+                moonrise: astronomy.moonrise,
+                moonset: astronomy.moonset,
+                on: forecastPoint.date,
+                calendar: calendar
+            ),
+            moonPhase: LunarPhase(
+                cycleFraction: astronomy.moonPhaseFraction
+            ),
+            sunrise: astronomy.sunrise,
+            sunset: astronomy.sunset,
+            moonrise: astronomy.moonrise,
+            moonset: astronomy.moonset,
+            wind: forecastPoint.weather.wind,
+            uvIndex: forecastPoint.weather.uvIndex
+        )
+    }
+
     func activeWindow(at date: Date = .now) -> BiteWindow? {
         windows.first { $0.isActive(at: date) }
     }

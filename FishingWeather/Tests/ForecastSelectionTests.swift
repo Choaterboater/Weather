@@ -4,6 +4,152 @@ import Testing
 
 @Suite("Forecast selection")
 struct ForecastSelectionTests {
+    @Test("Fishing conditions use the exact selected hour and forecast day")
+    func fishingConditionsUseSelectedForecastReference() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(
+            TimeZone(identifier: "America/Chicago")
+        )
+        let currentDate = try #require(calendar.date(
+            from: DateComponents(year: 2030, month: 7, day: 13, hour: 9)
+        ))
+        let selectedDate = try #require(calendar.date(
+            from: DateComponents(year: 2030, month: 7, day: 14, hour: 15)
+        ))
+        let selectedAstronomy = AstronomySnapshot(
+            sunrise: calendar.date(
+                from: DateComponents(year: 2030, month: 7, day: 14, hour: 6)
+            ),
+            sunset: calendar.date(
+                from: DateComponents(year: 2030, month: 7, day: 14, hour: 20)
+            ),
+            moonrise: calendar.date(
+                from: DateComponents(year: 2030, month: 7, day: 14, hour: 22)
+            ),
+            moonset: calendar.date(
+                from: DateComponents(year: 2030, month: 7, day: 14, hour: 8)
+            ),
+            moonTransit: nil,
+            moonPhaseFraction: 0.5
+        )
+        let selectedWind = WindSnapshot(
+            directionDegrees: 315,
+            speedMetersPerSecond: 9,
+            gustMetersPerSecond: 14
+        )
+        let selectedPoint = ForecastPoint.fixture(
+            date: selectedDate,
+            pressureHPa: 1_001,
+            uvIndex: 8,
+            windDirectionDegrees: selectedWind.directionDegrees,
+            windSpeedMetersPerSecond: selectedWind.speedMetersPerSecond,
+            windGustMetersPerSecond: selectedWind.gustMetersPerSecond
+        )
+        let snapshot = WeatherSnapshot.fixture(
+            now: currentDate,
+            hourly: [
+                .fixture(
+                    date: selectedDate.addingTimeInterval(-3 * 3_600),
+                    pressureHPa: 1_010
+                ),
+                selectedPoint.weather,
+            ],
+            astronomy: AstronomySnapshot(
+                sunrise: currentDate.addingTimeInterval(-3 * 3_600),
+                sunset: currentDate.addingTimeInterval(9 * 3_600),
+                moonrise: nil,
+                moonset: nil,
+                moonTransit: nil,
+                moonPhaseFraction: 0
+            ),
+            daily: [
+                .fixture(date: currentDate, astronomy: .empty),
+                .fixture(date: selectedDate, astronomy: selectedAstronomy),
+            ]
+        )
+
+        let value = FishingConditions.make(
+            snapshot: snapshot,
+            forecastPoint: selectedPoint,
+            calendar: calendar
+        )
+
+        #expect(
+            value.pressure.pressure?.converted(to: .hectopascals).value
+                == selectedPoint.weather.pressureHPa
+        )
+        #expect(value.pressure.tendency == .falling)
+        #expect(value.wind == selectedWind)
+        #expect(value.uvIndex == selectedPoint.weather.uvIndex)
+        #expect(value.sunrise == selectedAstronomy.sunrise)
+        #expect(value.sunset == selectedAstronomy.sunset)
+        #expect(value.moonrise == selectedAstronomy.moonrise)
+        #expect(value.moonset == selectedAstronomy.moonset)
+        #expect(value.moonPhase == .full)
+        #expect(value.windows.contains { $0.peak == selectedAstronomy.moonrise })
+    }
+
+    @Test("A future day without astronomy never borrows the current day's sky facts")
+    func missingFutureAstronomyDoesNotUseCurrentAstronomy() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .gmt
+        let currentDate = try #require(calendar.date(
+            from: DateComponents(year: 2030, month: 7, day: 13, hour: 9)
+        ))
+        let selectedDate = try #require(calendar.date(
+            from: DateComponents(year: 2030, month: 7, day: 14, hour: 15)
+        ))
+        let currentAstronomy = AstronomySnapshot(
+            sunrise: currentDate.addingTimeInterval(-3 * 3_600),
+            sunset: currentDate.addingTimeInterval(9 * 3_600),
+            moonrise: currentDate.addingTimeInterval(12 * 3_600),
+            moonset: currentDate.addingTimeInterval(-6 * 3_600),
+            moonTransit: nil,
+            moonPhaseFraction: 0.5
+        )
+        let selectedPoint = ForecastPoint.fixture(date: selectedDate)
+        let snapshot = WeatherSnapshot.fixture(
+            now: currentDate,
+            hourly: [selectedPoint.weather],
+            astronomy: currentAstronomy,
+            daily: [
+                .fixture(date: currentDate, astronomy: currentAstronomy),
+                .fixture(date: selectedDate, astronomy: nil),
+            ]
+        )
+
+        let value = FishingConditions.make(
+            snapshot: snapshot,
+            forecastPoint: selectedPoint,
+            calendar: calendar
+        )
+
+        #expect(value.sunrise == nil)
+        #expect(value.sunset == nil)
+        #expect(value.moonrise == nil)
+        #expect(value.moonset == nil)
+        #expect(value.moonPhase == .unknown)
+        #expect(value.windows.isEmpty)
+    }
+
+    @Test("Fishing detail cards share the selected forecast reference")
+    func fishingDetailCardsShareSelectedReference() throws {
+        let selectedDate = Date(timeIntervalSince1970: 1_900_000_000)
+        let forecastTimeZone = try #require(
+            TimeZone(identifier: "Pacific/Honolulu")
+        )
+
+        let reference = FishingDetailReference(
+            referenceDate: selectedDate,
+            forecastTimeZone: forecastTimeZone
+        )
+
+        #expect(reference.biteWindowsDate == selectedDate)
+        #expect(reference.tideDate == selectedDate)
+        #expect(reference.pressureDate == selectedDate)
+        #expect(reference.forecastTimeZone == forecastTimeZone)
+    }
+
     @Test func snapsToNearestHour() {
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         let points = [0, 1, 2].map {

@@ -65,12 +65,36 @@ struct WeatherProviderChainTests {
         }
     }
 
+    @Test("Only positively identified connectivity loss is offline")
+    func offlineClassificationIsConservative() {
+        #expect(
+            WeatherProviderError.from(URLError(.notConnectedToInternet)).isOffline
+        )
+        #expect(!WeatherProviderError.from(URLError(.timedOut)).isOffline)
+        #expect(!WeatherProviderError.from(FixtureError.unknown).isOffline)
+    }
+
+    @Test("Untyped provider failures become service outages, not offline errors")
+    func untypedProviderFailureIsServiceUnavailable() async {
+        let genericFailure = StubProvider(result: .failure(FixtureError.unknown))
+
+        await #expect(throws: WeatherProviderError.allProvidersFailed([
+            WeatherProviderFailure(
+                provider: "StubProvider",
+                error: .serviceUnavailable
+            ),
+        ])) {
+            _ = try await WeatherProviderChain(providers: [genericFailure])
+                .forecast(for: CLLocation(latitude: 30.29, longitude: -86.00))
+        }
+    }
+
     @Test func aggregatesFailuresInAttemptOrder() async {
         let typedFailure = StubProvider(result: .failure(WeatherProviderError.authentication))
-        let genericFailure = StubProvider(result: .failure(FixtureError.offline))
+        let genericFailure = StubProvider(result: .failure(FixtureError.unknown))
         let expected = WeatherProviderError.allProvidersFailed([
             WeatherProviderFailure(provider: "StubProvider", error: .authentication),
-            WeatherProviderFailure(provider: "StubProvider", error: .network("offline")),
+            WeatherProviderFailure(provider: "StubProvider", error: .serviceUnavailable),
         ])
 
         do {
@@ -113,7 +137,7 @@ private struct StubProvider: WeatherProvider {
 }
 
 private enum FixtureError: Error {
-    case offline
+    case unknown
 }
 
 private extension Date {
