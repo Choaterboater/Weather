@@ -538,6 +538,26 @@ struct ForecastSelectionTests {
         ])
     }
 
+    @Test func timelineBiteDetailUsesSharedBoundariesAndRejectsInvalidScores() {
+        let cases: [(score: Int?, expected: String)] = [
+            (85, "85 / 100 · Excellent"),
+            (70, "70 / 100 · Strong"),
+            (50, "50 / 100 · Fair"),
+            (30, "30 / 100 · Tough"),
+            (0, "0 / 100 · Poor"),
+            (-1, "Unavailable"),
+            (101, "Unavailable"),
+            (nil, "Unavailable"),
+        ]
+
+        for item in cases {
+            #expect(
+                ForecastTimelineBiteDetail.formatted(score: item.score)
+                    == item.expected
+            )
+        }
+    }
+
     @Test func scoreSummaryAndForecastRowsShareTheDomainBandContract() throws {
         let score = FishingScore(factors: [
             ScoreFactor(
@@ -561,6 +581,10 @@ struct ForecastSelectionTests {
             locale: Locale(identifier: "en_US"),
             timeZone: .gmt
         ) == "69 · Fair")
+        #expect(
+            ForecastTimelineBiteDetail.formatted(score: score.overall)
+                == "69 / 100 · Fair"
+        )
     }
 
     @Test func selectedDetailRejectsTheSameInvalidValuesAsMatrixRows() {
@@ -732,6 +756,9 @@ struct ForecastSelectionTests {
     @Test @MainActor func proForecastPreviewUsesGMTMidnightAndIsolatedPreferences() {
         let start = ProForecastPreviewFixture.start
         let midnight = ProForecastPreviewFixture.dayStart(for: start)
+        let points = ProForecastPreviewFixture.points
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = ProForecastPreviewFixture.timeZone
 
         #expect(ProForecastPreviewFixture.locale.identifier == "en_US_POSIX")
         #expect(ProForecastPreviewFixture.timeZone == .gmt)
@@ -741,6 +768,15 @@ struct ForecastSelectionTests {
             ProForecastPreviewFixture.preferenceSuiteName
                 == "app.choatelabs.bitecast.debug.proForecast.v1"
         )
+        #expect(points.count == 48)
+        #expect(points.allSatisfy { point in
+            guard let nextTurn = point.nextTideTurn else { return false }
+            return nextTurn.time > point.date
+        })
+        #expect(points.allSatisfy { point in
+            guard let nextTurn = point.nextTideTurn else { return false }
+            return [8, 20].contains(calendar.component(.hour, from: nextTurn.time))
+        })
 
         let key = "proForecast.fixturePersistenceProbe"
         ProForecastPreviewFixture.preferenceStore.set("kept", forKey: key)

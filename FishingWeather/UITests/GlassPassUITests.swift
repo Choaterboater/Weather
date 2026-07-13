@@ -9,6 +9,7 @@ final class GlassPassUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = [
             "-uiPreview", "proForecast",
+            "-resetProForecastPreviewPreferences",
             "-UIPreferredContentSizeCategoryName",
             "UICTContentSizeCategoryAccessibilityXXXL",
         ]
@@ -95,9 +96,32 @@ final class GlassPassUITests: XCTestCase {
             app.descendants(matching: .any)["proForecast.row.biteScore"]
                 .waitForNonExistence(timeout: 3)
         )
-        let fishingExpand = app.buttons["Expand Fishing group"]
-        XCTAssertTrue(fishingExpand.waitForExistence(timeout: 3))
-        fishingExpand.tap()
+
+        app.terminate()
+        app.launchArguments.removeAll {
+            $0 == "-resetProForecastPreviewPreferences"
+        }
+        app.launch()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["proForecast.matrix"]
+                .waitForExistence(timeout: 15),
+            "Pro Forecast preview did not survive process reconstruction"
+        )
+        let persistedFishing = app.buttons["Expand Fishing group"]
+        let persistedWeather = app.buttons["Collapse Weather group"]
+        XCTAssertTrue(persistedFishing.waitForExistence(timeout: 5))
+        XCTAssertTrue(persistedWeather.exists)
+        XCTAssertGreaterThan(
+            persistedFishing.frame.minY,
+            persistedWeather.frame.minY,
+            "Visible group order must persist across process reconstruction"
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["proForecast.row.biteScore"].exists,
+            "Collapsed groups must persist across process reconstruction"
+        )
+        persistedFishing.tap()
         XCTAssertTrue(
             app.descendants(matching: .any)["proForecast.row.biteScore"].waitForExistence(timeout: 3)
         )

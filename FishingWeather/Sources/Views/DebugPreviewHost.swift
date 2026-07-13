@@ -65,6 +65,7 @@ enum ProForecastPreviewFixture {
     static let locale = Locale(identifier: "en_US_POSIX")
     static let timeZone = TimeZone.gmt
     static let preferenceSuiteName = "app.choatelabs.bitecast.debug.proForecast.v1"
+    static let resetPreferenceArgument = "-resetProForecastPreviewPreferences"
 
     static func dayStart(for date: Date) -> Date {
         var calendar = Calendar(identifier: .gregorian)
@@ -73,22 +74,24 @@ enum ProForecastPreviewFixture {
         return calendar.startOfDay(for: date)
     }
 
-    @MainActor static let preferenceStore: UserDefaults = {
-        guard let store = UserDefaults(suiteName: preferenceSuiteName) else {
-            preconditionFailure("Unable to create isolated Pro Forecast preview defaults")
+    static func nextTideTurn(after date: Date) -> TideEvent {
+        let midnight = dayStart(for: date)
+        let candidates: [(time: Date, kind: TideEvent.Kind, height: Double)] = [
+            (midnight.addingTimeInterval(8 * 3_600), .high, 3.4),
+            (midnight.addingTimeInterval(20 * 3_600), .low, 0.8),
+            (midnight.addingTimeInterval(32 * 3_600), .high, 3.4),
+        ]
+        guard let next = candidates.first(where: { $0.time > date }) else {
+            preconditionFailure("Pro Forecast preview requires a future tide turn")
         }
-        store.removePersistentDomain(forName: preferenceSuiteName)
-        return store
-    }()
-}
+        return TideEvent(
+            time: next.time,
+            kind: next.kind,
+            heightFeet: next.height
+        )
+    }
 
-private struct DebugProForecast: View {
-    private let start = ProForecastPreviewFixture.start
-    @State private var selectedDate: Date? = Date(
-        timeIntervalSince1970: 1_800_000_000
-    )
-
-    private var points: [ForecastPoint] {
+    static var points: [ForecastPoint] {
         let major = BiteWindow(
             period: .major,
             peak: start.addingTimeInterval(6 * 3_600),
@@ -96,7 +99,7 @@ private struct DebugProForecast: View {
         )
         return (0..<48).map { hour in
             let date = start.addingTimeInterval(Double(hour) * 3_600)
-            let dayStart = ProForecastPreviewFixture.dayStart(for: date)
+            let midnight = dayStart(for: date)
             let temperature = 21 + 4 * sin(Double(hour) / 5)
             let tideRate = 0.7 * cos(Double(hour) / 2.4)
             return ForecastPoint(
@@ -112,8 +115,12 @@ private struct DebugProForecast: View {
                     cloudCoverFraction: 0.18 + 0.25 * sin(Double(hour) / 4),
                     precipitationChance: hour % 9 == 0 ? 0.32 : 0,
                     precipitationMM: hour % 9 == 0 ? 1.4 : 0,
-                    conditionText: hour % 9 == 0 ? "Passing showers" : "Partly cloudy",
-                    symbolName: hour % 9 == 0 ? "cloud.rain.fill" : "cloud.sun.fill",
+                    conditionText: hour % 9 == 0
+                        ? "Passing showers"
+                        : "Partly cloudy",
+                    symbolName: hour % 9 == 0
+                        ? "cloud.rain.fill"
+                        : "cloud.sun.fill",
                     wind: WindSnapshot(
                         directionDegrees: Double((150 + hour * 6) % 360),
                         speedMetersPerSecond: 3.6 + sin(Double(hour) / 3),
@@ -128,22 +135,35 @@ private struct DebugProForecast: View {
                 solunarWindow: major.isActive(at: date) ? major : nil,
                 pressureTendency: .falling,
                 moonPhase: .full,
-                sunrise: dayStart.addingTimeInterval(6.5 * 3_600),
-                sunset: dayStart.addingTimeInterval(18.4 * 3_600),
+                sunrise: midnight.addingTimeInterval(6.5 * 3_600),
+                sunset: midnight.addingTimeInterval(18.4 * 3_600),
                 tideRateFeetPerHour: tideRate,
-                nextTideTurn: TideEvent(
-                    time: dayStart.addingTimeInterval(8 * 3_600),
-                    kind: .high,
-                    heightFeet: 3.4
-                )
+                nextTideTurn: nextTideTurn(after: date)
             )
         }
     }
 
+    @MainActor static let preferenceStore: UserDefaults = {
+        guard let store = UserDefaults(suiteName: preferenceSuiteName) else {
+            preconditionFailure("Unable to create isolated Pro Forecast preview defaults")
+        }
+        if CommandLine.arguments.contains(resetPreferenceArgument) {
+            store.removePersistentDomain(forName: preferenceSuiteName)
+        }
+        return store
+    }()
+}
+
+private struct DebugProForecast: View {
+    private let start = ProForecastPreviewFixture.start
+    @State private var selectedDate: Date? = Date(
+        timeIntervalSince1970: 1_800_000_000
+    )
+
     var body: some View {
         ScrollView {
             ProForecastMatrix(
-                points: points,
+                points: ProForecastPreviewFixture.points,
                 selectedDate: $selectedDate,
                 timeZone: ProForecastPreviewFixture.timeZone,
                 now: start,

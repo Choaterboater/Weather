@@ -51,6 +51,17 @@ struct ForecastChartContent {
     }
 }
 
+/// Pure Timeline detail formatting that shares the domain's exact bite bands.
+enum ForecastTimelineBiteDetail {
+    static func formatted(score: Int?) -> String {
+        guard let score,
+              let band = BiteScoreBand.band(for: score) else {
+            return "Unavailable"
+        }
+        return "\(score) / 100 · \(band.title)"
+    }
+}
+
 /// A shared, scrubbable forecast timeline. Raw drag positions are kept local;
 /// only snapped provider hours are written to the cross-screen selection.
 struct InteractiveForecastChart: View {
@@ -379,7 +390,9 @@ struct InteractiveForecastChart: View {
                     )
                     ForecastDetailMetric(
                         label: "Bite",
-                        value: biteDetail(point)
+                        value: ForecastTimelineBiteDetail.formatted(
+                            score: point.biteScore
+                        )
                     )
                     ForecastDetailMetric(
                         label: "Water",
@@ -422,18 +435,6 @@ struct InteractiveForecastChart: View {
         let trend = point.pressureTendency.map { " · \($0.label.lowercased())" }
             ?? ""
         return "\(Int(pressure.rounded())) hPa\(trend)"
-    }
-
-    private func biteDetail(_ point: ForecastPoint) -> String {
-        guard let score = point.biteScore else { return "Unavailable" }
-        let rating: String = switch score {
-        case 85...: "Excellent"
-        case 70..<85: "Strong"
-        case 50..<70: "Fair"
-        case 30..<50: "Tough"
-        default: "Poor"
-        }
-        return "\(score) / 100 · \(rating)"
     }
 
     private func tideDetail(_ point: ForecastPoint) -> String {
