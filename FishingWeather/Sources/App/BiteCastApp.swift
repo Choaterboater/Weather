@@ -19,7 +19,6 @@ struct BiteCastApp: App {
         let provider = WeatherProviderChain(providers: [
             WeatherKitProvider(),
             NWSWeatherProvider(
-                userAgent: "BiteCast/0.1 (app.choatelabs.bitecast)",
                 astronomy: { location, date, calendar in
                     astronomy.snapshot(
                         for: location,

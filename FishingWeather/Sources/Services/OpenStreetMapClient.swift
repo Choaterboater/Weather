@@ -84,32 +84,42 @@ final class OpenStreetMapClient {
     }
 
     private func fetch(near location: CLLocation, radiusMiles: Double) async throws -> [RampPin] {
-        let meters = Int(radiusMiles * 1609.34)
-        // ~1.1 km granularity — matches the cache tile and keeps precise user
-        // coordinates out of a third party's request logs.
-        let lat = (location.coordinate.latitude * 100).rounded() / 100
-        let lon = (location.coordinate.longitude * 100).rounded() / 100
-        let query = """
-        [out:json][timeout:12];
-        (
-          node["amenity"="boat_ramp"](around:\(meters),\(lat),\(lon));
-          way["amenity"="boat_ramp"](around:\(meters),\(lat),\(lon));
-          node["leisure"="fishing"](around:\(meters),\(lat),\(lon));
-          node["man_made"="pier"]["fishing"="yes"](around:\(meters),\(lat),\(lon));
-        );
-        out center 80;
-        """
-        var request = URLRequest(url: URL(string: "https://overpass-api.de/api/interpreter")!)
-        request.httpMethod = "POST"
-        request.httpBody = "data=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")".data(using: .utf8)
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.setValue("BiteCast/0.1 (https://github.com/secure-ssid)", forHTTPHeaderField: "User-Agent")
-
+        let request = Self.request(near: location, radiusMiles: radiusMiles)
         let (data, response) = try await URLSession.shared.data(for: request)
         // The public Overpass instance routinely answers 429/504 with an HTML
         // body; decode that and the user sees a cryptic "wrong format" error.
         try HTTPStatusError.validate(response)
         return try Self.pins(from: data)
+    }
+
+    nonisolated static func request(
+        near location: CLLocation,
+        radiusMiles: Double
+    ) -> URLRequest {
+        let meters = Int(radiusMiles * 1609.34)
+        let coordinate = ExternalRequestPrivacy.coordinateComponents(
+            location,
+            decimalPlaces: 2
+        )
+        let query = """
+        [out:json][timeout:12];
+        (
+          node["amenity"="boat_ramp"](around:\(meters),\(coordinate.latitude),\(coordinate.longitude));
+          way["amenity"="boat_ramp"](around:\(meters),\(coordinate.latitude),\(coordinate.longitude));
+          node["leisure"="fishing"](around:\(meters),\(coordinate.latitude),\(coordinate.longitude));
+          node["man_made"="pier"]["fishing"="yes"](around:\(meters),\(coordinate.latitude),\(coordinate.longitude));
+        );
+        out center 80;
+        """
+        var request = URLRequest(url: URL(string: "https://overpass-api.de/api/interpreter")!)
+        request.httpMethod = "POST"
+        var formAllowed = CharacterSet.urlQueryAllowed
+        formAllowed.remove(charactersIn: "&+=?")
+        let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: formAllowed) ?? ""
+        request.httpBody = Data("data=\(encodedQuery)".utf8)
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.setValue(AppIdentity.userAgent, forHTTPHeaderField: "User-Agent")
+        return request
     }
 
     nonisolated static func pins(from data: Data) throws -> [RampPin] {

@@ -89,27 +89,34 @@ struct SpotsView: View {
     @ViewBuilder
     private var overviewMapSection: some View {
         if let here {
-            ZStack(alignment: .topTrailing) {
-                SpotsOverviewMap(
-                    center: here.coordinate,
-                    annotations: mapAnnotations,
-                    catchEntries: log.entries,
-                    showsHeatmap: showsHeatmap,
-                    style: SpotMapStyle.stored($mapStyleRaw),
-                    onSelect: handleMapSelection
-                )
-                
-                if !log.entries.filter({ $0.latitude != nil }).isEmpty {
-                    Button {
-                        showsHeatmap.toggle()
-                    } label: {
-                        Image(systemName: "flame.fill")
-                            .font(.system(size: 20))
-                            .foregroundStyle(showsHeatmap ? Ink.bite : .white)
-                            .padding(8)
-                            .background(.ultraThinMaterial, in: .circle)
+            VStack(alignment: .trailing, spacing: 4) {
+                ZStack(alignment: .topTrailing) {
+                    SpotsOverviewMap(
+                        center: here.coordinate,
+                        annotations: mapAnnotations,
+                        catchEntries: log.entries,
+                        showsHeatmap: showsHeatmap,
+                        style: SpotMapStyle.stored($mapStyleRaw),
+                        onSelect: handleMapSelection
+                    )
+
+                    if !log.entries.filter({ $0.latitude != nil }).isEmpty {
+                        Button {
+                            showsHeatmap.toggle()
+                        } label: {
+                            Image(systemName: "flame.fill")
+                                .font(.system(size: 20))
+                                .foregroundStyle(showsHeatmap ? Ink.bite : .white)
+                                .padding(8)
+                                .background(.ultraThinMaterial, in: .circle)
+                        }
+                        .padding(8)
                     }
-                    .padding(8)
+                }
+
+                if !osm.ramps.isEmpty {
+                    attribution
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                 }
             }
         }
@@ -234,54 +241,58 @@ struct SpotsView: View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: "Ramps & Public Spots", systemImage: "car.fill")
             GlassCard {
-                if osm.isLoading && osm.ramps.isEmpty {
-                    HStack {
-                        ProgressView()
-                        Text("Loading nearby ramps & piers…")
-                            .font(.system(size: 14, weight: .medium, design: .monospaced))
-                            .foregroundStyle(Ink.chartDim)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                } else if osm.ramps.isEmpty, osm.lastError != nil {
-                    // A failed request is not "no ramps here" — don't present
-                    // a network error as an authoritative empty area.
-                    HStack {
-                        Label("Couldn't load nearby ramps", systemImage: "wifi.slash")
-                            .font(.system(size: 14, weight: .medium, design: .monospaced))
-                            .foregroundStyle(Ink.chartDim)
-                        Spacer()
-                        Button("Retry") {
-                            guard let here else { return }
-                            Task { await osm.loadRamps(near: here) }
+                VStack(alignment: .leading, spacing: 12) {
+                    if osm.isLoading && osm.ramps.isEmpty {
+                        HStack {
+                            ProgressView()
+                            Text("Loading nearby ramps & piers…")
+                                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Ink.chartDim)
                         }
-                        .font(.system(size: 14, weight: .bold, design: .monospaced))
-                    }
-                } else if osm.ramps.isEmpty {
-                    Text("No public ramps or fishing sites tagged within 25 mi.")
-                        .font(.system(size: 14, weight: .medium, design: .monospaced))
-                        .foregroundStyle(Ink.chartDim)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    VStack(alignment: .leading, spacing: 10) {
+                    } else if osm.ramps.isEmpty, osm.lastError != nil {
+                        // A failed request is not "no ramps here" — don't present
+                        // a network error as an authoritative empty area.
+                        HStack {
+                            Label("Couldn't load nearby ramps", systemImage: "wifi.slash")
+                                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Ink.chartDim)
+                            Spacer()
+                            Button("Retry") {
+                                guard let here else { return }
+                                Task { await osm.loadRamps(near: here) }
+                            }
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                        }
+                    } else if osm.ramps.isEmpty {
+                        Text("No public ramps or fishing sites tagged within 25 mi.")
+                            .font(.system(size: 14, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Ink.chartDim)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
                         ForEach(osm.ramps.prefix(8)) { pin in
                             RampRow(pin: pin, distanceMiles: distance(to: pin))
                         }
-                        attribution
                     }
+                    attribution
                 }
             }
         }
     }
 
     private var attribution: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "info.circle")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-            Text("Community-tagged — quality varies. Data © OpenStreetMap.")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
+        Link(destination: ExternalServiceAttribution.openStreetMapURL) {
+            Label(
+                "Community-tagged — quality varies. \(ExternalServiceAttribution.openStreetMapLabel)",
+                systemImage: "info.circle"
+            )
+            .font(.system(size: 10, weight: .bold, design: .monospaced))
+            .fixedSize(horizontal: false, vertical: true)
         }
         .foregroundStyle(Ink.chartDim)
         .padding(.top, 2)
+        .accessibilityLabel("OpenStreetMap data attribution")
+        .accessibilityHint("Opens OpenStreetMap copyright and license information")
     }
 
     private var savedSection: some View {

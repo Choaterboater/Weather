@@ -25,6 +25,21 @@ struct NWSWeatherProviderTests {
         #expect(Set(requests.compactMap(NWSRequestRecorder.key)) == Set(NWSFixtures.minimumResponses.keys))
     }
 
+    @Test func defaultIdentityIsVersionedAndContactable() async throws {
+        let recorder = NWSRequestRecorder(responses: NWSFixtures.minimumResponses)
+        let provider = NWSWeatherProvider(loader: recorder.load)
+
+        _ = try await provider.forecast(for: location)
+
+        let requests = await recorder.requests
+        #expect(!requests.isEmpty)
+        #expect(requests.allSatisfy {
+            $0.value(forHTTPHeaderField: "User-Agent") == AppIdentity.userAgent
+        })
+        #expect(AppIdentity.userAgent.contains("BiteCast/"))
+        #expect(AppIdentity.userAgent.contains(AppIdentity.canonicalContactURL.absoluteString))
+    }
+
     @Test func decodesCanonicalCurrentAndHourlyValues() async throws {
         let provider = makeProvider(
             recorder: NWSRequestRecorder(responses: NWSFixtures.minimumResponses)
@@ -567,7 +582,7 @@ private actor NWSRequestRecorder {
 private enum NWSFixtures {
     typealias Response = NWSRequestRecorder.Response
 
-    static let pointKey = "/points/30.2938,-86.0049"
+    static let pointKey = "/points/30.294,-86.005"
 
     static var minimumResponses: [String: Response] {
         [
@@ -576,7 +591,7 @@ private enum NWSFixtures {
             "/gridpoints/TAE/50,50/forecast": .json(daily),
             "/gridpoints/TAE/50,50/stations": .json(stations),
             "/stations/KPAM/observations/latest": .json(observation),
-            "/alerts/active?point=30.2938,-86.0049": .json(alerts),
+            "/alerts/active?point=30.294,-86.005": .json(alerts),
         ]
     }
 
@@ -601,7 +616,7 @@ private enum NWSFixtures {
 
     static var alertFeatureFallback: [String: Response] {
         var responses = minimumResponses
-        responses["/alerts/active?point=30.2938,-86.0049"] = .json(
+        responses["/alerts/active?point=30.294,-86.005"] = .json(
             alerts
                 .replacingOccurrences(
                     of: #""id": "urn:oid:123","#,

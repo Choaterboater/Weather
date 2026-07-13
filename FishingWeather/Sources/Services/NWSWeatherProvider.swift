@@ -15,7 +15,7 @@ struct NWSWeatherProvider: WeatherProvider {
 
     init(
         loader: @escaping Loader = NWSWeatherProvider.liveLoad,
-        userAgent: String,
+        userAgent: String = AppIdentity.userAgent,
         astronomy: @escaping AstronomyWorker = { _, _, _ in .empty }
     ) {
         self.loader = loader
@@ -387,7 +387,7 @@ struct NWSWeatherProvider: WeatherProvider {
     }
 
     private static func coordinateString(_ location: CLLocation) -> String {
-        "\(location.coordinate.latitude),\(location.coordinate.longitude)"
+        ExternalRequestPrivacy.coordinateString(location, decimalPlaces: 3)
     }
 
     private static func celsius(_ value: Double, unit: String) -> Double? {
