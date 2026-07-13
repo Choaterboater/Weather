@@ -181,8 +181,8 @@ struct SpotsView: View {
                                 Text("Current Location")
                                     .font(.system(size: 16, weight: .bold, design: .monospaced))
                                     .foregroundStyle(Ink.chart)
-                                if let placeName = location.placeName {
-                                    Text(placeName)
+                                if location.descriptor.displayName != "Current Location" {
+                                    Text(location.descriptor.displayName)
                                         .font(.system(size: 11, weight: .medium, design: .monospaced))
                                         .foregroundStyle(Ink.chartDim)
                                 }

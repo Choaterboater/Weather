@@ -153,7 +153,7 @@ struct FishingView: View {
     }
 
     private var planLocationName: String {
-        spots.selectedSpot?.name ?? location.placeName ?? "Current spot"
+        spots.selectedSpot?.name ?? location.descriptor.displayName
     }
 
     /// Entry point to the Weekly Trip Planner.

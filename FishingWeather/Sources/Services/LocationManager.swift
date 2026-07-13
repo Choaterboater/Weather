@@ -11,6 +11,13 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     struct GeocodeResult: Sendable {
         let placeName: String?
         let stateCode: String?
+        let featureName: String?
+
+        init(placeName: String?, stateCode: String?, featureName: String? = nil) {
+            self.placeName = placeName
+            self.stateCode = stateCode
+            self.featureName = featureName
+        }
     }
 
     typealias ReverseGeocoder = @MainActor (CLLocation) async -> GeocodeResult?
@@ -24,6 +31,11 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     /// offshore / outside the US. Used to default state-specific data like
     /// fishing regulations when no saved spot is active.
     var administrativeArea: String?
+    private(set) var descriptor = LocationDescriptor.make(
+        city: nil,
+        stateCode: nil,
+        featureName: nil
+    )
     var authorizationStatus: CLAuthorizationStatus
     var lastError: String?
     private var geocodeTask: Task<Void, Never>?
@@ -36,6 +48,11 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
             location = Self.uiTestingLocation
             placeName = "St. Petersburg"
             administrativeArea = "FL"
+            descriptor = LocationDescriptor.make(
+                city: "St. Petersburg",
+                stateCode: "FL",
+                featureName: nil
+            )
         } else {
             authorizationStatus = manager.authorizationStatus
         }
@@ -126,6 +143,11 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         guard let result else { return }
         placeName = result.placeName
         administrativeArea = result.stateCode
+        descriptor = LocationDescriptor.make(
+            city: result.placeName,
+            stateCode: result.stateCode,
+            featureName: result.featureName
+        )
     }
 
     private static func liveReverseGeocode(_ location: CLLocation) async -> GeocodeResult? {
@@ -134,10 +156,9 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         else { return nil }
         let address = item.addressRepresentations
         return GeocodeResult(
-            // Prefer the locality (e.g. "Santa Rosa Beach"); fall back to the
-            // map item's display name.
-            placeName: address?.cityName ?? item.name,
-            stateCode: usStateCode(from: address)
+            placeName: address?.cityName,
+            stateCode: usStateCode(from: address),
+            featureName: item.name
         )
     }
 

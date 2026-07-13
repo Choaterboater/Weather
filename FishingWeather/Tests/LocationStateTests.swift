@@ -43,4 +43,34 @@ struct LocationStateTests {
         #expect(manager.placeName == nil)
         #expect(manager.administrativeArea == nil)
     }
+
+    @MainActor
+    @Test("A pending geocode retains the prior valid descriptor")
+    func pendingGeocodeRetainsPriorDescriptor() async {
+        let manager = LocationManager(reverseGeocoder: { location in
+            if location.coordinate.latitude == 27.1 {
+                return LocationManager.GeocodeResult(
+                    placeName: " Inlet Beach ",
+                    stateCode: "fl",
+                    featureName: nil
+                )
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+            return nil
+        })
+
+        manager.acceptLocation(CLLocationCoordinate2D(latitude: 27.1, longitude: -82.1))
+        let deadline = ContinuousClock.now + .seconds(1)
+        while manager.descriptor.displayName != "Inlet Beach, FL",
+              ContinuousClock.now < deadline {
+            await Task.yield()
+        }
+        #expect(manager.descriptor.displayName == "Inlet Beach, FL")
+
+        manager.acceptLocation(CLLocationCoordinate2D(latitude: 28.1, longitude: -83.1))
+
+        #expect(manager.placeName == nil)
+        #expect(manager.administrativeArea == nil)
+        #expect(manager.descriptor.displayName == "Inlet Beach, FL")
+    }
 }
