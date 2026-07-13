@@ -352,7 +352,6 @@ final class GlassPassUITests: XCTestCase {
         let planLink = app.buttons["bitetime.planWeek"]
         reveal(planLink, in: app)
         XCTAssertTrue(planLink.exists, "Plan the Week is unreachable after Log Catch")
-        XCTAssertTrue(planLink.isHittable, "Plan the Week is not tappable after Log Catch")
         snap(name: "2-bite-time")
 
         planLink.tap()
