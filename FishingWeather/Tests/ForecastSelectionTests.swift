@@ -465,6 +465,230 @@ struct ForecastSelectionTests {
         #expect(point.tideRateFeetPerHour == nil)
         #expect(point.nextTideTurn == nil)
     }
+
+    @Test func unsupportedFactorsAreOmitted() {
+        let point = ForecastPoint.fixture(
+            pressureHPa: nil,
+            visibilityMeters: nil
+        )
+
+        let rows = ForecastFactorRow.rows(for: [point])
+
+        #expect(!rows.map(\.id).contains(.pressure))
+        #expect(!rows.map(\.id).contains(.visibility))
+    }
+
+    @Test func zeroValuesRemainAvailableAndAreNotRenderedAsMissing() throws {
+        let point = ForecastPoint.fixture(
+            precipitationChance: 0,
+            precipitationMM: 0,
+            windSpeedMetersPerSecond: 0,
+            windGustMetersPerSecond: 0,
+            biteScore: 0,
+            tideHeightFeet: 0,
+            tideRateFeetPerHour: 0
+        )
+        let rows = ForecastFactorRow.rows(for: [point])
+        let ids = Set(rows.map(\.id))
+
+        #expect(ids.isSuperset(of: [
+            .biteScore,
+            .precipitationChance,
+            .precipitationAmount,
+            .windSpeed,
+            .windGust,
+            .tideHeight,
+            .tideMovement,
+        ]))
+        let precipitation = try #require(
+            rows.first { $0.id == .precipitationChance }
+        )
+        #expect(precipitation.formattedValue(
+            for: point,
+            locale: Locale(identifier: "en_US"),
+            timeZone: .gmt
+        ) == "0%")
+        let tide = try #require(rows.first { $0.id == .tideHeight })
+        #expect(tide.formattedValue(
+            for: point,
+            locale: Locale(identifier: "en_US"),
+            timeZone: .gmt
+        ) != nil)
+    }
+
+    @Test func biteBandsUseOneExactFiveThresholdContract() {
+        #expect(ForecastBiteBand.band(for: 100) == .excellent)
+        #expect(ForecastBiteBand.band(for: 85) == .excellent)
+        #expect(ForecastBiteBand.band(for: 84) == .strong)
+        #expect(ForecastBiteBand.band(for: 70) == .strong)
+        #expect(ForecastBiteBand.band(for: 69) == .fair)
+        #expect(ForecastBiteBand.band(for: 50) == .fair)
+        #expect(ForecastBiteBand.band(for: 49) == .tough)
+        #expect(ForecastBiteBand.band(for: 30) == .tough)
+        #expect(ForecastBiteBand.band(for: 29) == .poor)
+        #expect(ForecastBiteBand.band(for: 0) == .poor)
+        #expect(ForecastBiteBand.band(for: -1) == nil)
+        #expect(ForecastBiteBand.band(for: 101) == nil)
+        #expect(ForecastBiteBand.allCases.map(\.rangeLabel) == [
+            "85–100",
+            "70–84",
+            "50–69",
+            "30–49",
+            "0–29",
+        ])
+    }
+
+    @Test func nonFiniteAndOutOfDomainFactorsAreOmitted() {
+        let point = ForecastPoint.fixture(
+            pressureHPa: .nan,
+            visibilityMeters: -1,
+            precipitationChance: 1.1,
+            precipitationMM: -0.1,
+            humidityFraction: -0.1,
+            uvIndex: -1,
+            cloudCoverFraction: 1.1,
+            windDirectionDegrees: 361,
+            windSpeedMetersPerSecond: -1,
+            windGustMetersPerSecond: -.infinity,
+            biteScore: 101
+        )
+
+        let ids = Set(ForecastFactorRow.rows(for: [point]).map(\.id))
+
+        #expect(!ids.contains(.pressure))
+        #expect(!ids.contains(.visibility))
+        #expect(!ids.contains(.precipitationChance))
+        #expect(!ids.contains(.precipitationAmount))
+        #expect(!ids.contains(.humidity))
+        #expect(!ids.contains(.uvIndex))
+        #expect(!ids.contains(.cloudCover))
+        #expect(!ids.contains(.windDirection))
+        #expect(!ids.contains(.windSpeed))
+        #expect(!ids.contains(.windGust))
+        #expect(!ids.contains(.biteScore))
+    }
+
+    @Test func matrixValuesUseLocaleUnitsAndTargetTimeZone() throws {
+        let sunrise = Date(timeIntervalSince1970: 1_800_000_000)
+        let point = ForecastPoint.fixture(
+            temperatureCelsius: 20,
+            visibilityMeters: 1_609.344,
+            sunrise: sunrise
+        )
+        let rows = ForecastFactorRow.rows(for: [point])
+        let temperature = try #require(rows.first { $0.id == .temperature })
+        let visibility = try #require(rows.first { $0.id == .visibility })
+        let sunriseRow = try #require(rows.first { $0.id == .sunrise })
+        let chicago = try #require(TimeZone(identifier: "America/Chicago"))
+
+        let usTemperature = try #require(temperature.formattedValue(
+            for: point,
+            locale: Locale(identifier: "en_US"),
+            timeZone: .gmt
+        ))
+        let metricTemperature = try #require(temperature.formattedValue(
+            for: point,
+            locale: Locale(identifier: "en_GB"),
+            timeZone: .gmt
+        ))
+        let usVisibility = try #require(visibility.formattedValue(
+            for: point,
+            locale: Locale(identifier: "en_US"),
+            timeZone: .gmt
+        ))
+        let metricVisibility = try #require(visibility.formattedValue(
+            for: point,
+            locale: Locale(identifier: "en_GB"),
+            timeZone: .gmt
+        ))
+        let chicagoSunrise = try #require(sunriseRow.formattedValue(
+            for: point,
+            locale: Locale(identifier: "en_US"),
+            timeZone: chicago
+        ))
+        let utcSunrise = try #require(sunriseRow.formattedValue(
+            for: point,
+            locale: Locale(identifier: "en_US"),
+            timeZone: .gmt
+        ))
+
+        #expect(usTemperature.contains("68"))
+        #expect(metricTemperature.contains("20"))
+        #expect(usVisibility.contains("1"))
+        #expect(usVisibility.localizedCaseInsensitiveContains("mi"))
+        #expect(metricVisibility.contains("1.6"))
+        #expect(metricVisibility.localizedCaseInsensitiveContains("km"))
+        #expect(chicagoSunrise != utcSunrise)
+    }
+
+    @Test func preferencesNormalizeStableIDsAndRoundTrip() {
+        let preferences = ForecastFactorPreferences(
+            storedOrder: "wind,unknown,wind,fishing",
+            storedCollapsed: "waterAndSky,unknown,waterAndSky"
+        )
+
+        #expect(preferences.orderedGroups == [
+            .wind,
+            .fishing,
+            .weather,
+            .waterAndSky,
+        ])
+        #expect(preferences.collapsedGroups == [.waterAndSky])
+
+        let restored = ForecastFactorPreferences(
+            storedOrder: preferences.storedOrder,
+            storedCollapsed: preferences.storedCollapsed
+        )
+        #expect(restored == preferences)
+    }
+
+    @Test func preferencesMoveGroupsWithoutDroppingAny() {
+        var preferences = ForecastFactorPreferences()
+
+        #expect(!preferences.canMove(.fishing, direction: .earlier))
+        #expect(preferences.canMove(.fishing, direction: .later))
+        preferences.move(.waterAndSky, direction: .earlier)
+        preferences.toggleCollapsed(.weather)
+
+        #expect(preferences.orderedGroups == [
+            .fishing,
+            .weather,
+            .waterAndSky,
+            .wind,
+        ])
+        #expect(preferences.collapsedGroups == [.weather])
+        #expect(Set(preferences.orderedGroups) == Set(ForecastFactorGroup.allCases))
+    }
+
+    @Test func weekRequiresSevenContiguousDaysOfHourlyPoints() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let twoDays = (0..<48).map {
+            ForecastPoint.fixture(
+                date: start.addingTimeInterval(Double($0) * 3_600)
+            )
+        }
+        let fullWeek = (0..<(7 * 24)).map {
+            ForecastPoint.fixture(
+                date: start.addingTimeInterval(Double($0) * 3_600)
+            )
+        }
+        let sparseWeek = stride(from: 0, to: 7 * 24, by: 2).map {
+            ForecastPoint.fixture(
+                date: start.addingTimeInterval(Double($0) * 3_600)
+            )
+        }
+        let ninetyMinuteSamples = (0..<(7 * 24)).map {
+            ForecastPoint.fixture(
+                date: start.addingTimeInterval(Double($0) * 5_400)
+            )
+        }
+
+        #expect(ProForecastHorizon.available(for: twoDays) == [.day])
+        #expect(ProForecastHorizon.available(for: fullWeek) == [.day, .week])
+        #expect(ProForecastHorizon.available(for: sparseWeek) == [.day])
+        #expect(ProForecastHorizon.available(for: ninetyMinuteSamples) == [.day])
+        #expect(ProForecastHorizon.allCases == [.day, .week])
+    }
 }
 
 private extension ForecastPoint {
@@ -474,6 +698,11 @@ private extension ForecastPoint {
         pressureHPa: Double? = 1_013,
         visibilityMeters: Double? = 16_000,
         precipitationChance: Double? = 0,
+        precipitationMM: Double? = 0,
+        humidityFraction: Double? = 0.5,
+        uvIndex: Int? = 3,
+        cloudCoverFraction: Double? = 0.2,
+        windDirectionDegrees: Double = 180,
         windSpeedMetersPerSecond: Double = 3,
         windGustMetersPerSecond: Double? = nil,
         biteScore: Int? = 50,
@@ -494,6 +723,11 @@ private extension ForecastPoint {
                 pressureHPa: pressureHPa,
                 visibilityMeters: visibilityMeters,
                 precipitationChance: precipitationChance,
+                precipitationMM: precipitationMM,
+                humidityFraction: humidityFraction,
+                uvIndex: uvIndex,
+                cloudCoverFraction: cloudCoverFraction,
+                windDirectionDegrees: windDirectionDegrees,
                 windSpeedMetersPerSecond: windSpeedMetersPerSecond,
                 windGustMetersPerSecond: windGustMetersPerSecond
             ),
@@ -518,6 +752,11 @@ private extension HourlyWeatherPoint {
         pressureHPa: Double? = 1_013,
         visibilityMeters: Double? = 16_000,
         precipitationChance: Double? = 0,
+        precipitationMM: Double? = 0,
+        humidityFraction: Double? = 0.5,
+        uvIndex: Int? = 3,
+        cloudCoverFraction: Double? = 0.2,
+        windDirectionDegrees: Double = 180,
         windSpeedMetersPerSecond: Double = 3,
         windGustMetersPerSecond: Double? = nil
     ) -> HourlyWeatherPoint {
@@ -526,17 +765,17 @@ private extension HourlyWeatherPoint {
             temperatureCelsius: temperatureCelsius,
             apparentTemperatureCelsius: temperatureCelsius,
             dewPointCelsius: nil,
-            humidityFraction: 0.5,
+            humidityFraction: humidityFraction,
             pressureHPa: pressureHPa,
             visibilityMeters: visibilityMeters,
-            uvIndex: 3,
-            cloudCoverFraction: 0.2,
+            uvIndex: uvIndex,
+            cloudCoverFraction: cloudCoverFraction,
             precipitationChance: precipitationChance,
-            precipitationMM: 0,
+            precipitationMM: precipitationMM,
             conditionText: "Clear",
             symbolName: "sun.max",
             wind: WindSnapshot(
-                directionDegrees: 180,
+                directionDegrees: windDirectionDegrees,
                 speedMetersPerSecond: windSpeedMetersPerSecond,
                 gustMetersPerSecond: windGustMetersPerSecond
             )

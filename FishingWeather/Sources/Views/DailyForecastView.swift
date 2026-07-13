@@ -71,6 +71,7 @@ private struct DayRow: View {
     let day: DailyWeatherPoint
     let weekday: String
 
+    @Environment(\.locale) private var locale
     @ScaledMetric private var dayColumnWidth: CGFloat = 56
     @ScaledMetric private var iconColumnWidth: CGFloat = 32
     @ScaledMetric private var precipColumnWidth: CGFloat = 40
@@ -78,7 +79,7 @@ private struct DayRow: View {
     var body: some View {
         HStack {
             Text(weekday)
-                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                .font(.system(.subheadline, design: .rounded, weight: .semibold))
                 .foregroundStyle(Ink.chart)
                 .lineLimit(1)
                 .frame(width: dayColumnWidth, alignment: .leading)
@@ -90,7 +91,7 @@ private struct DayRow: View {
             if let precipitationChance = day.precipitationChance,
                precipitationChance > 0 {
                 Text(precipitationChance.formatted(.percent.precision(.fractionLength(0))))
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .font(.system(.caption, design: .rounded, weight: .semibold))
                     .foregroundStyle(Ink.tide)
                     .frame(width: precipColumnWidth, alignment: .leading)
             } else {
@@ -100,12 +101,30 @@ private struct DayRow: View {
             Spacer()
 
             Text(WeatherUnits.wholeTemperature(celsius: day.lowCelsius))
-                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                .font(.system(.subheadline, design: .monospaced, weight: .medium))
                 .foregroundStyle(Ink.chartDim)
             Text(WeatherUnits.wholeTemperature(celsius: day.highCelsius))
-                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                .font(.system(.subheadline, design: .monospaced, weight: .semibold))
                 .foregroundStyle(Ink.chart)
         }
         .padding(.vertical, 10)
+        .frame(minHeight: 44)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilitySummary)
+    }
+
+    private var accessibilitySummary: String {
+        var values = [
+            weekday,
+            day.conditionText,
+            "low \(WeatherUnits.wholeTemperature(celsius: day.lowCelsius, locale: locale))",
+            "high \(WeatherUnits.wholeTemperature(celsius: day.highCelsius, locale: locale))",
+        ]
+        if let chance = day.precipitationChance, chance.isFinite {
+            values.append(
+                "\(chance.formatted(.percent.precision(.fractionLength(0)))) chance of precipitation"
+            )
+        }
+        return values.joined(separator: ", ")
     }
 }

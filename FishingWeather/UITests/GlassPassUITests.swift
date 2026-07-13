@@ -5,6 +5,69 @@ import XCTest
 final class GlassPassUITests: XCTestCase {
 
     @MainActor
+    func testProForecastMatrixAtLargeDynamicType() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-uiPreview", "proForecast",
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL",
+            "-proForecast.groupOrder", "",
+            "-proForecast.collapsedGroups", "",
+        ]
+        app.launch()
+
+        let matrix = app.descendants(matching: .any)["proForecast.matrix"]
+        XCTAssertTrue(
+            matrix.waitForExistence(timeout: 15),
+            "Pro Forecast preview did not become reachable"
+        )
+        let screen = app.windows.firstMatch.frame
+        let heading = app.staticTexts["Pro Forecast"]
+        let sourceLabel = app.staticTexts["Hourly source data"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 3))
+        XCTAssertTrue(sourceLabel.waitForExistence(timeout: 3))
+        XCTAssertLessThanOrEqual(heading.frame.maxX, screen.maxX)
+        XCTAssertLessThanOrEqual(sourceLabel.frame.maxX, screen.maxX)
+        XCTAssertTrue(app.buttons["proForecast.horizon.day"].exists)
+        XCTAssertFalse(app.buttons["proForecast.horizon.week"].exists)
+        XCTAssertFalse(app.staticTexts["Month"].exists)
+
+        let currentHour = app.buttons["proForecast.hour.1800000000"]
+        XCTAssertTrue(currentHour.waitForExistence(timeout: 3))
+        XCTAssertEqual(currentHour.value as? String, "Now, selected")
+        XCTAssertLessThanOrEqual(currentHour.frame.maxX, screen.maxX)
+
+        let nextHour = app.buttons["proForecast.hour.1800003600"]
+        XCTAssertTrue(
+            nextHour.waitForExistence(timeout: 5),
+            "The second forecast hour is not reachable at large Dynamic Type"
+        )
+        if !nextHour.isHittable {
+            matrix.swipeLeft()
+        }
+        XCTAssertTrue(nextHour.isHittable)
+        nextHour.tap()
+        XCTAssertEqual(nextHour.value as? String, "Selected")
+
+        let fishingToggle = app.buttons["proForecast.group.fishing.toggle"]
+        XCTAssertTrue(fishingToggle.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["proForecast.row.biteScore"].exists
+        )
+        fishingToggle.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["proForecast.row.biteScore"]
+                .waitForNonExistence(timeout: 3)
+        )
+        fishingToggle.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["proForecast.row.biteScore"].waitForExistence(timeout: 3)
+        )
+
+        snap(name: "6-pro-forecast-large-type")
+    }
+
+    @MainActor
     func testWalkDestinationsAndCentralLogCatch() throws {
         let app = XCUIApplication()
         app.launchArguments = [
