@@ -8,6 +8,10 @@ struct LocalAstronomyProviderTests {
     private static let solarTolerance: TimeInterval = 5 * 60
     private static let lunarTolerance: TimeInterval = 20 * 60
     private static let synodicMonthDays = 29.530588853
+    private static let referenceNewMoonJulianDay = 2_451_550.25972
+    private static let halfLunationJulianDay = 2_451_565.0250144265
+    private static let julianDayAtUnixEpoch = 2_440_587.5
+    private static let phaseTolerance = 1e-10
 
     @Test
     func returnsSolarAndMoonValues() {
@@ -139,6 +143,54 @@ struct LocalAstronomyProviderTests {
         #expect(first == second)
     }
 
+    @Test(arguments: [Double.nan, Double.infinity, -Double.infinity])
+    func nonFiniteDateReturnsEmpty(timeIntervalSinceReferenceDate: Double) {
+        let value = LocalAstronomyProvider().snapshot(
+            for: CLLocation(latitude: 30.2938, longitude: -86.0049),
+            date: Date(
+                timeIntervalSinceReferenceDate: timeIntervalSinceReferenceDate
+            ),
+            calendar: Self.calendar(timeZone: "UTC")
+        )
+
+        #expect(value == AstronomySnapshot.empty)
+    }
+
+    @Test
+    func phaseUsesTheDeclaredNewMoonEpoch() {
+        let provider = LocalAstronomyProvider()
+        let location = CLLocation(latitude: 30.2938, longitude: -86.0049)
+        let calendar = Self.calendar(timeZone: "UTC")
+        let newMoonDate = Self.date(
+            julianDay: Self.referenceNewMoonJulianDay
+        )
+        let halfLunationDate = Self.date(
+            julianDay: Self.halfLunationJulianDay
+        )
+
+        let newMoonPhase = provider.snapshot(
+            for: location,
+            date: newMoonDate,
+            calendar: calendar
+        ).moonPhaseFraction
+        let halfLunationPhase = provider.snapshot(
+            for: location,
+            date: halfLunationDate,
+            calendar: calendar
+        ).moonPhaseFraction
+
+        guard let newMoonPhase, let halfLunationPhase else {
+            Issue.record("Expected phase values at the declared epoch")
+            return
+        }
+        let newMoonCircularDistance = min(
+            abs(newMoonPhase),
+            abs(1 - newMoonPhase)
+        )
+        #expect(newMoonCircularDistance < Self.phaseTolerance)
+        #expect(abs(halfLunationPhase - 0.5) < Self.phaseTolerance)
+    }
+
     @Test
     func synodicPhaseRepeatsAfterOneMeanLunation() {
         let location = CLLocation(latitude: 30.2938, longitude: -86.0049)
@@ -245,5 +297,11 @@ struct LocalAstronomyProviderTests {
 
     private static func date(_ value: String) -> Date {
         ISO8601DateFormatter().date(from: value)!
+    }
+
+    private static func date(julianDay: Double) -> Date {
+        Date(
+            timeIntervalSince1970: (julianDay - julianDayAtUnixEpoch) * 86_400
+        )
     }
 }

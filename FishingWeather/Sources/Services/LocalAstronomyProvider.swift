@@ -7,6 +7,10 @@ struct LocalAstronomyProvider: Sendable {
         date: Date,
         calendar: Calendar = .current
     ) -> AstronomySnapshot {
+        guard date.timeIntervalSinceReferenceDate.isFinite else {
+            return .empty
+        }
+
         let day = JulianDay(date)
         let coordinate = location.coordinate
         let solar = SolarEvents.calculate(
