@@ -1,226 +1,196 @@
 import SwiftUI
 
+/// Secondary advice intentionally constructed only after the angler chooses
+/// `More advice` on the compact Best Bait Today card.
 struct BaitEngineView: View {
-    let conditions: FishingConditions
-    let species: Species
-    var tideEvents: [TideEvent] = []
+    let context: BestBaitContext
     let engine: BaitEngine
 
+    @Environment(\.dismiss) private var dismiss
     @State private var question = ""
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: "AI Bait Engine", systemImage: "sparkles")
+    private var result: BestBaitResult? {
+        guard engine.result?.key == context.key else { return nil }
+        return engine.result
+    }
 
-            content
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    if let result {
+                        optionalReport(result)
+                        whySection(result)
+                        BaitArtView(
+                            recommendation: result.recommendation,
+                            species: context.species
+                        )
+                        YouTubeVideoCarousel(
+                            title: "Tutorials",
+                            query: "How to fish "
+                                + result.recommendation.topBait
+                                + " for \(context.species.displayName)"
+                        )
+                        questionSection
+                    } else {
+                        ContentUnavailableView(
+                            "Advice changed",
+                            systemImage: "arrow.triangle.2.circlepath",
+                            description: Text(
+                                "Close this view to load advice for the active forecast hour."
+                            )
+                        )
+                    }
+                }
+                .padding()
+            }
+            .background(Ink.backdrop)
+            .navigationTitle("More advice")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
         }
-        .animation(.smooth(duration: 0.35), value: engine.status)
-        .sensoryFeedback(trigger: engine.status) { _, newValue in
-            switch newValue {
-            case .ready: .success
-            case .failed: .error
-            default: nil
+        .task(id: result?.key) {
+            await engine.generateMoreAdvice(for: context)
+        }
+    }
+
+    @ViewBuilder
+    private func optionalReport(_ result: BestBaitResult) -> some View {
+        if case .onDeviceAppleIntelligence = result.source {
+            VStack(alignment: .leading, spacing: 8) {
+                SectionHeader(
+                    title: "Selected-hour report",
+                    systemImage: "text.quote"
+                )
+                GlassCard {
+                    if let report = engine.report {
+                        Text(report)
+                            .font(.body)
+                            .foregroundStyle(Ink.chart)
+                    } else if engine.isGeneratingAdvice {
+                        HStack(spacing: 12) {
+                            ProgressView()
+                            Text("Reading the selected hour…")
+                                .font(.body)
+                                .foregroundStyle(Ink.chartDim)
+                        }
+                    } else if let adviceError = engine.adviceError {
+                        Label(
+                            adviceError,
+                            systemImage: "exclamationmark.bubble"
+                        )
+                        .font(.body)
+                        .foregroundStyle(Ink.chartDim)
+                    }
+                }
+            }
+        }
+    }
+
+    private func whySection(_ result: BestBaitResult) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(title: "Why this pick", systemImage: "text.magnifyingglass")
+            GlassCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(result.recommendation.whyReason)
+                        .font(.body)
+                        .foregroundStyle(Ink.chart)
+
+                    Divider()
+                        .overlay(Ink.hullLine)
+
+                    detail(
+                        label: "Technique",
+                        value: result.recommendation.technique,
+                        systemImage: "figure.fishing"
+                    )
+                    detail(
+                        label: "Depth",
+                        value: result.recommendation.depth,
+                        systemImage: "arrow.down.to.line"
+                    )
+                }
             }
         }
     }
 
     @ViewBuilder
-    private var content: some View {
-        Group {
-            switch engine.status {
-            case .idle:
-                GlassCard {
+    private var questionSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(title: "Ask a follow-up", systemImage: "bubble.left.and.text.bubble.right")
+            GlassCard {
+                if engine.canAnswer {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Get an on-device bait recommendation tuned to right now's conditions.")
-                            .font(.system(size: 14, weight: .medium, design: .monospaced))
-                            .foregroundStyle(Ink.chartDim)
-                        Button("Get recommendation", systemImage: "wand.and.stars") {
-                            Task {
-                                await engine.generate(
-                                    conditions: conditions,
-                                    species: species,
-                                    tideEvents: tideEvents
-                                )
+                        ForEach(engine.answers) { qa in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(qa.question)
+                                    .font(.headline)
+                                    .foregroundStyle(Ink.chart)
+                                Text(qa.answer)
+                                    .font(.body)
+                                    .foregroundStyle(Ink.chartDim)
                             }
                         }
-                        .buttonStyle(.glassProminent)
-                        .controlSize(.large)
-                    }
-                }
-            case .working:
-                GlassCard {
-                    HStack(spacing: 12) {
-                        ProgressView()
-                        Text("Reading the water…")
-                            .font(.system(size: 14, weight: .medium, design: .monospaced))
-                            .foregroundStyle(Ink.chartDim)
-                    }
-                }
-            case .unavailable(let message):
-                GlassCard {
-                    Label(message, systemImage: "exclamationmark.bubble")
-                        .font(.system(size: 14, weight: .medium, design: .monospaced))
-                        .foregroundStyle(Ink.chartDim)
-                }
-            case .failed(let message):
-                GlassCard {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Label("Couldn't generate advice", systemImage: "exclamationmark.triangle")
-                            .font(.system(size: 14, weight: .bold, design: .monospaced))
-                            .foregroundStyle(Ink.chart)
-                        Text(message)
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
-                            .foregroundStyle(Ink.chartDim)
-                        Button("Try again") {
-                            Task {
-                                await engine.generate(
-                                    conditions: conditions,
-                                    species: species,
-                                    tideEvents: tideEvents
-                                )
+
+                        HStack {
+                            TextField(
+                                "Ask about this selected hour",
+                                text: $question
+                            )
+                            .textFieldStyle(.plain)
+                            .onSubmit(submit)
+
+                            Button(action: submit) {
+                                Image(systemName: "arrow.up.circle.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(Ink.bite)
                             }
+                            .accessibilityLabel("Send question")
+                            .disabled(
+                                question.trimmingCharacters(
+                                    in: .whitespacesAndNewlines
+                                ).isEmpty || engine.isAnswering
+                            )
                         }
-                        .buttonStyle(.bordered)
+
+                        if engine.isAnswering {
+                            ProgressView().controlSize(.small)
+                        }
                     }
-                }
-            case .ready:
-                if let report = engine.report {
-                    GlassCard {
-                        Text(report)
-                            .font(.callout)
-                    }
-                }
-                if let recommendation = engine.recommendation {
-                    BaitCard(recommendation: recommendation, species: species)
-                }
-                askBox
-            }
-        }
-    }
-
-    private var askBox: some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(engine.answers) { qa in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(qa.question)
-                            .font(.system(size: 14, weight: .bold, design: .monospaced))
-                            .foregroundStyle(Ink.chart)
-                        Text(qa.answer)
-                            .font(.system(size: 14, weight: .medium, design: .monospaced))
-                            .foregroundStyle(Ink.chartDim)
-                    }
-                }
-                HStack {
-                    TextField("Ask anything — “why aren’t they biting?”", text: $question)
-                        .textFieldStyle(.plain)
-                        .onSubmit(submit)
-                    Button(action: submit) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 24))
-                            .foregroundStyle(Ink.bite)
-                    }
-                    .accessibilityLabel("Send question")
-                    .disabled(question.trimmingCharacters(in: .whitespaces).isEmpty || engine.isAnswering)
-                }
-                if engine.isAnswering {
-                    ProgressView().controlSize(.small)
-                }
-            }
-        }
-    }
-
-    private func submit() {
-        let q = question
-        question = ""
-        Task { await engine.ask(q) }
-    }
-}
-
-private struct BaitCard: View {
-    let recommendation: BaitRecommendation
-    let species: Species
-
-    var body: some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: 14) {
-                BaitArtView(recommendation: recommendation, species: species)
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(recommendation.topBait)
-                            .font(.system(size: 20, weight: .bold, design: .monospaced))
-                            .foregroundStyle(Ink.chart)
-                        Text(recommendation.color)
-                            .font(.system(size: 14, weight: .medium, design: .monospaced))
-                            .foregroundStyle(Ink.chartDim)
-                    }
-                    Spacer()
-                    ConfidenceBadge(value: recommendation.confidence)
-                }
-
-                HStack(spacing: 24) {
-                    DetailItem(label: "Technique", value: recommendation.technique, systemImage: "figure.fishing")
-                    DetailItem(label: "Depth", value: recommendation.depth, systemImage: "arrow.down.to.line")
-                }
-
-                Text(recommendation.whyReason)
-                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                } else {
+                    Text(
+                        "Follow-up Q&A requires a current on-device Apple Intelligence result."
+                    )
+                    .font(.body)
                     .foregroundStyle(Ink.chartDim)
-                    
-                YouTubeVideoCarousel(
-                    title: "Tutorials",
-                    query: "How to fish \(recommendation.topBait) for \(species.displayName)"
-                )
+                }
             }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Bait recommendation")
-        .accessibilityValue("\(recommendation.topBait), \(recommendation.color). \(recommendation.confidence) percent confidence. Technique: \(recommendation.technique). Depth: \(recommendation.depth). \(recommendation.whyReason)")
-    }
-}
-
-private struct ConfidenceBadge: View {
-    let value: Int
-
-    private var tint: Color {
-        switch value {
-        case 70...: Ink.bite
-        case 40..<70: Ink.brass
-        default: Ink.slack
-        }
     }
 
-    var body: some View {
-        VStack(spacing: 2) {
-            Text("\(value)%")
-                .font(.system(size: 16, weight: .bold, design: .monospaced))
-                .foregroundStyle(tint)
-                .contentTransition(.numericText())
-            Text("confidence")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .textCase(.uppercase)
-                .tracking(1)
-                .foregroundStyle(Ink.chartDim)
-        }
-    }
-}
-
-private struct DetailItem: View {
-    let label: String
-    let value: String
-    let systemImage: String
-
-    var body: some View {
+    private func detail(
+        label: String,
+        value: String,
+        systemImage: String
+    ) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Label(label, systemImage: systemImage)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .textCase(.uppercase)
-                .tracking(1)
+                .font(.caption)
                 .foregroundStyle(Ink.chartDim)
             Text(value)
-                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                .font(.body.weight(.semibold))
                 .foregroundStyle(Ink.chart)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func submit() {
+        let submitted = question
+        question = ""
+        Task { await engine.ask(submitted) }
     }
 }
