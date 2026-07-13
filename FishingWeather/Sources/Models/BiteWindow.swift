@@ -1,7 +1,7 @@
 import Foundation
 
 /// A solunar feeding period. Major periods are stronger and longer than minor ones.
-enum BitePeriod: String {
+enum BitePeriod: String, Equatable, Sendable {
     case major = "Major"
     case minor = "Minor"
 
@@ -15,7 +15,7 @@ enum BitePeriod: String {
 }
 
 /// A single bite window with a peak time and a span around it.
-struct BiteWindow: Identifiable {
+struct BiteWindow: Identifiable, Equatable, Sendable {
     /// Stable across `FishingConditions` recomputes (conditions is derived state).
     var id: String { "\(period.rawValue)|\(peak.timeIntervalSince1970)|\(cause)" }
     let period: BitePeriod
