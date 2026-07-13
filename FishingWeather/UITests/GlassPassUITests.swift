@@ -1,16 +1,15 @@
 import XCTest
 
-/// Walks every tab (and the two detail screens with standalone glass buttons)
-/// attaching a screenshot of each, so a reviewer can eyeball the Liquid Glass
-/// rendering without driving the simulator by hand.
+/// Walks the permanent destinations and their key local flows, attaching
+/// screenshots so the navigation contract and visual shell can be reviewed.
 final class GlassPassUITests: XCTestCase {
 
     @MainActor
-    func testWalkTabsAndDetailScreens() throws {
+    func testWalkDestinationsAndCentralLogCatch() throws {
         let app = XCUIApplication()
         app.launchArguments = [
             "-uiTesting",
-            "-selectedTab", "weather",
+            "-selectedTab", "biteTime",
             "-selectedSpecies", "all",
             "-selectedSpotID", "",
             "-spotMapStyle", "standard",
@@ -19,30 +18,43 @@ final class GlassPassUITests: XCTestCase {
 
         let tabBar = app.tabBars.firstMatch
         XCTAssertTrue(tabBar.waitForExistence(timeout: 20), "Tab bar never appeared — still on the location gate?")
+        XCTAssertEqual(
+            tabBar.buttons.count,
+            4,
+            "The tab bar must expose only the four labeled destinations"
+        )
 
-        // Let the first weather fetch settle so cards render.
-        Thread.sleep(forTimeInterval: 6)
-        snap(name: "1-weather")
+        let biteTimeTab = app.buttons["tab.biteTime"]
+        XCTAssertTrue(biteTimeTab.waitForExistence(timeout: 5), "BiteTime destination is unreachable")
+        XCTAssertTrue(biteTimeTab.isSelected, "BiteTime launch selection was not applied")
+        XCTAssertTrue(app.buttons["tab.community"].exists)
+        XCTAssertTrue(app.buttons["tab.map"].exists)
+        XCTAssertTrue(app.buttons["tab.you"].exists)
 
-        openTab(app, "Fishing")
-        Thread.sleep(forTimeInterval: 3)
-        snap(name: "2-fishing")
+        let logCatch = app.buttons["action.logCatch"]
+        XCTAssertTrue(logCatch.waitForExistence(timeout: 5), "Central Log Catch action is unreachable")
+        logCatch.tap()
+        XCTAssertTrue(app.navigationBars["Log Catch"].waitForExistence(timeout: 5))
+        snap(name: "1-log-catch")
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(logCatch.waitForExistence(timeout: 5), "Log Catch did not dismiss")
+        XCTAssertTrue(biteTimeTab.isSelected, "Log Catch changed the selected destination")
 
-        // Open the Weekly Trip Planner and capture whatever state it reaches
-        // (loading/outlook on device; error on the simulator where WeatherKit
-        // is unavailable). Confirms the link and navigation are wired.
+        // The action must leave the selected destination and its navigation
+        // state alone. Plan the Week remains reachable on BiteTime.
         let planLink = app.staticTexts["Plan the Week"].firstMatch
-        XCTAssertTrue(planLink.waitForExistence(timeout: 5), "Weekly Trip Planner link is unreachable")
+        XCTAssertTrue(planLink.waitForExistence(timeout: 12), "BiteTime was no longer selected after Log Catch")
+        snap(name: "2-bite-time")
+
         planLink.tap()
         XCTAssertTrue(
             app.navigationBars["Plan the Week"].waitForExistence(timeout: 5),
             "Weekly Trip Planner did not open"
         )
-        Thread.sleep(forTimeInterval: 4)
         snap(name: "2b-planner")
         backOut(app)
 
-        openTab(app, "Spots")
+        openDestination(app, id: "tab.map")
         // The overview map is gated on the device location resolving; wait for
         // it rather than a fixed sleep, then let tiles paint.
         let overviewMap = app.descendants(matching: .any)["Map of nearby spots and ramps"]
@@ -50,67 +62,62 @@ final class GlassPassUITests: XCTestCase {
             overviewMap.waitForExistence(timeout: 15),
             "Nearby-spots map is unreachable"
         )
-        Thread.sleep(forTimeInterval: 4)
-        snap(name: "3-spots")
+        snap(name: "3-map")
 
         // Flip the overview map to satellite imagery and re-capture.
         let satellite = app.buttons["Satellite"]
         XCTAssertTrue(satellite.waitForExistence(timeout: 3), "Satellite map control is unreachable")
         satellite.tap()
-        Thread.sleep(forTimeInterval: 4)   // imagery tiles stream in
-        snap(name: "3b-spots-satellite")
+        XCTAssertTrue(satellite.waitForExistence(timeout: 3))
+        XCTAssertTrue(satellite.isSelected, "Satellite map style was not selected")
+        snap(name: "3b-map-satellite")
 
-        openTab(app, "Guide")
-        Thread.sleep(forTimeInterval: 2)
-        snap(name: "4-guide")
+        openDestination(app, id: "tab.you")
+        XCTAssertTrue(app.navigationBars["You"].waitForExistence(timeout: 5))
+        snap(name: "4-you")
 
-        // Drill into a species card by name; only back out if the detail
-        // screen actually appeared (a blind "first button" tap can hit a
-        // filter chip or toolbar button instead).
-        let bassCard = app.scrollViews.staticTexts["Bass"].firstMatch
-        XCTAssertTrue(bassCard.waitForExistence(timeout: 3), "Bass guide card is unreachable")
-        bassCard.tap()
-        let detailMarker = app.buttons["Set as Fishing tab focus"]
-        XCTAssertTrue(detailMarker.waitForExistence(timeout: 5), "Bass detail screen did not open")
-        Thread.sleep(forTimeInterval: 2)
-        snap(name: "4b-species-detail")
-        backOut(app)
+        assertPush(app, row: "Catch Log", navigationTitle: "Catch Log")
+        assertPush(app, row: "Species Guide", navigationTitle: "Species Guide")
+        assertPush(app, row: "Scout the Water", navigationTitle: "Scout the Water")
+        assertPush(app, row: "Saved Spots", navigationTitle: "Saved Spots")
 
-        openTab(app, "Log")
-        Thread.sleep(forTimeInterval: 1)
-        snap(name: "5-log")
+        let settings = app.buttons["Settings"].firstMatch
+        XCTAssertTrue(settings.waitForExistence(timeout: 5), "Settings is unreachable from You")
+        settings.tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.navigationBars["You"].waitForExistence(timeout: 5))
 
-        openTab(app, "Scout")
-        Thread.sleep(forTimeInterval: 1)
-        snap(name: "6-scout")
+        openDestination(app, id: "tab.community")
+        XCTAssertTrue(app.navigationBars["Community"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Private by design"].waitForExistence(timeout: 5))
+        snap(name: "5-community")
     }
 
-    /// Taps a tab by name, falling through to the More list when the tab bar
-    /// has overflowed.
     @MainActor
-    private func openTab(_ app: XCUIApplication, _ name: String) {
-        let tab = app.tabBars.buttons[name]
-        if tab.exists {
-            tab.tap()
-            return
-        }
-        let more = app.tabBars.buttons["More"]
-        if more.exists {
-            more.tap()
-            let row = app.tables.staticTexts[name].firstMatch
-            if row.waitForExistence(timeout: 3) {
-                row.tap()
-                return
-            }
-        }
-        XCTFail("Could not reach tab \(name)")
+    private func openDestination(_ app: XCUIApplication, id: String) {
+        let destination = app.buttons[id]
+        XCTAssertTrue(destination.waitForExistence(timeout: 5), "Could not reach \(id)")
+        destination.tap()
+    }
+
+    @MainActor
+    private func assertPush(
+        _ app: XCUIApplication,
+        row: String,
+        navigationTitle: String
+    ) {
+        let link = app.buttons[row].firstMatch
+        XCTAssertTrue(link.waitForExistence(timeout: 5), "\(row) is unreachable from You")
+        link.tap()
+        XCTAssertTrue(app.navigationBars[navigationTitle].waitForExistence(timeout: 5))
+        backOut(app)
     }
 
     @MainActor
     private func backOut(_ app: XCUIApplication) {
         let back = app.navigationBars.buttons.firstMatch
         if back.exists { back.tap() }
-        Thread.sleep(forTimeInterval: 1)
     }
 
     @MainActor

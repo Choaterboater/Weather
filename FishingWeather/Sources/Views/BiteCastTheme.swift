@@ -1,9 +1,8 @@
 import SwiftUI
 
-/// Marine-instrument design tokens for BiteCast — a dark chartplotter palette
-/// with brass accents and monospaced data readouts, drawn from an angler's
-/// world (barometers, tide charts, chart paper) rather than a generic weather
-/// app's soft blue gradients.
+/// Native outdoors design tokens for BiteCast: deep water surfaces, warm
+/// chart-paper language, and a restrained brass accent. Measurements may use
+/// monospaced digits, while headings and prose use the system rounded face.
 enum Ink {
     static let abyss    = Color(red: 0.031, green: 0.075, blue: 0.122) // #08131F ground
     static let hull     = Color(red: 0.071, green: 0.157, blue: 0.231) // #12283B panel
@@ -14,6 +13,7 @@ enum Ink {
     static let bite     = Color(red: 0.247, green: 0.725, blue: 0.541) // #3FB98A go
     static let slack    = Color(red: 0.776, green: 0.314, blue: 0.243) // #C6503E caution
     static let tide     = Color(red: 0.302, green: 0.678, blue: 0.784) // #4DADC8 water
+    static let card     = Color(red: 0.078, green: 0.153, blue: 0.216) // calm surface base
 
     /// Score-band color on the marine palette (bite → brass → slack).
     static func band(for score: Int) -> Color {
@@ -36,16 +36,14 @@ enum Ink {
 }
 
 extension View {
-    /// Tracked, uppercase, monospaced instrument label styling.
+    /// A compact native section label. Callers keep their natural casing.
     func instrumentLabel(_ color: Color = Ink.chartDim) -> some View {
-        self.font(.system(size: 10, weight: .semibold, design: .monospaced))
-            .tracking(2)
-            .textCase(.uppercase)
+        self.font(.system(.caption, design: .rounded, weight: .semibold))
             .foregroundStyle(color)
     }
 }
 
-/// A raised dark instrument panel — the marine theme's card surface.
+/// A raised, quiet surface for grouped content. Glass is reserved for controls.
 struct InstrumentPanel<Content: View>: View {
     @ViewBuilder var content: Content
 
@@ -53,13 +51,11 @@ struct InstrumentPanel<Content: View>: View {
         content
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                LinearGradient(colors: [Ink.hull, Ink.abyss],
-                               startPoint: .top, endPoint: .bottom),
-                in: .rect(cornerRadius: 20)
-            )
+            .background(Ink.card.opacity(0.96), in: .rect(cornerRadius: 20))
             .overlay(
-                RoundedRectangle(cornerRadius: 20).stroke(Ink.hullLine, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(Ink.hullLine.opacity(0.8), lineWidth: 1)
             )
+            .shadow(color: .black.opacity(0.12), radius: 14, y: 6)
     }
 }
