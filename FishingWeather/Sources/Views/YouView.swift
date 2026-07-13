@@ -84,6 +84,15 @@ struct YouView: View {
                             .navigationTitle("Saved Spots")
                     }
                     divider
+                    destinationLink(
+                        title: "Legal & Support",
+                        detail: "Privacy, terms, notices, and help",
+                        systemImage: "checkmark.shield.fill"
+                    ) {
+                        LegalCenterView()
+                    }
+                    .accessibilityIdentifier("you.legalSupport")
+                    divider
                     Button {
                         showsSettings = true
                     } label: {

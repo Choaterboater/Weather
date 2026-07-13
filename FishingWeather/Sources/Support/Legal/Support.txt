@@ -1,0 +1,32 @@
+BiteCast Support
+
+Project support page
+
+https://github.com/Choaterboater/Weather
+
+Before reporting a problem
+
+• Confirm the device has a network connection for live weather, maps, videos, products, and other online features.
+• Confirm Location While Using, Camera, Photos, or Notifications permission is enabled if the affected feature needs it.
+• Try the screen's Retry or pull-to-refresh action.
+• Record the BiteCast version, iOS version, affected screen, expected result, and what happened.
+
+Protect your privacy
+
+Do not post precise private fishing coordinates, unredacted catch notes, API keys, account credentials, or personal contact information in a public issue. A screenshot can contain a location even when it is not obvious.
+
+WeatherKit authentication errors
+
+If Apple Weather reports an authentication-service error, confirm WeatherKit is enabled for the app identifier and provisioning profile, then rebuild with a current signed profile. BiteCast should fall back to the National Weather Service when that provider is available.
+
+Console messages
+
+Messages from PointerUI, PerfPowerTelemetry, keyboard scenes, zero-size Metal layers, or unrelated system services can be iOS framework diagnostics. Include them in a report only when they coincide with a visible BiteCast failure. A blank screen, persistent loading state, missing saved catch, wrong location, or repeatable crash is actionable.
+
+Data removal
+
+Remove individual catches from Catch Log. Use iOS Settings to revoke app permissions. Removing the app removes its remaining local container, subject to device or cloud backups managed through Apple.
+
+Response and availability
+
+The project page is the current support channel. No response time or continuous service level is promised.

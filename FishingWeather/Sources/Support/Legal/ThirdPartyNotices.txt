@@ -1,0 +1,67 @@
+BiteCast Third-Party Notices
+
+BiteCast uses or links to services and content provided by others. Provider names and marks belong to their respective owners.
+
+Apple Weather and WeatherKit
+
+Weather data and attribution marks are provided through Apple Weather and WeatherKit. BiteCast displays the legal-attribution link and supplied mark with Apple Weather content.
+
+https://weatherkit.apple.com/legal-attribution.html
+
+Apple Maps
+
+Maps, search, and location features can use Apple Maps and MapKit under Apple's applicable terms.
+
+https://www.apple.com/legal/internet-services/maps/terms-en.html
+
+United States National Weather Service
+
+Forecasts and alerts can be supplied by the National Weather Service. Official alerts link back to weather.gov.
+
+https://www.weather.gov/
+
+NOAA Tides and Currents
+
+Tide-station metadata and predictions can be supplied by NOAA Center for Operational Oceanographic Products and Services.
+
+https://tidesandcurrents.noaa.gov/
+
+United States Geological Survey
+
+Water-gauge observations can be supplied by USGS Water Services.
+
+https://waterservices.usgs.gov/
+
+OpenStreetMap
+
+Nearby-water searches use OpenStreetMap data. © OpenStreetMap contributors. OpenStreetMap data is available under the Open Database License.
+
+https://www.openstreetmap.org/copyright
+
+iNaturalist and Creative Commons media
+
+Observation metadata and eligible public-domain, CC0, or CC BY photos can be supplied by iNaturalist. BiteCast preserves a creator credit, source-observation link, and license link for each displayed observation photo. Creative Commons license text is available from the displayed license URL.
+
+https://www.inaturalist.org/
+
+https://creativecommons.org/
+
+YouTube
+
+Fishing-video search results and thumbnails can be supplied by the YouTube Data API. YouTube is a trademark of Google LLC.
+
+https://www.youtube.com/
+
+Retailers and affiliate destinations
+
+Product search and outbound links can include Amazon, eBay, Tackle Warehouse, Bass Pro Shops, FishUSA, or a displayed affiliate-network redirect. Product names, prices, images, and marks belong to their respective owners. Availability and terms are controlled by the destination.
+
+Replicate
+
+The optional text-to-image bait-art feature can use Replicate-hosted models. Model authors and Replicate retain their applicable rights and terms.
+
+https://replicate.com/
+
+BiteCast species art
+
+The field-guide fish illustrations shipped without an external photo credit are BiteCast original interface artwork. BiteCast does not ship an unverified species photo. If licensed media is added later, its creator, source, license, modification note, and proof record must pass the app's bundled-media manifest checks before display.

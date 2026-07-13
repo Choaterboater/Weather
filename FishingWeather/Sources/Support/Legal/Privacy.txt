@@ -1,0 +1,58 @@
+BiteCast Privacy Notice
+
+Effective July 13, 2026
+
+Overview
+
+BiteCast is designed to work without an account. The current app does not operate a public community feed, publish catches, or provide a developer-hosted account service. Most personal content stays inside the app on your device.
+
+Location and conditions
+
+If you grant Location While Using the App, BiteCast uses your precise location to show nearby weather, water, spots, regulations, and fishing guidance. You may deny or revoke location access in iOS Settings. Saved spots and a location you choose manually can also be used for these features.
+
+Depending on the feature and availability, BiteCast makes requests to these services:
+
+• Apple Weather receives the location required for a WeatherKit request. Apple Weather responses are retained only in a temporary cache and are removed after their supplied expiration boundary.
+• The United States National Weather Service receives latitude and longitude rounded to three decimal places for forecasts and alerts.
+• OpenStreetMap and iNaturalist receive latitude and longitude rounded to two decimal places for nearby water and observation searches.
+• The United States Geological Survey receives an approximate map bounding box for nearby water gauges.
+• NOAA Tides and Currents provides station metadata and tide predictions. BiteCast selects a nearby station on device, then requests predictions using the station identifier.
+• Apple Maps may process map searches, map display, and location-related requests under Apple's terms.
+
+Temporary weather data can be cached on device to improve reliability. BiteCast rejects expired Apple Weather data and does not permanently attach Apple Weather conditions to a catch record. National Weather Service data saved with a catch is identified by source.
+
+Catches, photos, and notes
+
+BiteCast stores each catch's date, species, bait, optional length and weight, notes, exact latitude and longitude when available, spot label, and an optional app-managed copy of the selected photo. The photo is resized and compressed for local storage. If a still-valid National Weather Service snapshot is available at save time, the record can also contain pressure trend, air temperature, dew point, wind, provider identity, and the forecast expiration date. A moon label calculated on device can be stored with separate on-device astronomy provenance. If a loaded NOAA tide prediction is available, the record can separately contain tide phase and NOAA station identity. Those source-labeled values remain available as historical conditions after the live forecast expires. Legacy condition fields without source metadata remain in the raw local record so an upgrade does not silently destroy data, but they are not displayed or used for personalization. Apple Weather condition values are not saved with the catch.
+
+Catch files request iOS complete file protection inside BiteCast's app container. Your operating-system backup settings may include app data in a device or cloud backup controlled by you and Apple.
+
+You can remove one catch at a time from the Catch Log. Deleting a catch removes its record and associated catch photo from the app's local container. Deleting the app through iOS removes the remaining local app container, subject to backups managed outside BiteCast.
+
+Photo analysis and artificial intelligence
+
+Fish identification and water-scout photo analysis run on device. BiteCast does not send your catch or water photos to Replicate or another developer-operated image service. If the required licensed on-device model is unavailable, the app reports that identification is unavailable instead of uploading the photo.
+
+The optional bait-art feature may send a text-only illustration prompt, such as a bait name and visual style, to Replicate. It does not include your photo or precise location. Replicate returns a generated image link. Do not include personal information in an art prompt.
+
+External content and shopping
+
+Local-video features may send a fishing search phrase to YouTube and load video thumbnails. Product features may send a bait or tackle search phrase to Amazon, eBay, or another displayed retailer and may open an affiliate link. The destination can receive standard web information such as your IP address, browser or device information, cookies, and the item you selected under its own privacy notice. An affiliate purchase may compensate the app owner without changing your displayed price.
+
+iNaturalist observation photos are limited to public-domain, CC0, or CC BY media accepted by BiteCast. The app displays the creator, observation source, and license link with that media.
+
+Retention and sharing
+
+BiteCast keeps catch content until you delete it. Saved preferences and spots remain until you change them, delete them, or remove the app. Temporary service responses use feature-specific caches and expiration boundaries.
+
+BiteCast does not sell your catch data. BiteCast sends only the information described above when you choose or use a feature that needs an external service. Those independent services process requests under their own privacy policies and terms.
+
+Security and choices
+
+No storage method is guaranteed to be perfectly secure. Keep your device passcode enabled and iOS current. You control location, camera, photo-library, and notification permissions in iOS Settings. You can use core offline records without enabling every optional permission.
+
+Changes and contact
+
+Material changes will be reflected by updating this notice and its effective date in the app. For support or privacy questions, use the project support page:
+
+https://github.com/Choaterboater/Weather
