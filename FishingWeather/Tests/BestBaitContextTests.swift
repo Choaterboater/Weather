@@ -59,6 +59,32 @@ struct BestBaitContextTests {
         #expect(first.key != refreshed.key)
     }
 
+    @Test("Sanitized prompt changes invalidate the recommendation key")
+    func promptInputInvalidates() throws {
+        let first = try #require(Self.context(
+            forecastPoint: Self.point(at: 3_599, biteScore: 71)
+        ))
+        let repeated = try #require(Self.context(
+            forecastPoint: Self.point(at: 3_599, biteScore: 71)
+        ))
+        let reweighted = try #require(Self.context(
+            forecastPoint: Self.point(at: 3_599, biteScore: 72)
+        ))
+
+        #expect(first.promptSummary == repeated.promptSummary)
+        #expect(first.key == repeated.key)
+        #expect(first.key.species == reweighted.key.species)
+        #expect(first.key.locationKey == reweighted.key.locationKey)
+        #expect(first.key.weatherFetchedAt == reweighted.key.weatherFetchedAt)
+        #expect(first.key.tideFingerprint == reweighted.key.tideFingerprint)
+        #expect(
+            first.key.forecastHourBucket
+                == reweighted.key.forecastHourBucket
+        )
+        #expect(first.promptSummary != reweighted.promptSummary)
+        #expect(first.key != reweighted.key)
+    }
+
     @Test("Committed tide fingerprint invalidates the recommendation key")
     func tideFingerprintInvalidates() throws {
         let first = try #require(Self.context(tideFingerprint: "tide-a"))
@@ -200,6 +226,48 @@ struct BestBaitContextTests {
         #expect(summary.contains("Deterministic bite score: unavailable"))
     }
 
+    @Test("Fallback presentation omits color and labels profile habitat")
+    func fallbackPresentationIsHonest() throws {
+        let context = try #require(Self.context())
+        let profile = BaitProfile.profile(for: .bass)
+        let result = BestBaitResult(
+            key: context.key,
+            recommendation: BaitRecommendation(
+                topBait: try #require(profile.baits.first),
+                color: "",
+                technique: try #require(profile.techniques.first),
+                depth: profile.habitatHint,
+                confidence: 0,
+                whyReason: profile.habitatHint
+            ),
+            source: .generalSpeciesGuidance
+        )
+
+        #expect(result.presentationColor == nil)
+        #expect(result.presentationDetailLabel == "Habitat")
+        #expect(result.presentationDetailValue == profile.habitatHint)
+        #expect(result.presentationDetailSystemImage == "water.waves")
+    }
+
+    @Test("Model presentation preserves generated color and depth")
+    func modelPresentationUsesGeneratedFields() throws {
+        let context = try #require(Self.context())
+        let result = BestBaitResult(
+            key: context.key,
+            recommendation: Self.modelRecommendation(named: "Jig"),
+            source: .onDeviceAppleIntelligence(
+                generatedAt: Date(timeIntervalSince1970: 9_999)
+            )
+        )
+
+        #expect(result.presentationColor == "Green pumpkin")
+        #expect(result.presentationDetailLabel == "Depth")
+        #expect(result.presentationDetailValue == "4–8 ft")
+        #expect(
+            result.presentationDetailSystemImage == "arrow.down.to.line"
+        )
+    }
+
     @MainActor
     @Test("Unavailable model publishes the deterministic profile starting point")
     func unavailableModelPublishesFallback() async throws {
@@ -220,6 +288,7 @@ struct BestBaitContextTests {
         let profile = BaitProfile.profile(for: .bass)
         #expect(result.recommendation.topBait == profile.baits.first)
         #expect(result.recommendation.technique == profile.techniques.first)
+        #expect(result.recommendation.color.isEmpty)
         #expect(result.sourceLabel == "General species guidance — not adjusted for today")
         #expect(result.generatedAt == nil)
         #expect(await workerCalls.value == 0)
@@ -313,7 +382,10 @@ struct BestBaitContextTests {
         )
     }
 
-    private static func point(at epoch: TimeInterval) -> ForecastPoint {
+    private static func point(
+        at epoch: TimeInterval,
+        biteScore: Int? = 72
+    ) -> ForecastPoint {
         let date = Date(timeIntervalSince1970: epoch)
         return ForecastPoint(
             weather: HourlyWeatherPoint(
@@ -336,7 +408,7 @@ struct BestBaitContextTests {
                     gustMetersPerSecond: 6
                 )
             ),
-            biteScore: 72,
+            biteScore: biteScore,
             tideHeightFeet: 2.3,
             tidePhase: "Rising",
             solunarWindow: BiteWindow(

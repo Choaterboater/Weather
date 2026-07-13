@@ -401,6 +401,74 @@ struct AsyncStateIdentityTests {
     }
 
     @MainActor
+    @Test("Changed prompt input bypasses a cached best-bait result")
+    func changedPromptBypassesCachedBaitResult() async throws {
+        let calls = AsyncCounter()
+        let first = try #require(Self.baitContext(
+            locationOffset: 0,
+            biteScore: 70
+        ))
+        let reweighted = try #require(Self.baitContext(
+            locationOffset: 0,
+            biteScore: 71
+        ))
+        let engine = BaitEngine(
+            modelAvailability: { .available },
+            recommendationWorker: { context in
+                await calls.increment()
+                return Self.baitRecommendation(
+                    "Score \(context.forecastPoint.biteScore ?? -1) bait"
+                )
+            }
+        )
+
+        await engine.generateBestBait(for: .bass, context: first)
+        await engine.generateBestBait(for: .bass, context: reweighted)
+
+        #expect(await calls.value == 2)
+        #expect(engine.result?.key == reweighted.key)
+        #expect(engine.result?.recommendation.topBait == "Score 71 bait")
+    }
+
+    @MainActor
+    @Test("Changed prompt input does not coalesce with in-flight bait work")
+    func changedPromptDoesNotCoalesceInflightBait() async throws {
+        let oldStarted = AsyncStartSignal()
+        let calls = AsyncCounter()
+        let oldContext = try #require(Self.baitContext(
+            locationOffset: 0,
+            biteScore: 70
+        ))
+        let reweighted = try #require(Self.baitContext(
+            locationOffset: 0,
+            biteScore: 71
+        ))
+        let engine = BaitEngine(
+            modelAvailability: { .available },
+            recommendationWorker: { context in
+                await calls.increment()
+                if context.forecastPoint.biteScore == 70 {
+                    await oldStarted.markStarted()
+                    try? await Task.sleep(for: .milliseconds(100))
+                    return Self.baitRecommendation("Old score bait")
+                }
+                return Self.baitRecommendation("Reweighted bait")
+            }
+        )
+
+        let old = Task {
+            await engine.generateBestBait(for: .bass, context: oldContext)
+        }
+        await oldStarted.wait()
+        await engine.generateBestBait(for: .bass, context: reweighted)
+        await old.value
+
+        #expect(await calls.value == 2)
+        #expect(engine.result?.key == reweighted.key)
+        #expect(engine.result?.recommendation.topBait == "Reweighted bait")
+    }
+
+    @MainActor
     @Test("A stale best-bait success cannot replace a newer context")
     func staleBaitSuccessDoesNotCommit() async throws {
         let oldStarted = AsyncStartSignal()
@@ -648,7 +716,8 @@ struct AsyncStateIdentityTests {
     }
 
     private static func baitContext(
-        locationOffset: Double
+        locationOffset: Double,
+        biteScore: Int? = 70
     ) -> BestBaitContext? {
         let date = Date(timeIntervalSince1970: 3_600)
         let point = ForecastPoint(
@@ -672,7 +741,7 @@ struct AsyncStateIdentityTests {
                     gustMetersPerSecond: nil
                 )
             ),
-            biteScore: 70,
+            biteScore: biteScore,
             tideHeightFeet: nil,
             tidePhase: nil,
             solunarWindow: nil

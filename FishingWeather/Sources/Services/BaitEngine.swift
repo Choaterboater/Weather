@@ -12,6 +12,7 @@ struct BaitContextKey: Hashable, Sendable {
     let weatherFetchedAt: Date
     let tideFingerprint: String
     let forecastHourBucket: Int64
+    let inputFingerprint: String
 
     static func canGenerate(for species: Species) -> Bool {
         species != .all
@@ -22,7 +23,8 @@ struct BaitContextKey: Hashable, Sendable {
         coordinate: CLLocationCoordinate2D,
         weatherFetchedAt: Date,
         tideFingerprint: String,
-        forecastPoint: ForecastPoint
+        forecastPoint: ForecastPoint,
+        inputFingerprint: String
     ) -> BaitContextKey? {
         guard canGenerate(for: species),
               coordinate.latitude.isFinite,
@@ -43,8 +45,17 @@ struct BaitContextKey: Hashable, Sendable {
             locationKey: roundedLocationKey(for: coordinate),
             weatherFetchedAt: weatherFetchedAt,
             tideFingerprint: tideFingerprint,
-            forecastHourBucket: bucket
+            forecastHourBucket: bucket,
+            inputFingerprint: inputFingerprint
         )
+    }
+
+    /// Fingerprints the exact sanitized facts supplied to the model. The
+    /// surrounding prompt is static, so a changed value here represents a
+    /// changed recommendation input even when the base forecast identity is
+    /// unchanged.
+    static func inputFingerprint(for promptSummary: String) -> String {
+        stableFingerprint(promptSummary.utf8)
     }
 
     /// Fingerprints only committed tide values supplied by `TideService`.
@@ -72,12 +83,7 @@ struct BaitContextKey: Hashable, Sendable {
             .joined(separator: "\n")
             .utf8
 
-        var hash: UInt64 = 14_695_981_039_346_656_037
-        for byte in bytes {
-            hash ^= UInt64(byte)
-            hash &*= 1_099_511_628_211
-        }
-        return String(format: "%016llx", hash)
+        return stableFingerprint(bytes)
     }
 
     private static func roundedLocationKey(
@@ -104,6 +110,17 @@ struct BaitContextKey: Hashable, Sendable {
             value
         )
     }
+
+    private static func stableFingerprint<Bytes: Sequence>(
+        _ bytes: Bytes
+    ) -> String where Bytes.Element == UInt8 {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in bytes {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return String(format: "%016llx", hash)
+    }
 }
 
 /// The exact provider-neutral hour described to the model.
@@ -123,21 +140,28 @@ struct BestBaitContext: Equatable, Sendable {
         tideFingerprint: String,
         forecastPoint: ForecastPoint
     ) {
+        guard forecastPoint.date.timeIntervalSince1970.isFinite else {
+            return nil
+        }
+        let promptSummary = Self.summary(
+            species: species,
+            point: forecastPoint
+        )
         guard let key = BaitContextKey.make(
             species: species,
             coordinate: coordinate,
             weatherFetchedAt: weatherFetchedAt,
             tideFingerprint: tideFingerprint,
-            forecastPoint: forecastPoint
+            forecastPoint: forecastPoint,
+            inputFingerprint: BaitContextKey.inputFingerprint(
+                for: promptSummary
+            )
         ) else { return nil }
 
         self.key = key
         self.species = species
         self.forecastPoint = forecastPoint
-        promptSummary = Self.summary(
-            species: species,
-            point: forecastPoint
-        )
+        self.promptSummary = promptSummary
     }
 
     private static func summary(
@@ -308,6 +332,39 @@ struct BestBaitResult: Equatable {
             return nil
         }
         return generatedAt
+    }
+
+    /// Source-aware fields consumed by both bait surfaces. The profile
+    /// fallback has no evidence for a color or exact depth, so its profile
+    /// habitat remains visible without being mislabeled as either.
+    var presentationColor: String? {
+        guard case .onDeviceAppleIntelligence = source else { return nil }
+        let trimmed = recommendation.color.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        return trimmed.isEmpty ? nil : recommendation.color
+    }
+
+    var presentationDetailLabel: String {
+        switch source {
+        case .onDeviceAppleIntelligence:
+            "Depth"
+        case .generalSpeciesGuidance:
+            "Habitat"
+        }
+    }
+
+    var presentationDetailValue: String {
+        recommendation.depth
+    }
+
+    var presentationDetailSystemImage: String {
+        switch source {
+        case .onDeviceAppleIntelligence:
+            "arrow.down.to.line"
+        case .generalSpeciesGuidance:
+            "water.waves"
+        }
     }
 }
 
@@ -709,7 +766,7 @@ final class BaitEngine {
 
         return BaitRecommendation(
             topBait: bait,
-            color: "Species profile starting point",
+            color: "",
             technique: technique,
             depth: profile.habitatHint,
             confidence: 0,

@@ -91,9 +91,11 @@ struct BestBaitTodayView: View {
                         Text(result.recommendation.topBait)
                             .font(.title3.weight(.bold))
                             .foregroundStyle(Ink.chart)
-                        Text(result.recommendation.color)
-                            .font(.callout)
-                            .foregroundStyle(Ink.chartDim)
+                        if let color = result.presentationColor {
+                            Text(color)
+                                .font(.callout)
+                                .foregroundStyle(Ink.chartDim)
+                        }
                     }
 
                     HStack(alignment: .top, spacing: 20) {
@@ -103,9 +105,9 @@ struct BestBaitTodayView: View {
                             systemImage: "figure.fishing"
                         )
                         detail(
-                            label: "Depth",
-                            value: result.recommendation.depth,
-                            systemImage: "arrow.down.to.line"
+                            label: result.presentationDetailLabel,
+                            value: result.presentationDetailValue,
+                            systemImage: result.presentationDetailSystemImage
                         )
                     }
 
@@ -232,12 +234,15 @@ struct BestBaitTodayView: View {
     private func accessibilityValue(for result: BestBaitResult) -> String {
         var parts = [
             result.recommendation.topBait,
-            result.recommendation.color,
             "Technique: \(result.recommendation.technique)",
-            "Depth: \(result.recommendation.depth)",
+            "\(result.presentationDetailLabel): "
+                + result.presentationDetailValue,
             result.recommendation.whyReason,
             result.sourceLabel,
         ]
+        if let color = result.presentationColor {
+            parts.insert(color, at: 1)
+        }
         if let generatedAt = result.generatedAt {
             parts.append(
                 "Generated "
