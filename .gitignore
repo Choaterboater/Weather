@@ -12,5 +12,6 @@ build/
 
 # Secrets (Replicate token, signing config, etc.)
 Secrets.xcconfig
+PublicConfig.xcconfig
 *.local.xcconfig
 .env

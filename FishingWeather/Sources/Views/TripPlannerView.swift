@@ -12,34 +12,38 @@ struct TripPlannerScreen: View {
     @Environment(TideService.self) private var tides
     @Environment(AlertSettings.self) private var alertSettings
     @State private var loader = TripForecastLoader()
+    @State private var retryID = 0
 
     var body: some View {
         TripPlannerView(
             outlook: loader.outlook,
             isLoading: loader.isLoading,
             errorMessage: loader.errorMessage,
-            onRetry: { Task { await load(force: true) } }
+            onRetry: { retryID += 1 }
         )
         .task(id: taskKey) { await load() }
     }
 
     private func load(force: Bool = false) async {
-        await loader.load(
+        guard let outlook = await loader.load(
             for: location, species: species, locationName: locationName,
             tides: { await tides.weekTidesByDay(near: $0) },
             force: force
-        )
+        ), !Task.isCancelled else { return }
         // Refresh scheduled bite alerts from the freshly loaded outlook. The
         // scheduler returns nothing when alerts are off, so this also clears.
-        if let outlook = loader.outlook {
-            let alerts = BiteAlertScheduler.plan(from: outlook,
-                                                 preferences: alertSettings.preferences)
-            await BiteAlertNotifier.reschedule(alerts)
-        }
+        let alerts = BiteAlertScheduler.plan(from: outlook,
+                                             preferences: alertSettings.preferences)
+        await BiteAlertNotifier.reschedule(alerts)
     }
 
     private var taskKey: String {
-        "\(species.rawValue)-\(location.coordinate.latitude),\(location.coordinate.longitude)"
+        let request = TripForecastLoader.requestKey(
+            location: location,
+            species: species,
+            locationName: locationName
+        )
+        return "\(request)|retry:\(retryID)"
     }
 }
 

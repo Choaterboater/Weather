@@ -1,0 +1,4 @@
+// Optional non-secret values for distributed builds. Keep long-lived service
+// credentials out of this file: the Release Info.plist has no substitutions for
+// Amazon/eBay client secrets or Replicate bearer tokens.
+#include? "PublicConfig.xcconfig"

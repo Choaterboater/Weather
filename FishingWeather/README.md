@@ -1,4 +1,4 @@
-# Fishing Weather — Phases 1–5
+# BiteCast — Fishing Weather
 
 - **Phase 1 (Weather):** WeatherKit + CoreLocation — current conditions, hourly,
   10-day, and active alerts, styled with Liquid Glass.
@@ -24,7 +24,7 @@
   Prefers an on-device Core ML model (`FishClassifier.mlmodelc`, free/offline) and
   falls back to a Replicate vision model; the result auto-sets the species picker.
 
-Targets **iOS 27 / Xcode 27 / Swift 6.4** (strict concurrency).
+Targets **iOS 26.5 / Xcode 26.6 / Swift 6.0** with strict concurrency.
 
 ## Generate the Xcode project
 
@@ -35,8 +35,8 @@ never causes merge conflicts.
 ```bash
 brew install xcodegen      # once
 cd FishingWeather
-xcodegen generate          # creates FishingWeather.xcodeproj
-open FishingWeather.xcodeproj
+xcodegen generate          # creates BiteCast.xcodeproj
+open BiteCast.xcodeproj
 ```
 
 > Prefer not to use XcodeGen? Create a new iOS App in Xcode, then drag the
@@ -45,11 +45,11 @@ open FishingWeather.xcodeproj
 ## Before it runs
 
 1. **Signing team.** In Xcode → target → Signing & Capabilities, pick your team
-   (or set `DEVELOPMENT_TEAM` in `project.yml`). The bundle id placeholder is
-   `com.example.fishingweather` — change it to your own.
+   (or set `DEVELOPMENT_TEAM` in `project.yml`). The current bundle identifier is
+   `app.choatelabs.bitecast`.
 2. **WeatherKit.** Requires a paid Apple Developer account. The
    `com.apple.developer.weatherkit` entitlement is already in
-   `Sources/Support/FishingWeather.entitlements`; also enable the **WeatherKit**
+   `Sources/Support/BiteCast.entitlements`; also enable the **WeatherKit**
    service for your App ID in the developer portal.
 3. **Location.** `NSLocationWhenInUseUsageDescription` is set in `Info.plist`.
 
@@ -57,7 +57,7 @@ open FishingWeather.xcodeproj
 
 ```
 Sources/
-  App/        FishingWeatherApp.swift      app entry, injects observables
+  App/        BiteCastApp.swift            app entry, injects observables
   Services/   LocationManager.swift        CoreLocation wrapper (@Observable)
               WeatherStore.swift           WeatherKit fetch + state
   Models/     BiteWindow.swift             solunar window value type
@@ -120,11 +120,19 @@ tell bass from crappie without a fish-specific model.
   open as search links (no live API) and get wrapped in your affiliate-network
   deep link (AvantLink/Impact/CJ) when you set a `{url}` template in Info.plist,
   so those clicks earn commission too.
-- All credentials are optional. Copy `Secrets.xcconfig.example` to
+- All credentials are optional for local development. Copy `Secrets.xcconfig.example` to
   `Secrets.xcconfig` (gitignored) and fill in what you have — `REPLICATE_API_TOKEN`,
   Amazon (`AMAZON_ACCESS_KEY`/`AMAZON_SECRET_KEY`/`AMAZON_PARTNER_TAG`), eBay
   (`EBAY_CLIENT_ID`/`EBAY_CLIENT_SECRET`/`EBAY_CAMPAIGN_ID`) — or set env vars.
-  Anything unset just disables that source.
+  Anything unset just disables that source. Long-lived Amazon, eBay, and Replicate
+  credentials are included only in Debug builds: production use must route those
+  services through a server-side proxy or token broker. A gitignored xcconfig alone
+  cannot protect a credential embedded in a distributed app bundle.
+- For non-secret Release values, copy `PublicConfig.xcconfig.example` to
+  `PublicConfig.xcconfig` or inject the same settings in CI. Restrict the YouTube
+  key to `app.choatelabs.bitecast` and the YouTube Data API. Affiliate URL templates
+  contain `//`, so set their literal placeholders in the appropriate Info plist or
+  inject them as escaped CI build settings.
 
 ## Solunar approximation
 
@@ -135,6 +143,6 @@ easy to swap for a precise ephemeris later.
 
 ## Status
 
-Phases 1–5 are scaffolded. Remaining work is a real build pass on a Mac with
-Xcode 27 (this repo was assembled on Linux and hasn't been compiled), signing,
-WeatherKit enablement, and an optional Replicate token. See `../PLAN.md`.
+The app builds and tests on Xcode 26.6. Distribution still requires signing and
+WeatherKit to be enabled for the App ID. Optional secret-backed integrations need
+a production proxy as described above. See `../PLAN.md`.

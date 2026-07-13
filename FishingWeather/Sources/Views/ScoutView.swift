@@ -47,15 +47,15 @@ struct ScoutView: View {
             }
             .ignoresSafeArea()
         }
-        .onChange(of: pickerItem) { _, newItem in
-            guard let newItem else { return }
-            Task {
-                if let data = try? await newItem.loadTransferable(type: Data.self),
-                   let picked = UIImage(data: data) {
-                    image = picked
-                    analyze(picked)
-                }
-            }
+        .task(id: pickerItem) {
+            guard let selectedItem = pickerItem,
+                  let data = try? await selectedItem.loadTransferable(type: Data.self),
+                  !Task.isCancelled,
+                  pickerItem == selectedItem,
+                  let picked = UIImage(data: data)
+            else { return }
+            image = picked
+            analyze(picked)
         }
         .onChange(of: species) {
             scout.reset()

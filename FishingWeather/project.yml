@@ -20,12 +20,14 @@ targets:
     platform: iOS
     sources:
       - path: Sources
-    # Injects the gitignored API keys (via AppConfig's optional include) into
-    # every build; without this wiring, regenerating the project silently
-    # dropped all secrets.
+        excludes:
+          - Support/Info.plist
+          - Support/Info-Debug.plist
+    # Injects gitignored API keys into local Debug builds only. Release uses a
+    # separate plist that cannot embed the long-lived service credentials.
     configFiles:
       Debug: AppConfig.xcconfig
-      Release: AppConfig.xcconfig
+      Release: ReleaseConfig.xcconfig
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.choatelabs.bitecast
@@ -34,6 +36,9 @@ targets:
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1"
         DEVELOPMENT_TEAM: RAYW3WPJ98
+      configs:
+        Debug:
+          INFOPLIST_FILE: Sources/Support/Info-Debug.plist
 
   BiteCastTests:
     type: bundle.unit-test

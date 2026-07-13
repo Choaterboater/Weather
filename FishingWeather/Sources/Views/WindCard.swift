@@ -75,7 +75,7 @@ struct WindPanel: View {
     }
 
     /// Plain-language read on what the sustained wind means on the water.
-    static func descriptor(forMph mph: Double) -> String {
+    nonisolated static func descriptor(forMph mph: Double) -> String {
         switch mph {
         case ..<5: "Calm — glassy water"
         case ..<10: "Light breeze — prime conditions"

@@ -43,13 +43,30 @@ struct RootView: View {
             }
         case .denied, .restricted:
             // Still usable if the angler has saved spots from before.
-            if spots.selectedSpot != nil {
+            if Self.canEnterMainContent(
+                status: location.authorizationStatus,
+                hasSavedSpots: !spots.spots.isEmpty
+            ) {
                 MainTabView()
             } else {
                 NavigationStack { LocationDeniedView() }
             }
         default:
             MainTabView()
+        }
+    }
+
+    nonisolated static func canEnterMainContent(
+        status: CLAuthorizationStatus,
+        hasSavedSpots: Bool
+    ) -> Bool {
+        switch status {
+        case .denied, .restricted:
+            hasSavedSpots
+        case .notDetermined:
+            false
+        default:
+            true
         }
     }
 }

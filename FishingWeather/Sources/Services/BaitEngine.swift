@@ -10,6 +10,8 @@ import FoundationModels
 @MainActor
 @Observable
 final class BaitEngine {
+    typealias AnswerWorker = @MainActor (String) async throws -> String
+
     enum Status: Equatable {
         case idle
         case unavailable(String)
@@ -32,6 +34,11 @@ final class BaitEngine {
 
     private var session: LanguageModelSession?
     private var generateID = 0
+    private let answerWorker: AnswerWorker?
+
+    init(answerWorker: AnswerWorker? = nil) {
+        self.answerWorker = answerWorker
+    }
 
     /// Whether the device can run the on-device model right now.
     var availabilityMessage: String? {
@@ -49,6 +56,7 @@ final class BaitEngine {
         recommendation = nil
         answers = []
         session = nil
+        isAnswering = false
     }
 
     func generate(
@@ -109,20 +117,44 @@ final class BaitEngine {
     /// Free-text follow-up that reuses the current session for context.
     func ask(_ question: String) async {
         let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        if availabilityMessage != nil { return }
+        guard !trimmed.isEmpty, !isAnswering else { return }
+        if answerWorker == nil, availabilityMessage != nil { return }
 
-        let session = self.session ?? LanguageModelSession(instructions: Self.instructions)
-        self.session = session
+        let activeSession: LanguageModelSession?
+        if answerWorker == nil {
+            let session = self.session ?? LanguageModelSession(instructions: Self.instructions)
+            self.session = session
+            activeSession = session
+        } else {
+            activeSession = nil
+        }
+        let generation = generateID
 
         isAnswering = true
-        defer { isAnswering = false }
+        defer {
+            if Self.isCurrentGeneration(generation, current: generateID) {
+                isAnswering = false
+            }
+        }
         do {
-            let answer = try await session.respond(to: trimmed).content
+            let answer: String
+            if let answerWorker {
+                answer = try await answerWorker(trimmed)
+            } else if let activeSession {
+                answer = try await activeSession.respond(to: trimmed).content
+            } else {
+                return
+            }
+            guard Self.isCurrentGeneration(generation, current: generateID) else { return }
             answers.append(QAPair(question: trimmed, answer: answer))
         } catch {
+            guard Self.isCurrentGeneration(generation, current: generateID) else { return }
             answers.append(QAPair(question: trimmed, answer: "Couldn't answer: \(error.localizedDescription)"))
         }
+    }
+
+    nonisolated static func isCurrentGeneration(_ requested: Int, current: Int) -> Bool {
+        requested == current
     }
 
     // MARK: - Prompting

@@ -8,7 +8,15 @@ import Observation
 @MainActor
 @Observable
 final class LocationManager: NSObject, CLLocationManagerDelegate {
+    struct GeocodeResult: Sendable {
+        let placeName: String?
+        let stateCode: String?
+    }
+
+    typealias ReverseGeocoder = @MainActor (CLLocation) async -> GeocodeResult?
+
     private let manager = CLLocationManager()
+    private let reverseGeocoder: ReverseGeocoder
 
     var location: CLLocation?
     var placeName: String?
@@ -18,8 +26,10 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     var administrativeArea: String?
     var authorizationStatus: CLAuthorizationStatus
     var lastError: String?
+    private var geocodeTask: Task<Void, Never>?
 
-    override init() {
+    init(reverseGeocoder: ReverseGeocoder? = nil) {
+        self.reverseGeocoder = reverseGeocoder ?? Self.liveReverseGeocode
         #if DEBUG
         if Self.usesUITestingFixture {
             authorizationStatus = .authorizedWhenInUse
@@ -77,10 +87,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         // Extract Sendable scalars; CLLocation itself must not cross the hop.
         let coordinate = latest.coordinate
         Task { @MainActor in
-            let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-            self.location = location
-            self.lastError = nil
-            await self.reverseGeocode(location)
+            self.acceptLocation(coordinate)
         }
     }
 
@@ -95,18 +102,53 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         }
     }
 
+    func acceptLocation(_ coordinate: CLLocationCoordinate2D) {
+        let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        self.location = location
+        placeName = nil
+        administrativeArea = nil
+        lastError = nil
+
+        geocodeTask?.cancel()
+        geocodeTask = Task { [weak self] in
+            await self?.reverseGeocode(location)
+        }
+    }
+
     private func reverseGeocode(_ location: CLLocation) async {
         #if DEBUG
         guard !Self.usesUITestingFixture else { return }
         #endif
-        guard let request = MKReverseGeocodingRequest(location: location) else { return }
-        let items = try? await request.mapItems
-        guard let item = items?.first else { return }
+        let result = await reverseGeocoder(location)
+        guard !Task.isCancelled,
+              Self.isCurrentGeocode(location.coordinate, current: self.location)
+        else { return }
+        guard let result else { return }
+        placeName = result.placeName
+        administrativeArea = result.stateCode
+    }
+
+    private static func liveReverseGeocode(_ location: CLLocation) async -> GeocodeResult? {
+        guard let request = MKReverseGeocodingRequest(location: location),
+              let item = try? await request.mapItems.first
+        else { return nil }
         let address = item.addressRepresentations
-        // Prefer the locality (e.g. "Santa Rosa Beach"); fall back to the
-        // map item's display name.
-        placeName = address?.cityName ?? item.name
-        administrativeArea = Self.usStateCode(from: address)
+        return GeocodeResult(
+            // Prefer the locality (e.g. "Santa Rosa Beach"); fall back to the
+            // map item's display name.
+            placeName: address?.cityName ?? item.name,
+            stateCode: usStateCode(from: address)
+        )
+    }
+
+    nonisolated static func isCurrentGeocode(
+        _ requested: CLLocationCoordinate2D,
+        current: CLLocation?
+    ) -> Bool {
+        guard let current else { return false }
+        let coordinate = current.coordinate
+        return abs(requested.latitude - coordinate.latitude) < 0.000_000_1
+            && abs(requested.longitude - coordinate.longitude) < 0.000_000_1
     }
 
     /// iOS 26's MapKit exposes no structured administrative-area field — the

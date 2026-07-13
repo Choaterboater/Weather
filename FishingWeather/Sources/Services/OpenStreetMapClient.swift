@@ -28,7 +28,7 @@ struct RampPin: Identifiable, Equatable {
         }
     }
 
-    let id: Int          // OSM node/way id
+    let id: String       // OSM element type + type-scoped numeric id
     let name: String?
     let kind: Kind
     let latitude: Double
@@ -109,8 +109,11 @@ final class OpenStreetMapClient {
         // The public Overpass instance routinely answers 429/504 with an HTML
         // body; decode that and the user sees a cryptic "wrong format" error.
         try HTTPStatusError.validate(response)
-        let decoded = try JSONDecoder().decode(OverpassResponse.self, from: data)
-        return decoded.elements.compactMap(\.pin)
+        return try Self.pins(from: data)
+    }
+
+    nonisolated static func pins(from data: Data) throws -> [RampPin] {
+        try JSONDecoder().decode(OverpassResponse.self, from: data).elements.compactMap(\.pin)
     }
 
     private static func tileKey(_ location: CLLocation) -> String {
@@ -154,7 +157,13 @@ final class OpenStreetMapClient {
             } else {
                 kind = .fishingSite
             }
-            return RampPin(id: id, name: tags["name"], kind: kind, latitude: coord.0, longitude: coord.1)
+            return RampPin(
+                id: "\(type)/\(id)",
+                name: tags["name"],
+                kind: kind,
+                latitude: coord.0,
+                longitude: coord.1
+            )
         }
     }
 }

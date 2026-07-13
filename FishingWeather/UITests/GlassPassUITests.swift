@@ -8,7 +8,13 @@ final class GlassPassUITests: XCTestCase {
     @MainActor
     func testWalkTabsAndDetailScreens() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-uiTesting"]
+        app.launchArguments = [
+            "-uiTesting",
+            "-selectedTab", "weather",
+            "-selectedSpecies", "all",
+            "-selectedSpotID", "",
+            "-spotMapStyle", "standard",
+        ]
         app.launch()
 
         let tabBar = app.tabBars.firstMatch
@@ -25,29 +31,34 @@ final class GlassPassUITests: XCTestCase {
         // Open the Weekly Trip Planner and capture whatever state it reaches
         // (loading/outlook on device; error on the simulator where WeatherKit
         // is unavailable). Confirms the link and navigation are wired.
-        let planLink = app.buttons["Plan the Week"]
-        if planLink.waitForExistence(timeout: 3) {
-            planLink.tap()
-            Thread.sleep(forTimeInterval: 4)
-            snap(name: "2b-planner")
-            backOut(app)
-        }
+        let planLink = app.staticTexts["Plan the Week"].firstMatch
+        XCTAssertTrue(planLink.waitForExistence(timeout: 5), "Weekly Trip Planner link is unreachable")
+        planLink.tap()
+        XCTAssertTrue(
+            app.navigationBars["Plan the Week"].waitForExistence(timeout: 5),
+            "Weekly Trip Planner did not open"
+        )
+        Thread.sleep(forTimeInterval: 4)
+        snap(name: "2b-planner")
+        backOut(app)
 
         openTab(app, "Spots")
         // The overview map is gated on the device location resolving; wait for
         // it rather than a fixed sleep, then let tiles paint.
         let overviewMap = app.descendants(matching: .any)["Map of nearby spots and ramps"]
-        _ = overviewMap.waitForExistence(timeout: 15)
+        XCTAssertTrue(
+            overviewMap.waitForExistence(timeout: 15),
+            "Nearby-spots map is unreachable"
+        )
         Thread.sleep(forTimeInterval: 4)
         snap(name: "3-spots")
 
         // Flip the overview map to satellite imagery and re-capture.
         let satellite = app.buttons["Satellite"]
-        if satellite.waitForExistence(timeout: 3) {
-            satellite.tap()
-            Thread.sleep(forTimeInterval: 4)   // imagery tiles stream in
-            snap(name: "3b-spots-satellite")
-        }
+        XCTAssertTrue(satellite.waitForExistence(timeout: 3), "Satellite map control is unreachable")
+        satellite.tap()
+        Thread.sleep(forTimeInterval: 4)   // imagery tiles stream in
+        snap(name: "3b-spots-satellite")
 
         openTab(app, "Guide")
         Thread.sleep(forTimeInterval: 2)
@@ -57,15 +68,13 @@ final class GlassPassUITests: XCTestCase {
         // screen actually appeared (a blind "first button" tap can hit a
         // filter chip or toolbar button instead).
         let bassCard = app.scrollViews.staticTexts["Bass"].firstMatch
-        if bassCard.waitForExistence(timeout: 3) {
-            bassCard.tap()
-            let detailMarker = app.buttons["Set as Fishing tab focus"]
-            if detailMarker.waitForExistence(timeout: 5) {
-                Thread.sleep(forTimeInterval: 2)
-                snap(name: "4b-species-detail")
-                backOut(app)
-            }
-        }
+        XCTAssertTrue(bassCard.waitForExistence(timeout: 3), "Bass guide card is unreachable")
+        bassCard.tap()
+        let detailMarker = app.buttons["Set as Fishing tab focus"]
+        XCTAssertTrue(detailMarker.waitForExistence(timeout: 5), "Bass detail screen did not open")
+        Thread.sleep(forTimeInterval: 2)
+        snap(name: "4b-species-detail")
+        backOut(app)
 
         openTab(app, "Log")
         Thread.sleep(forTimeInterval: 1)
