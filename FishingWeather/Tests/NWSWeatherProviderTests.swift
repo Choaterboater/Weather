@@ -78,6 +78,26 @@ struct NWSWeatherProviderTests {
         #expect(abs((day.windPeakMetersPerSecond ?? 0) - (20 * 0.44704)) < 0.001)
     }
 
+    @Test func dropsNightOnlyDailyGroupRatherThanInventingHigh() async throws {
+        let provider = makeProvider(
+            recorder: NWSRequestRecorder(responses: NWSFixtures.nightOnlyDaily)
+        )
+
+        let value = try await provider.forecast(for: location)
+
+        #expect(value.daily.isEmpty)
+    }
+
+    @Test func dropsDayOnlyDailyGroupRatherThanInventingLow() async throws {
+        let provider = makeProvider(
+            recorder: NWSRequestRecorder(responses: NWSFixtures.dayOnlyDaily)
+        )
+
+        let value = try await provider.forecast(for: location)
+
+        #expect(value.daily.isEmpty)
+    }
+
     @Test func mapsAlertIdentityDatesAndDetails() async throws {
         let provider = makeProvider(
             recorder: NWSRequestRecorder(responses: NWSFixtures.minimumResponses)
@@ -93,6 +113,18 @@ struct NWSWeatherProviderTests {
         #expect(alert.startDate == NWSFixtures.date("2026-07-12T10:15:00-05:00"))
         #expect(alert.endDate == NWSFixtures.date("2026-07-12T12:00:00-05:00"))
         #expect(alert.detailsURL?.absoluteString == "https://api.weather.gov/alerts/urn:oid:123")
+    }
+
+    @Test func alertIdentityAndDetailsFallBackToTopLevelFeatureID() async throws {
+        let provider = makeProvider(
+            recorder: NWSRequestRecorder(responses: NWSFixtures.alertFeatureFallback)
+        )
+
+        let value = try await provider.forecast(for: location)
+
+        let alert = try #require(value.alerts.first)
+        #expect(alert.id == "https://api.weather.gov/alerts/feature-123")
+        #expect(alert.detailsURL?.absoluteString == "https://api.weather.gov/alerts/feature-123")
     }
 
     @Test func usesInjectedAstronomy() async throws {
@@ -179,6 +211,16 @@ struct NWSWeatherProviderTests {
         #expect(value.current.pressureHPa == nil)
     }
 
+    @Test func missingObservationIconPreservesNighttimeHourlySymbol() async throws {
+        let recorder = NWSRequestRecorder(responses: NWSFixtures.withoutObservationIconAtNight)
+        let provider = makeProvider(recorder: recorder)
+
+        let value = try await provider.forecast(for: location)
+
+        #expect(value.hourly.first?.symbolName == "moon.stars")
+        #expect(value.current.symbolName == "moon.stars")
+    }
+
     @Test func unsupportedForecastTemperatureUnitIsDecodingError() async {
         await expectDecoding(NWSFixtures.unsupportedHourlyTemperatureUnit)
     }
@@ -189,6 +231,23 @@ struct NWSWeatherProviderTests {
 
     @Test func unsupportedForecastDirectionIsDecodingError() async {
         await expectDecoding(NWSFixtures.unsupportedHourlyDirection)
+    }
+
+    @Test func trimmedExactCalmWindIsAccepted() async throws {
+        let recorder = NWSRequestRecorder(responses: NWSFixtures.hourlyWind("  Calm  "))
+        let provider = makeProvider(recorder: recorder)
+
+        let value = try await provider.forecast(for: location)
+
+        #expect(value.hourly.first?.wind.speedMetersPerSecond == 0)
+    }
+
+    @Test func malformedCalmWindIsDecodingError() async {
+        await expectDecoding(NWSFixtures.hourlyWind("calm furlongs"))
+    }
+
+    @Test func embeddedMPHGarbageIsDecodingError() async {
+        await expectDecoding(NWSFixtures.hourlyWind("gusts 5 to 10 mph later"))
     }
 
     @Test func unsupportedPointMaps404() async {
@@ -255,6 +314,21 @@ struct NWSWeatherProviderTests {
         }
     }
 
+    @Test func laterChildFailureCancelsEarlierSuspendedRequest() async {
+        let gate = NWSFailFastGate()
+        let loader = NWSFailFastLoader(gate: gate)
+        let provider = NWSWeatherProvider(
+            loader: loader.load,
+            userAgent: userAgent
+        )
+
+        await #expect(throws: WeatherProviderError.serviceUnavailable) {
+            _ = try await provider.forecast(for: location)
+        }
+        let cancellationObserved = await gate.waitUntilCancellation()
+        #expect(cancellationObserved)
+    }
+
     @Test func preservesDirectCancellation() async {
         let provider = NWSWeatherProvider(
             loader: { _ in throw CancellationError() },
@@ -304,6 +378,92 @@ struct NWSWeatherProviderTests {
         } catch {
             Issue.record("Expected WeatherProviderError, got \(error)")
         }
+    }
+}
+
+private struct NWSFailFastGate: Sendable {
+    private let started: AsyncStream<Void>
+    private let startedContinuation: AsyncStream<Void>.Continuation
+    private let hold: AsyncStream<Void>
+    private let holdContinuation: AsyncStream<Void>.Continuation
+    private let cancellation: AsyncStream<Void>
+    private let cancellationContinuation: AsyncStream<Void>.Continuation
+
+    init() {
+        let started = AsyncStream.makeStream(
+            of: Void.self,
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        self.started = started.stream
+        startedContinuation = started.continuation
+
+        let hold = AsyncStream.makeStream(of: Void.self)
+        self.hold = hold.stream
+        holdContinuation = hold.continuation
+
+        let cancellation = AsyncStream.makeStream(
+            of: Void.self,
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        self.cancellation = cancellation.stream
+        cancellationContinuation = cancellation.continuation
+    }
+
+    func suspendUntilCancelled() async throws {
+        try await withTaskCancellationHandler {
+            startedContinuation.yield()
+            startedContinuation.finish()
+            for await _ in hold {}
+            try Task.checkCancellation()
+        } onCancel: {
+            cancellationContinuation.yield()
+            cancellationContinuation.finish()
+            holdContinuation.finish()
+        }
+    }
+
+    func waitUntilStarted() async {
+        for await _ in started { return }
+    }
+
+    func waitUntilCancellation() async -> Bool {
+        for await _ in cancellation { return true }
+        return false
+    }
+}
+
+private struct NWSFailFastLoader: Sendable {
+    let gate: NWSFailFastGate
+
+    func load(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        guard let key = NWSRequestRecorder.key(request) else {
+            throw URLError(.badURL)
+        }
+
+        if key == "/gridpoints/TAE/50,50/forecast/hourly" {
+            try await gate.suspendUntilCancelled()
+            throw URLError(.cancelled)
+        }
+
+        let response: NWSRequestRecorder.Response
+        if key == "/gridpoints/TAE/50,50/forecast" {
+            await gate.waitUntilStarted()
+            response = .status(503)
+        } else if let fixture = NWSFixtures.minimumResponses[key] {
+            response = fixture
+        } else {
+            throw URLError(.resourceUnavailable)
+        }
+
+        guard let httpResponse = HTTPURLResponse(
+            url: request.url ?? URL(string: "https://api.weather.gov")!,
+            statusCode: response.statusCode,
+            httpVersion: "HTTP/1.1",
+            headerFields: response.headers
+        ) else {
+            throw URLError(.badServerResponse)
+        }
+        return (response.data, httpResponse)
     }
 }
 
@@ -383,6 +543,34 @@ private enum NWSFixtures {
         return responses
     }
 
+    static var nightOnlyDaily: [String: Response] {
+        var responses = minimumResponses
+        responses["/gridpoints/TAE/50,50/forecast"] = .json(dailyResponse(nightPeriod))
+        return responses
+    }
+
+    static var dayOnlyDaily: [String: Response] {
+        var responses = minimumResponses
+        responses["/gridpoints/TAE/50,50/forecast"] = .json(dailyResponse(dayPeriod))
+        return responses
+    }
+
+    static var alertFeatureFallback: [String: Response] {
+        var responses = minimumResponses
+        responses["/alerts/active?point=30.2938,-86.0049"] = .json(
+            alerts
+                .replacingOccurrences(
+                    of: #""id": "urn:oid:123","#,
+                    with: #""id": "","#
+                )
+                .replacingOccurrences(
+                    of: #""@id": "https://api.weather.gov/alerts/urn:oid:123""#,
+                    with: #""@id": "not-a-url""#
+                )
+        )
+        return responses
+    }
+
     static var withoutPressure: [String: Response] {
         var responses = minimumResponses
         responses["/stations/KPAM/observations/latest"] = .json(
@@ -438,6 +626,33 @@ private enum NWSFixtures {
         return responses
     }
 
+    static var withoutObservationIconAtNight: [String: Response] {
+        var responses = minimumResponses
+        responses["/gridpoints/TAE/50,50/forecast/hourly"] = .json(
+            hourly
+                .replacingOccurrences(
+                    of: "https://api.weather.gov/icons/land/day/tsra_hi,40?size=medium",
+                    with: "https://api.weather.gov/icons/land/night/skc?size=medium"
+                )
+                .replacingOccurrences(
+                    of: #""shortForecast": "Thunderstorms""#,
+                    with: #""shortForecast": "Clear""#
+                )
+        )
+        responses["/stations/KPAM/observations/latest"] = .json(
+            observation
+                .replacingOccurrences(
+                    of: #""textDescription": "Mostly Cloudy""#,
+                    with: #""textDescription": "Clear""#
+                )
+                .replacingOccurrences(
+                    of: #""icon": "https://api.weather.gov/icons/land/day/bkn?size=medium","#,
+                    with: ""
+                )
+        )
+        return responses
+    }
+
     static var unsupportedHourlyTemperatureUnit: [String: Response] {
         replacingHourly(#""temperatureUnit": "F""#, with: #""temperatureUnit": "unknown""#)
     }
@@ -448,6 +663,13 @@ private enum NWSFixtures {
 
     static var unsupportedHourlyDirection: [String: Response] {
         replacingHourly(#""windDirection": "SW""#, with: #""windDirection": "VARIABLE""#)
+    }
+
+    static func hourlyWind(_ value: String) -> [String: Response] {
+        replacingHourly(
+            #""windSpeed": "5 to 10 mph""#,
+            with: "\"windSpeed\": \"\(value)\""
+        )
     }
 
     private static func replacingHourly(_ target: String, with replacement: String) -> [String: Response] {
@@ -506,34 +728,43 @@ private enum NWSFixtures {
     }
     """#
 
-    private static let daily = #"""
-    {
-      "properties": {
-        "periods": [
-          {
-            "startTime": "2026-07-12T06:00:00-05:00",
-            "isDaytime": true,
-            "temperature": 86,
-            "temperatureUnit": "F",
-            "probabilityOfPrecipitation": {"unitCode": "wmoUnit:percent", "value": 20},
-            "windSpeed": "10 to 15 mph",
-            "windDirection": "S",
-            "icon": "https://api.weather.gov/icons/land/day/sct?size=medium",
-            "shortForecast": "Mostly Sunny"
-          },
-          {
-            "startTime": "2026-07-12T18:00:00-05:00",
-            "isDaytime": false,
-            "temperature": 68,
-            "temperatureUnit": "F",
-            "probabilityOfPrecipitation": {"unitCode": "wmoUnit:percent", "value": 40},
-            "windSpeed": "15 to 20 mph",
-            "windDirection": "SW",
-            "icon": "https://api.weather.gov/icons/land/night/tsra,40?size=medium",
-            "shortForecast": "Chance Thunderstorms"
+    private static let daily = dailyResponse("\(dayPeriod),\(nightPeriod)")
+
+    private static func dailyResponse(_ periods: String) -> String {
+        """
+        {
+          "properties": {
+            "periods": [\(periods)]
           }
-        ]
-      }
+        }
+        """
+    }
+
+    private static let dayPeriod = #"""
+    {
+      "startTime": "2026-07-12T06:00:00-05:00",
+      "isDaytime": true,
+      "temperature": 86,
+      "temperatureUnit": "F",
+      "probabilityOfPrecipitation": {"unitCode": "wmoUnit:percent", "value": 20},
+      "windSpeed": "10 to 15 mph",
+      "windDirection": "S",
+      "icon": "https://api.weather.gov/icons/land/day/sct?size=medium",
+      "shortForecast": "Mostly Sunny"
+    }
+    """#
+
+    private static let nightPeriod = #"""
+    {
+      "startTime": "2026-07-12T18:00:00-05:00",
+      "isDaytime": false,
+      "temperature": 68,
+      "temperatureUnit": "F",
+      "probabilityOfPrecipitation": {"unitCode": "wmoUnit:percent", "value": 40},
+      "windSpeed": "15 to 20 mph",
+      "windDirection": "SW",
+      "icon": "https://api.weather.gov/icons/land/night/tsra,40?size=medium",
+      "shortForecast": "Chance Thunderstorms"
     }
     """#
 
@@ -573,8 +804,9 @@ private enum NWSFixtures {
     {
       "features": [
         {
-          "id": "urn:oid:123",
+          "id": "https://api.weather.gov/alerts/feature-123",
           "properties": {
+            "id": "urn:oid:123",
             "@id": "https://api.weather.gov/alerts/urn:oid:123",
             "event": "Severe Thunderstorm Warning",
             "headline": "Severe Thunderstorm Warning issued July 12",
