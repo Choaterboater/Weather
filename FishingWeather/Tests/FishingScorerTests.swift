@@ -939,4 +939,31 @@ struct FishingScorerTests {
         ).factors.first { $0.kind == .tide }!.detail
         #expect(detail.contains("Next tide in 1 hr"), "Detail was: \(detail)")
     }
+
+    @Test("The overall score is the rounded weighted sum, not a sum of roundings")
+    func overallDoesNotAccumulatePerFactorRounding() {
+        // Each factor lands on a .5 boundary, so rounding every contribution
+        // before summing drifts the total and can cross a band boundary.
+        let factors = [
+            ScoreFactor(kind: .solunar, label: "Solunar", weight: 0.25, raw: 0.858, detail: ""),
+            ScoreFactor(kind: .pressure, label: "Pressure", weight: 0.20, raw: 0.858, detail: ""),
+            ScoreFactor(kind: .wind, label: "Wind", weight: 0.15, raw: 0.858, detail: ""),
+            ScoreFactor(kind: .tide, label: "Tide", weight: 0.25, raw: 0.858, detail: ""),
+            ScoreFactor(kind: .season, label: "Season", weight: 0.15, raw: 0.858, detail: ""),
+        ]
+        let score = FishingScore(factors: factors)
+
+        #expect(score.overall == 86)
+        #expect(score.band == .excellent)
+    }
+
+    @Test("A score of zero weight and raw never produces a non-finite total")
+    func degenerateFactorsClampToZero() {
+        let score = FishingScore(factors: [
+            ScoreFactor(kind: .wind, label: "Wind", weight: 0, raw: 0, detail: ""),
+        ])
+
+        #expect(score.overall == 0)
+        #expect(score.band == .poor)
+    }
 }

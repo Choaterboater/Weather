@@ -24,6 +24,17 @@ enum WeatherUnits {
         )
     }
 
+    /// Placeholder shown when a provider covered only part of a forecast day.
+    static let absentTemperature = "—"
+
+    static func wholeTemperature(
+        celsius: Double?,
+        locale: Locale = .current
+    ) -> String {
+        guard let celsius, celsius.isFinite else { return absentTemperature }
+        return wholeTemperature(celsius: celsius, locale: locale)
+    }
+
     static func milesPerHour(metersPerSecond: Double) -> Double {
         Measurement(value: metersPerSecond, unit: UnitSpeed.metersPerSecond)
             .converted(to: .milesPerHour)

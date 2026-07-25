@@ -596,9 +596,14 @@ private struct DebugSettings: View {
         s.preferences.enabled = true
         return s
     }()
+    // SettingsView reads the active provenance to explain when bite alerts are
+    // paused, so the preview needs a store even though it never loads.
+    @State private var weatherStore = BiteTimePreviewFixture.weatherStore(for: .live)
 
     var body: some View {
-        SettingsView().environment(settings)
+        SettingsView()
+            .environment(settings)
+            .environment(weatherStore)
     }
 }
 

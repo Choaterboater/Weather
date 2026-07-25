@@ -248,6 +248,7 @@ struct BiteTimeView: View {
     @AppStorage private var species: Species
     @State private var engine: BaitEngine
     @State private var selection = BiteTimeSelectionState()
+    @State private var seriesCache = ForecastSeriesCache()
     @State private var presentation = BiteTimeForecastPresentation.timeline
     @State private var speciesFeedbackGeneration = 0
     @State private var liveNow: Date
@@ -362,13 +363,27 @@ struct BiteTimeView: View {
             of: .hour,
             for: now
         )?.start ?? now
-        return ForecastSeriesBuilder.build(
-            weather: snapshot,
-            tideSamples: committedTideSamples,
-            species: species,
-            weights: personalWeights,
-            now: forecastStart
-        )
+        let samples = committedTideSamples
+        let weights = personalWeights
+        // Read several times per body pass (selectedPoint, conditions, the
+        // chart, and the onChange comparand). Build once per distinct input set.
+        return seriesCache.points(
+            for: ForecastSeriesKey(
+                weather: snapshot,
+                tideSamples: samples,
+                species: species,
+                weights: weights,
+                now: forecastStart
+            )
+        ) {
+            ForecastSeriesBuilder.build(
+                weather: snapshot,
+                tideSamples: samples,
+                species: species,
+                weights: weights,
+                now: forecastStart
+            )
+        }
     }
 
     private var preferredForecastDate: Date {

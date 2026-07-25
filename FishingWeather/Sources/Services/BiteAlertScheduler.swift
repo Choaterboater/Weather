@@ -1,4 +1,26 @@
 import Foundation
+import UserNotifications
+
+/// Builds the delivery trigger for every weather-derived notification.
+///
+/// Absolute offsets rather than calendar components on purpose: wall-clock
+/// components carry no time zone, so `UNCalendarNotificationTrigger`
+/// re-resolves them against whatever zone the device is in at fire time.
+/// Crossing a time zone between scheduling and firing shifts the alert, and a
+/// fire time inside a DST spring-forward gap matches no instant at all.
+enum WeatherDerivedNotificationTrigger {
+    static func make(
+        fireDate: Date,
+        from referenceDate: Date
+    ) -> UNTimeIntervalNotificationTrigger? {
+        let interval = fireDate.timeIntervalSince(referenceDate)
+        guard interval.isFinite, interval > 0 else { return nil }
+        return UNTimeIntervalNotificationTrigger(
+            timeInterval: interval,
+            repeats: false
+        )
+    }
+}
 
 /// Local notifications cannot carry WeatherKit's required combined mark and
 /// legal link. Weather-derived notifications therefore stay inside the NWS
@@ -10,6 +32,9 @@ enum WeatherDerivedNotificationPolicy {
     ) -> Bool {
         guard let provenance,
               provenance.isValid(at: date),
+              // A cache delivery carries a fresh presentation window but stale
+              // forecast content. Never schedule a future alert from it.
+              provenance.source != .cache,
               let attribution = provenance.providerAttribution else {
             return false
         }

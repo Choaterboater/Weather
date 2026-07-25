@@ -17,6 +17,9 @@ enum PersonalScoreModel {
     static let fullCatches = 15
     /// Maximum weighting shift, at full confidence.
     static let maxShift = 0.5
+    /// Confidence at exactly `minCatches`, so crossing the threshold is a
+    /// visible change rather than a no-op that still claims to be personalized.
+    static let minConfidence = 0.2
 
     /// The catches that actually inform personalization — the per-species sample
     /// (or the fallback), but only once it clears `minCatches`. Empty otherwise.
@@ -44,7 +47,13 @@ enum PersonalScoreModel {
         let sample = sample(catches, species: species)
         guard sample.count >= minCatches else { return base }
 
-        let confidence = min(1, Double(sample.count - minCatches) / Double(fullCatches - minCatches))
+        // The first qualifying catch must already move the weights, otherwise
+        // the "tuned to your N catches" badge appears while the score is still
+        // the standard one. Confidence ramps from a non-zero floor at
+        // `minCatches` to full strength at `fullCatches`.
+        let progress = Double(sample.count - minCatches)
+            / Double(fullCatches - minCatches)
+        let confidence = min(1, minConfidence + (1 - minConfidence) * progress)
         let shift = maxShift * confidence
         guard shift > 0 else { return base }
 
@@ -134,8 +143,12 @@ enum PersonalScoreModel {
         return nil
     }
 
-    static func seasonAffinity(_ entry: CatchEntry, species: Species) -> Double? {
-        let month = Calendar.current.component(.month, from: entry.date)
+    static func seasonAffinity(
+        _ entry: CatchEntry,
+        species: Species,
+        calendar: Calendar = .current
+    ) -> Double? {
+        let month = calendar.component(.month, from: entry.date)
         let peaks = species.peakMonths
         guard !peaks.isEmpty else { return nil }
         if peaks.contains(month) { return 1.0 }

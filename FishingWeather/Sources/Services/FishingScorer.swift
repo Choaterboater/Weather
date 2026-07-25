@@ -204,18 +204,23 @@ enum FishingScorer {
         return Subscore(raw: raw, detail: detail)
     }
 
+    /// `Date.FormatStyle` is a value type, so this costs no allocation. The
+    /// previous `DateFormatter` was constructed once per scored hour, which the
+    /// 48-hour timeline paid for on every rebuild.
     private static func formattedTime(
         _ date: Date,
         calendar: Calendar,
         locale: Locale
     ) -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = calendar
-        formatter.locale = locale
-        formatter.timeZone = calendar.timeZone
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+        date.formatted(
+            Date.FormatStyle(
+                date: .omitted,
+                time: .shortened,
+                locale: locale,
+                calendar: calendar,
+                timeZone: calendar.timeZone
+            )
+        )
     }
 
     private static func scorePressure(tendency: PressureTendency?, changePerHour: Double?) -> Subscore {

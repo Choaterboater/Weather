@@ -12,6 +12,16 @@ struct NWSWeatherProvider: WeatherProvider {
 
     static let snapshotLifetime: TimeInterval = 30 * 60
 
+    /// How far back to pull station observations. `PressureReading` wants a
+    /// baseline at least an hour old and targets three hours; six gives it room
+    /// when a station reports irregularly.
+    static let observationHistoryWindow: TimeInterval = 6 * 3_600
+
+    /// An alert ending moments after the fetch would otherwise mint a snapshot
+    /// that `WeatherStore` rejects at commit time, surfacing a successful fetch
+    /// as a service failure. Never publish a validity window shorter than this.
+    static let minimumSnapshotLifetime: TimeInterval = 5 * 60
+
     private let loader: Loader
     private let userAgent: String
     private let astronomy: AstronomyWorker
@@ -41,7 +51,7 @@ struct NWSWeatherProvider: WeatherProvider {
 
             var hourlyValue: [HourlyWeatherPoint]?
             var dailyValue: [DailyWeatherPoint]?
-            var observationValue: NWSObservationProperties?
+            var observationValue = NWSObservationBundle.empty
             var alertValue: [WeatherAlertSnapshot]?
 
             try await withThrowingTaskGroup(of: NWSFetchResult.self) { group in
@@ -56,8 +66,9 @@ struct NWSWeatherProvider: WeatherProvider {
                     ))
                 }
                 group.addTask {
-                    .observation(try await self.loadObservation(
-                        point.properties.observationStations
+                    .observation(try await self.loadObservations(
+                        point.properties.observationStations,
+                        at: fetchedAt
                     ))
                 }
                 group.addTask {
@@ -90,9 +101,13 @@ struct NWSWeatherProvider: WeatherProvider {
             let cappedExpiry = fetchedAt.addingTimeInterval(
                 Self.snapshotLifetime
             )
+            // Only an alert that outlives the minimum lifetime may shorten the
+            // snapshot; anything closer would reject a perfectly good fetch.
             let earliestAlertExpiry = alertValue
                 .compactMap(\.endDate)
-                .filter { $0 > fetchedAt }
+                .filter {
+                    $0 > fetchedAt.addingTimeInterval(Self.minimumSnapshotLifetime)
+                }
                 .min()
 
             return WeatherSnapshot(
@@ -101,11 +116,12 @@ struct NWSWeatherProvider: WeatherProvider {
                     longitude: location.coordinate.longitude
                 ),
                 timeZoneIdentifier: point.properties.timeZone,
-                current: current(observationValue, fallback: firstHour),
+                current: current(observationValue.latest, fallback: firstHour),
                 hourly: hourlyValue,
                 daily: dailyValue,
                 alerts: alertValue,
                 astronomy: astronomy(location, fetchedAt, calendar),
+                pressureHistory: observationValue.pressureHistory,
                 provenance: WeatherProvenance(
                     source: .nws,
                     fetchedAt: fetchedAt,
@@ -152,7 +168,15 @@ struct NWSWeatherProvider: WeatherProvider {
             from: data
         )
 
-        return try response.properties.periods.map(Self.hourly)
+        // One anomalous period must not discard a whole day of forecast. Drop
+        // what cannot be read and fail only when nothing survives.
+        let points = response.properties.periods.compactMap(Self.hourly)
+        guard !points.isEmpty else {
+            throw WeatherProviderError.decoding(
+                "NWS hourly forecast contained no usable periods"
+            )
+        }
+        return points
     }
 
     private func loadDaily(
@@ -177,7 +201,14 @@ struct NWSWeatherProvider: WeatherProvider {
         )
     }
 
-    private func loadObservation(_ stationsURL: URL) async throws -> NWSObservationProperties? {
+    /// NWS publishes no pressure in its hourly forecast, so the observation
+    /// endpoint is the only barometric source on this path. Fetching the recent
+    /// series rather than only `/latest` is what lets `PressureReading` derive a
+    /// real tendency instead of falling back to "unavailable".
+    private func loadObservations(
+        _ stationsURL: URL,
+        at fetchedAt: Date
+    ) async throws -> NWSObservationBundle {
         guard Self.isCanonicalNWSAPIURL(
             stationsURL,
             allowsQuery: false
@@ -187,7 +218,7 @@ struct NWSWeatherProvider: WeatherProvider {
         guard let stationData = try await optionalData(for: stationsURL),
               let stationURL = try decode(NWSStationCollection.self, from: stationData)
                 .features.first?.id
-        else { return nil }
+        else { return .empty }
 
         guard Self.isCanonicalNWSAPIURL(
             stationURL,
@@ -196,9 +227,49 @@ struct NWSWeatherProvider: WeatherProvider {
             throw WeatherProviderError.serviceUnavailable
         }
 
-        let latestURL = stationURL.appending(path: "observations/latest")
-        guard let observationData = try await optionalData(for: latestURL) else { return nil }
-        return try decode(NWSObservationResponse.self, from: observationData).properties
+        var components = URLComponents(
+            url: stationURL.appending(path: "observations"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [
+            URLQueryItem(
+                name: "start",
+                value: Self.iso8601String(
+                    fetchedAt.addingTimeInterval(-Self.observationHistoryWindow)
+                )
+            ),
+        ]
+        guard let observationsURL = components?.url,
+              let observationData = try await optionalData(for: observationsURL)
+        else { return .empty }
+
+        let observations = try decode(
+            NWSObservationCollection.self,
+            from: observationData
+        ).features.map(\.properties)
+
+        // NWS orders newest-first, but pick by timestamp rather than trusting it.
+        let dated = observations.compactMap { properties -> (Date, NWSObservationProperties)? in
+            guard let timestamp = Self.date(properties.timestamp) else { return nil }
+            return (timestamp, properties)
+        }
+        let latest = dated
+            .filter { $0.0 <= fetchedAt }
+            .max { $0.0 < $1.0 }?
+            .1 ?? observations.first
+
+        let pressureHistory = dated
+            .compactMap { timestamp, properties -> PressureSample? in
+                guard let hPa = Self.hectopascals(properties.barometricPressure),
+                      hPa.isFinite else { return nil }
+                return PressureSample(date: timestamp, pressureHPa: hPa)
+            }
+            .sorted { $0.date < $1.date }
+
+        return NWSObservationBundle(
+            latest: latest,
+            pressureHistory: pressureHistory
+        )
     }
 
     private func loadAlerts(
@@ -326,7 +397,7 @@ struct NWSWeatherProvider: WeatherProvider {
         )
     }
 
-    private static func hourly(_ period: NWSForecastPeriod) throws -> HourlyWeatherPoint {
+    private static func hourly(_ period: NWSForecastPeriod) -> HourlyWeatherPoint? {
         guard let parsedDate = date(period.startTime),
               let temperatureCelsius = celsius(period.temperature, unit: period.temperatureUnit),
               let wind = windRange(period.windSpeed),
@@ -335,7 +406,7 @@ struct NWSWeatherProvider: WeatherProvider {
                   permitsVariable: wind.upperMetersPerSecond == 0
               )
         else {
-            throw WeatherProviderError.decoding("NWS hourly period used an unsupported value")
+            return nil
         }
 
         return HourlyWeatherPoint(
@@ -365,7 +436,7 @@ struct NWSWeatherProvider: WeatherProvider {
         calendar: Calendar,
         astronomy: (Date) -> AstronomySnapshot
     ) throws -> [DailyWeatherPoint] {
-        let candidates = try periods.map { period -> NWSDailyCandidate in
+        let candidates = periods.compactMap { period -> NWSDailyCandidate? in
             guard let parsedDate = date(period.startTime),
                   let temperatureCelsius = celsius(
                       period.temperature,
@@ -377,7 +448,7 @@ struct NWSWeatherProvider: WeatherProvider {
                       permitsVariable: wind.upperMetersPerSecond == 0
                   ) != nil
             else {
-                throw WeatherProviderError.decoding("NWS daily period used an unsupported value")
+                return nil
             }
             return NWSDailyCandidate(
                 date: calendar.startOfDay(for: parsedDate),
@@ -391,23 +462,32 @@ struct NWSWeatherProvider: WeatherProvider {
             )
         }
 
+        guard !candidates.isEmpty else {
+            throw WeatherProviderError.decoding(
+                "NWS daily forecast contained no usable periods"
+            )
+        }
+
         let groups = Dictionary(grouping: candidates, by: \.date)
         return groups
             .keys
             .sorted()
             .compactMap { date in
-                guard let group = groups[date],
-                      let daytime = group.first(where: \.isDaytime),
-                      let nighttime = group.first(where: { !$0.isDaytime })
-                else { return nil }
+                guard let group = groups[date] else { return nil }
+                // NWS returns a rolling list starting at the current period, so
+                // the first and last days routinely carry only one half. Emit
+                // the half that exists rather than dropping the day outright.
+                let daytime = group.first(where: \.isDaytime)
+                let nighttime = group.first(where: { !$0.isDaytime })
+                guard let representative = daytime ?? nighttime else { return nil }
 
                 return DailyWeatherPoint(
                     date: date,
-                    lowCelsius: nighttime.temperatureCelsius,
-                    highCelsius: daytime.temperatureCelsius,
+                    lowCelsius: nighttime?.temperatureCelsius,
+                    highCelsius: daytime?.temperatureCelsius,
                     precipitationChance: group.compactMap(\.precipitationChance).max(),
-                    conditionText: daytime.conditionText,
-                    symbolName: daytime.symbolName,
+                    conditionText: representative.conditionText,
+                    symbolName: representative.symbolName,
                     windMetersPerSecond: group.compactMap(\.windMetersPerSecond).max(),
                     windPeakMetersPerSecond: group.compactMap(\.windPeakMetersPerSecond).max(),
                     astronomy: astronomy(date)
@@ -613,6 +693,13 @@ struct NWSWeatherProvider: WeatherProvider {
         return standard.date(from: value)
     }
 
+    private static func iso8601String(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        return formatter.string(from: date)
+    }
+
     private static func canonicalNWSAPIURL(_ value: String?) -> URL? {
         guard let value,
               let url = URL(string: value),
@@ -745,8 +832,20 @@ private struct NWSStationCollection: Decodable, Sendable {
     }
 }
 
-private struct NWSObservationResponse: Decodable, Sendable {
-    let properties: NWSObservationProperties
+private struct NWSObservationCollection: Decodable, Sendable {
+    let features: [Feature]
+
+    struct Feature: Decodable, Sendable {
+        let properties: NWSObservationProperties
+    }
+}
+
+/// The station's newest reading plus the recent barometric series behind it.
+private struct NWSObservationBundle: Sendable {
+    let latest: NWSObservationProperties?
+    let pressureHistory: [PressureSample]
+
+    static let empty = Self(latest: nil, pressureHistory: [])
 }
 
 private struct NWSObservationProperties: Decodable, Sendable {
@@ -808,7 +907,7 @@ private struct NWSAlertFeature: Decodable, Sendable {
 private enum NWSFetchResult: Sendable {
     case hourly([HourlyWeatherPoint])
     case daily([DailyWeatherPoint])
-    case observation(NWSObservationProperties?)
+    case observation(NWSObservationBundle)
     case alerts([WeatherAlertSnapshot])
 }
 

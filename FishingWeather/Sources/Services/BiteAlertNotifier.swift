@@ -70,12 +70,10 @@ enum BiteAlertNotifier {
                 content.body = alert.body
                 content.sound = .default
 
-                let components = Calendar.current.dateComponents(
-                    [.year, .month, .day, .hour, .minute], from: alert.fireDate)
-                let trigger = UNCalendarNotificationTrigger(
-                    dateMatching: components,
-                    repeats: false
-                )
+                guard let trigger = WeatherDerivedNotificationTrigger.make(
+                    fireDate: alert.fireDate,
+                    from: commitDate
+                ) else { continue }
                 let request = UNNotificationRequest(
                     identifier: alert.id,
                     content: content,

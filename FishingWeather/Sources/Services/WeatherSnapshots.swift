@@ -35,7 +35,30 @@ actor WeatherSnapshots {
         let version: Int
     }
 
-    private static let currentVersion = 2
+    /// Bumped to 3 when `WeatherSnapshot` gained `pressureHistory`. The version
+    /// gate runs before the snapshot decode, so older envelopes are rejected
+    /// cleanly rather than failing as malformed.
+    private static let currentVersion = 3
+
+    /// How long cached bytes stay on disk. This is deliberately *not* the
+    /// origin provider's expiry: a snapshot that is too old to present as
+    /// current is exactly the snapshot an offline angler still wants to see.
+    /// `CachedWeatherProvider` decides what is servable; storage only decides
+    /// what is retained.
+    static let retentionWindow: TimeInterval = 24 * 3_600
+
+    static func isRetained(
+        _ provenance: WeatherProvenance,
+        at date: Date,
+        retentionWindow: TimeInterval = WeatherSnapshots.retentionWindow
+    ) -> Bool {
+        let fetchedAt = provenance.fetchedAt
+        guard fetchedAt.timeIntervalSinceReferenceDate.isFinite,
+              provenance.expiresAt.timeIntervalSinceReferenceDate.isFinite
+        else { return false }
+        let age = date.timeIntervalSince(fetchedAt)
+        return age >= 0 && age <= retentionWindow
+    }
     private static let logger = Logger(
         subsystem: "app.choatelabs.bitecast",
         category: "WeatherSnapshots"
@@ -96,9 +119,9 @@ actor WeatherSnapshots {
             }
 
             if let existing {
-                if !existing.provenance.isValid(at: saveDate) {
+                if !Self.isRetained(existing.provenance, at: saveDate) {
                     Self.logger.error(
-                        "invalid or expired snapshot purged before save for \(url.lastPathComponent)"
+                        "unretainable snapshot purged before save for \(url.lastPathComponent)"
                     )
                     try fileManager.removeItem(at: url)
                 } else if existing.provenance.fetchedAt >= snapshot.provenance.fetchedAt {
@@ -138,7 +161,10 @@ actor WeatherSnapshots {
 
         do {
             let snapshot = try decodedSnapshot(at: url)
-            guard snapshot.provenance.isValid(at: now()) else {
+            // Retention, not presentability. An expired-but-retained snapshot is
+            // returned so `CachedWeatherProvider` can decide whether it is still
+            // useful as an offline fallback.
+            guard Self.isRetained(snapshot.provenance, at: now()) else {
                 try fileManager.removeItem(at: url)
                 return nil
             }
@@ -228,8 +254,10 @@ actor WeatherSnapshots {
             let shouldKeep: Bool
             if entry.pathExtension == "json" {
                 do {
-                    shouldKeep = try decodedSnapshot(at: entry)
-                        .provenance.isValid(at: referenceDate)
+                    shouldKeep = Self.isRetained(
+                        try decodedSnapshot(at: entry).provenance,
+                        at: referenceDate
+                    )
                 } catch {
                     shouldKeep = false
                 }
@@ -265,10 +293,22 @@ actor WeatherSnapshots {
 
 /// Final provider in the fallback chain. It deliberately preserves the
 /// original fetch time while identifying the delivery source as the cache.
+///
+/// This provider intentionally serves snapshots the origin provider already
+/// considers expired. That is the whole point of an offline fallback: NWS
+/// snapshots expire in 30 minutes and WeatherKit's in an hour, so gating on the
+/// origin expiry would make `maxAge` unreachable and leave an angler out of
+/// signal with nothing. The delivery is re-stamped as `.cache` with
+/// `isFallback: true` and its own short validity window, so the UI shows it as
+/// cached and the app keeps retrying the live providers.
 struct CachedWeatherProvider: WeatherProvider {
     typealias Clock = @Sendable () -> Date
 
     static let defaultMaxAge: TimeInterval = 24 * 3_600
+
+    /// How long one cache *delivery* stays presentable before the app must ask
+    /// the live providers again. Independent of how old the data itself is.
+    static let deliveryLifetime: TimeInterval = 15 * 60
 
     let cache: WeatherSnapshots
     let maxAge: TimeInterval
@@ -295,7 +335,8 @@ struct CachedWeatherProvider: WeatherProvider {
               maxAge >= 0,
               age >= 0,
               age <= maxAge,
-              persisted.provenance.isValid(at: referenceDate) else {
+              persisted.provenance.fetchedAt.timeIntervalSinceReferenceDate.isFinite
+        else {
             throw WeatherProviderError.serviceUnavailable
         }
 
@@ -329,13 +370,16 @@ struct CachedWeatherProvider: WeatherProvider {
             daily: persisted.daily,
             alerts: persisted.alerts,
             astronomy: persisted.astronomy,
+            pressureHistory: persisted.pressureHistory,
             provenance: WeatherProvenance(
                 source: .cache,
                 fetchedAt: persisted.provenance.fetchedAt,
                 isFallback: true,
                 attribution: "Cached from \(origin)",
                 providerAttribution: persisted.provenance.providerAttribution,
-                expiresAt: persisted.provenance.expiresAt
+                // The delivery gets its own window. `fetchedAt` stays original
+                // so every surface remains honest about how old the data is.
+                expiresAt: referenceDate.addingTimeInterval(Self.deliveryLifetime)
             )
         )
     }

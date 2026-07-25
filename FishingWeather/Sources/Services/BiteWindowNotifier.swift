@@ -93,14 +93,10 @@ enum BiteWindowNotifier {
                 + "\(window.start.formatted(date: .omitted, time: .shortened))."
             content.sound = .default
 
-            let components = Calendar.current.dateComponents(
-                [.year, .month, .day, .hour, .minute],
-                from: fireDate
-            )
-            let trigger = UNCalendarNotificationTrigger(
-                dateMatching: components,
-                repeats: false
-            )
+            guard let trigger = WeatherDerivedNotificationTrigger.make(
+                fireDate: fireDate,
+                from: commitDate
+            ) else { return false }
             let request = UNNotificationRequest(
                 identifier: WeatherDerivedNotificationIdentifiers.nextWindow,
                 content: content,

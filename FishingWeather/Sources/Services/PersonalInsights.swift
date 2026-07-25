@@ -77,8 +77,14 @@ enum PersonalInsightsBuilder {
             guard !bait.isEmpty else { continue }
             tally[bait.lowercased(), default: (bait, 0)].count += 1
         }
+        // Dictionary iteration order varies between launches, so ties need an
+        // explicit key or "Top baits" reshuffles on its own.
         return tally.values
-            .sorted { $0.count > $1.count }
+            .sorted {
+                $0.count == $1.count
+                    ? $0.display.lowercased() < $1.display.lowercased()
+                    : $0.count > $1.count
+            }
             .prefix(3)
             .map { PersonalInsights.BaitCount(bait: $0.display, count: $0.count) }
     }
@@ -112,8 +118,11 @@ enum PersonalInsightsBuilder {
         return stats
     }
 
-    private static func timeOfDay(for date: Date) -> String {
-        switch Calendar.current.component(.hour, from: date) {
+    private static func timeOfDay(
+        for date: Date,
+        calendar: Calendar = .current
+    ) -> String {
+        switch calendar.component(.hour, from: date) {
         case 5..<8: "Dawn"
         case 8..<11: "Morning"
         case 11..<15: "Midday"
@@ -127,7 +136,13 @@ enum PersonalInsightsBuilder {
     private static func topCount(_ items: [String]) -> (String, Int)? {
         guard !items.isEmpty else { return nil }
         let counts = Dictionary(grouping: items, by: { $0 }).mapValues(\.count)
-        guard let best = counts.max(by: { $0.value < $1.value }) else { return nil }
+        // Deterministic across launches: break count ties alphabetically rather
+        // than on whatever order the dictionary happens to hash into.
+        guard let best = counts.min(by: {
+            $0.value == $1.value
+                ? $0.key.lowercased() < $1.key.lowercased()
+                : $0.value > $1.value
+        }) else { return nil }
         return (best.key, best.value)
     }
 }

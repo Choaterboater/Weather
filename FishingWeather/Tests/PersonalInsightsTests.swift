@@ -135,4 +135,25 @@ struct PersonalInsightsTests {
         #expect(PersonalScoreModel.moonAffinity(expiredNWS[0]) == 1)
         #expect(PersonalScoreModel.windAffinity(expiredNWS[0]) == 1)
     }
+
+    @Test("Equally common baits rank in a stable order")
+    func tiedBaitsAreOrderedDeterministically() throws {
+        // Both baits are caught the same number of times. The ranking used to
+        // fall out of Dictionary iteration order, so "Top baits" reshuffled
+        // between launches purely on hash seeding.
+        let catches = (0..<3).map { _ in makeCatch(bait: "Senko") }
+            + (0..<3).map { _ in makeCatch(bait: "Chatterbait") }
+
+        let insights = try #require(
+            PersonalInsightsBuilder.build(from: catches, species: .bass)
+        )
+
+        #expect(insights.topBaits.map(\.bait) == ["Chatterbait", "Senko"])
+        for _ in 0..<5 {
+            let repeated = try #require(
+                PersonalInsightsBuilder.build(from: catches, species: .bass)
+            )
+            #expect(repeated.topBaits.map(\.bait) == insights.topBaits.map(\.bait))
+        }
+    }
 }

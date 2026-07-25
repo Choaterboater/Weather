@@ -6,6 +6,12 @@
 **Scope:** All 162 Swift files (~35.7k LOC) under `FishingWeather/`, plus the
 XcodeGen spec, release gate, and bundled resources.
 
+> **Status: all 15 findings have fixes in this branch.** See
+> [Fix log](#fix-log) at the end for what changed per finding, the two
+> behavior changes that required rewriting existing tests, and — important —
+> what still has to be verified by an actual build. No Swift toolchain exists in
+> this environment, so **none of the fixes have been compiled or run.**
+
 ## How this pass was run
 
 No Swift toolchain is available in this environment (`swift`, `swiftc`,
@@ -687,3 +693,122 @@ Worth recording, so the next pass doesn't re-litigate it:
 Findings 7 and 8 are worth doing whenever the surrounding files are next open;
 neither is urgent on a small catch log or a single tide lookup, but both scale
 badly with real usage.
+
+---
+
+# Fix log
+
+All 15 findings are addressed in this branch. **Nothing below has been compiled
+or executed** — no Swift toolchain exists in this environment. Treat the whole
+set as needing a build and a full test run before merge.
+
+## What changed, per finding
+
+| # | Fix | Key files |
+|---|---|---|
+| 1 | Storage now retains on a 24 h window instead of the origin provider's expiry; `CachedWeatherProvider` serves stale data up to `maxAge` and re-stamps the delivery with its own 15-minute presentation window | `WeatherSnapshots.swift` |
+| 2 | NWS fetches the station's recent observation *series* rather than only `/latest`; the readings ride along on `WeatherSnapshot.pressureHistory` and both scoring paths read `pressureSamples` | `NWSWeatherProvider.swift`, `WeatherSnapshot.swift`, `PressureReading.swift`, `ForecastSelection.swift`, `FishingConditions.swift` |
+| 3 | `ForecastSeriesCache` memoizes the series on an input key; `FishingScorer` swaps per-hour `DateFormatter` construction for a value-type `Date.FormatStyle` | `ForecastSelection.swift`, `BiteTimeView.swift`, `FishingScorer.swift` |
+| 4 | Confidence ramps from a non-zero floor (`minConfidence`) at `minCatches`, so crossing the threshold actually personalizes | `PersonalScoreModel.swift` |
+| 5 | `DailyWeatherPoint.lowCelsius`/`highCelsius` are optional; a day with only one NWS period is emitted with the half that exists | `WeatherSnapshot.swift`, `NWSWeatherProvider.swift`, `DailyForecastView.swift`, `WeatherUnits.swift` |
+| 6 | Hourly and daily periods `compactMap`; the provider fails only when nothing survives | `NWSWeatherProvider.swift` |
+| 7 | The recursive protection sweep is gated behind a marker written after it succeeds, so it runs as a migration rather than on every save | `CatchRepository.swift` |
+| 8 | Nearest-station selection uses an equirectangular prefilter (one cheap pass, no `CLLocation` allocation per comparison); the exact geodesic still gates the 50-mile cutoff | `TideService.swift` |
+| 9 | Forecast-zone calendars threaded through `FishingConditions`, `Species.isInSeason`, `PersonalScoreModel.seasonAffinity`, `PersonalInsights.timeOfDay` | four files |
+| 10 | Both notifiers use `UNTimeIntervalNotificationTrigger` via a shared `WeatherDerivedNotificationTrigger` | `BiteAlertScheduler.swift`, `BiteAlertNotifier.swift`, `BiteWindowNotifier.swift` |
+| 11 | Explicit alphabetical tie-breakers in `topBaits` and `topCount` | `PersonalInsights.swift` |
+| 12 | `overall` is the rounded weighted sum; `contribution` is display-only | `FishingScore.swift` |
+| 13 | `AltitudeMaximum.find` returns `nil` when the maximum pins to a day boundary | `LocalAstronomyProvider.swift` |
+| 14 | Only an alert outliving `minimumSnapshotLifetime` (5 min) may shorten snapshot validity | `NWSWeatherProvider.swift` |
+| 15 | Settings explains when bite alerts are paused because the active source is Apple Weather | `SettingsView.swift`, `DebugPreviewHost.swift` |
+
+## Consequences worth reviewing deliberately
+
+**Finding 1 changes what the app is willing to show.** The cache now serves
+forecasts up to 24 hours old when every live provider fails. That is the
+feature working as designed — provenance is re-stamped `.cache` with
+`isFallback: true` and `fetchedAt` deliberately keeps the original timestamp so
+every surface stays honest about the data's age — but it is a product decision,
+not purely a bug fix. If the intent was "never show stale weather," the
+alternative fix is to delete `maxAge` and document the cache as a same-TTL
+cold-launch cache instead.
+
+Making the cache reachable also meant closing a door it opened: a cache
+delivery now carries a fresh presentation window, which would have let
+`BiteAlertScheduler` schedule notifications from up-to-24-hour-old forecast
+content. `WeatherDerivedNotificationPolicy.allows` now rejects `.cache`
+provenance explicitly.
+
+**Finding 2 adds a network dependency.** The NWS path now calls
+`/stations/{id}/observations?start=…` instead of `/observations/latest`. Same
+request count, but a different endpoint and response shape. This is the change
+most in need of verification against a live NWS response — the fixtures encode
+my understanding of the GeoJSON collection shape, not an observed payload.
+
+Note the honest limit of this fix: observations cover roughly `now-6h`
+through `now`, so hours beyond the current one still have no pressure and still
+score neutral. That is correct — NWS publishes no forecast pressure and
+inventing one would be worse — but it means the pressure factor is real for the
+*current* score and unavailable further out on this path.
+
+## Existing tests that had to change
+
+Two tests asserted the defective behavior directly, so they encode the old
+contract and could not simply be kept:
+
+- `dropsNightOnlyDailyGroupRatherThanInventingHigh` and
+  `dropsDayOnlyDailyGroupRatherThanInventingLow` asserted `value.daily.isEmpty`.
+  They are now `nightOnlyDailyGroupKeepsItsLow` /
+  `dayOnlyDailyGroupKeepsItsHigh`, asserting the surviving half and a `nil`
+  counterpart.
+- `unsupportedForecastWindUnitIsDecodingError`,
+  `unsupportedForecastDirectionIsDecodingError`,
+  `malformedCalmWindIsDecodingError`, and `embeddedMPHGarbageIsDecodingError`
+  asserted that one bad period fails the whole forecast. They now assert the
+  bad period is dropped and the good one survives, with a new
+  `allUnreadableHourlyPeriodsIsDecodingError` covering the fail-closed case.
+
+The NWS observation fixtures were rekeyed from `/stations/KPAM/observations/latest`
+to `/stations/KPAM/observations` and wrapped in a GeoJSON collection, and the
+cache envelope fixtures moved to schema version 3.
+
+## New regression tests
+
+- `observationsSupplyPressureHistory` — falling-barometer observations produce a
+  real `.falling` tendency on a path where hourly pressure is `nil` throughout.
+- `imminentAlertEndDoesNotShortenSnapshotExpiry` — finding 14.
+- `expiredSnapshotIsStillServedWithinMaxAge` and
+  `snapshotOlderThanMaxAgeIsNotServed` — finding 1, using a realistic
+  30-minute origin expiry rather than the 24-hour fixture default that masked it.
+- `thresholdCatchCountActuallyPersonalizes` and `confidenceRampsWithSampleSize` —
+  finding 4.
+- `overallDoesNotAccumulatePerFactorRounding` and `degenerateFactorsClampToZero` —
+  finding 12.
+- `repeatedReadsOfTheSameKeyBuildOnce` and `changedKeyRebuilds` — finding 3.
+- `tiedBaitsAreOrderedDeterministically` — finding 11.
+
+## Verify before merge
+
+In rough order of risk:
+
+1. **It compiles.** ~28 files changed with no compiler feedback available.
+   `WeatherSnapshot` gained a stored property (behind a defaulted explicit
+   init), `DailyWeatherPoint` lost two non-optional guarantees, and
+   `NWSFetchResult` changed its payload type.
+2. **The NWS observations response shape.** Fixture-derived, not observed.
+3. **Numeric expectations across the suite.** Finding 12 changes `overall` by up
+   to a couple of points; any test asserting an exact score may need its
+   expectation resettled. Finding 4 changes personalized weights at small sample
+   sizes for the same reason.
+4. **`LocalAstronomyProviderTests`.** Finding 13 makes `moonTransit` `nil` at
+   day boundaries. The existing fixtures look like interior maxima, but two
+   tests assert `moonTransit != nil` and three assert exact instants.
+5. **The `@State private var seriesCache = ForecastSeriesCache()` isolation.**
+   This mirrors the existing `@State private var tideService = TideService()`
+   pattern in `BiteCastApp`, so it should be fine under the project's
+   main-actor inference — but it is the kind of thing Swift 6 strict
+   concurrency has opinions about.
+6. **`CatchLogTests` protection expectations.** The marker gate was designed to
+   keep `interruptedProtectionMigrationIsVisibleAndRetriedWithoutDataLoss`
+   passing (the marker is written only after a successful sweep), but that
+   reasoning wants a real run behind it.

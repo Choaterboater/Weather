@@ -1213,6 +1213,50 @@ private extension HourlyWeatherPoint {
     }
 }
 
+@Suite("Forecast series cache")
+@MainActor
+struct ForecastSeriesCacheTests {
+    private func key(species: Species) -> ForecastSeriesKey {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        return ForecastSeriesKey(
+            weather: .fixture(now: now, hourly: []),
+            tideSamples: [],
+            species: species,
+            weights: .standard,
+            now: now
+        )
+    }
+
+    @Test("An unchanged key builds the series once, however often it is read")
+    func repeatedReadsOfTheSameKeyBuildOnce() {
+        let cache = ForecastSeriesCache()
+        var builds = 0
+        let subject = key(species: .bass)
+
+        // BiteTimeView reads the series several times per body pass — directly,
+        // through selectedPoint, and again as an onChange comparand.
+        for _ in 0..<5 {
+            _ = cache.points(for: subject) {
+                builds += 1
+                return []
+            }
+        }
+
+        #expect(builds == 1)
+    }
+
+    @Test("A changed input rebuilds")
+    func changedKeyRebuilds() {
+        let cache = ForecastSeriesCache()
+        var builds = 0
+
+        _ = cache.points(for: key(species: .bass)) { builds += 1; return [] }
+        _ = cache.points(for: key(species: .crappie)) { builds += 1; return [] }
+
+        #expect(builds == 2)
+    }
+}
+
 private extension WeatherSnapshot {
     static func fixture(
         now: Date,

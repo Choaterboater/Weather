@@ -94,6 +94,63 @@ enum ForecastSelection {
     }
 }
 
+/// Everything `ForecastSeriesBuilder.build` reads. Two equal keys must produce
+/// an identical series, which is what makes memoizing the build safe.
+struct ForecastSeriesKey: Equatable, Sendable {
+    let fetchedAt: Date
+    let expiresAt: Date
+    let source: WeatherSource
+    let coordinate: WeatherCoordinate
+    let timeZoneIdentifier: String
+    let species: Species
+    let weights: FactorWeights
+    let tideSamples: [TideSample]
+    let now: Date
+
+    init(
+        weather: WeatherSnapshot,
+        tideSamples: [TideSample],
+        species: Species,
+        weights: FactorWeights,
+        now: Date
+    ) {
+        fetchedAt = weather.provenance.fetchedAt
+        expiresAt = weather.provenance.expiresAt
+        source = weather.provenance.source
+        coordinate = weather.coordinate
+        timeZoneIdentifier = weather.timeZoneIdentifier
+        self.species = species
+        self.weights = weights
+        self.tideSamples = tideSamples
+        self.now = now
+    }
+}
+
+/// Memoizes the last forecast series so a SwiftUI body that reads the series
+/// several times — directly, through `selectedPoint`, and again in an
+/// `onChange` comparand — pays for one build instead of one per read.
+///
+/// A reference type held in `@State` deliberately: it is not `@Observable`, so
+/// caching during a body pass cannot invalidate the view that is drawing.
+@MainActor
+final class ForecastSeriesCache {
+    private var key: ForecastSeriesKey?
+    private var points: [ForecastPoint] = []
+
+    init() {}
+
+    func points(
+        for key: ForecastSeriesKey,
+        build: () -> [ForecastPoint]
+    ) -> [ForecastPoint] {
+        if self.key == key { return points }
+        let result = build()
+        self.key = key
+        points = result
+        return result
+    }
+}
+
 /// Builds the immutable hourly series consumed by every forecast surface.
 enum ForecastSeriesBuilder {
     private static let maximumHours = 48
@@ -123,9 +180,10 @@ enum ForecastSeriesBuilder {
             weather: weather,
             calendar: calendar
         )
-        let pressureHistory = weather.hourly.compactMap { point in
-            point.pressureHPa.map { (date: point.date, hPa: $0) }
-        }
+        // Observed readings plus any forecast pressure. On the NWS path the
+        // hourly series carries none, so the station observations are the only
+        // thing standing between the scorer and a permanently neutral factor.
+        let pressureHistory = weather.pressureSamples
 
         return hours.map { hour in
             let day = calendar.startOfDay(for: hour.date)
@@ -145,7 +203,11 @@ enum ForecastSeriesBuilder {
                 .filter { $0.start > hour.date }
                 .min { $0.start < $1.start }
             let pressure = PressureReading.analyze(
-                nowHPa: hour.pressureHPa,
+                nowHPa: PressureReading.pressure(
+                    at: hour.date,
+                    forecastHPa: hour.pressureHPa,
+                    samples: pressureHistory
+                ),
                 history: pressureHistory,
                 now: hour.date,
                 fallback: .steady

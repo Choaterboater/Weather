@@ -53,6 +53,29 @@ struct PressureReading: Sendable {
         )
     }
 
+    /// The pressure to attribute to `date`. A forecast value for that exact
+    /// hour always wins. An observed reading is carried onto an hour only when
+    /// it genuinely covers it, so a single current observation can never
+    /// masquerade as tomorrow's forecast pressure.
+    static func pressure(
+        at date: Date,
+        forecastHPa: Double?,
+        samples: [(date: Date, hPa: Double)],
+        maximumCarry: TimeInterval = 3_600
+    ) -> Double? {
+        if let forecastHPa, forecastHPa.isFinite { return forecastHPa }
+        let nearest = samples
+            .filter { $0.hPa.isFinite && $0.date.timeIntervalSinceReferenceDate.isFinite }
+            .min {
+                abs($0.date.timeIntervalSince(date))
+                    < abs($1.date.timeIntervalSince(date))
+            }
+        guard let nearest,
+              abs(nearest.date.timeIntervalSince(date)) <= maximumCarry
+        else { return nil }
+        return nearest.hPa
+    }
+
     static func analyze(
         nowHPa: Double?,
         history: [(date: Date, hPa: Double)],

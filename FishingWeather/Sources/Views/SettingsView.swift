@@ -4,7 +4,17 @@ import SwiftUI
 /// smart bite alerts; a natural place for future preferences.
 struct SettingsView: View {
     @Environment(AlertSettings.self) private var settings
+    @Environment(WeatherStore.self) private var weather
     @Environment(\.dismiss) private var dismiss
+
+    /// Weather-derived notifications carry no room for WeatherKit's required
+    /// combined mark and legal link, so they are only permitted on the NWS
+    /// path. Whenever the active forecast is Apple-sourced, an enabled toggle
+    /// would otherwise deliver nothing with no explanation.
+    private var alertsArePaused: Bool {
+        settings.preferences.enabled
+            && !WeatherDerivedNotificationPolicy.allows(weather.provenance)
+    }
 
     var body: some View {
         @Bindable var settings = settings
@@ -19,6 +29,16 @@ struct SettingsView: View {
                         Picker("Notify before", selection: $settings.preferences.leadMinutes) {
                             ForEach([15, 30, 45, 60, 90], id: \.self) { Text("\($0) min").tag($0) }
                         }
+                    }
+                    if alertsArePaused {
+                        Label {
+                            Text("Paused for this forecast. Bite alerts can only be sent while the National Weather Service is the active source.")
+                        } icon: {
+                            Image(systemName: "bell.slash")
+                        }
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("settings.alertsPaused")
                     }
                 } header: {
                     Text("Smart alerts")

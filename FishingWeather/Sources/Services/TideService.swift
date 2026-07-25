@@ -293,11 +293,43 @@ final class TideService {
     }
 
     private func nearestStation(to location: CLLocation) -> TideStation? {
-        stations.min { a, b in
-            let da = location.distance(from: CLLocation(latitude: a.latitude, longitude: a.longitude))
-            let db = location.distance(from: CLLocation(latitude: b.latitude, longitude: b.longitude))
-            return da < db
+        Self.nearestStation(to: location, in: stations)
+    }
+
+    /// The catalog is ~3,000 entries and this runs on the main actor, so the
+    /// previous `min(by:)` — which built two `CLLocation`s and solved two
+    /// geodesics per *comparison* — was the same hitch the station decode was
+    /// already moved off-actor to avoid.
+    ///
+    /// A cheap equirectangular prefilter shortlists candidates, and only those
+    /// pay for a real geodesic. Latitude degrees are ~69 miles everywhere;
+    /// longitude degrees shrink by cos(latitude).
+    nonisolated static func nearestStation(
+        to location: CLLocation,
+        in stations: [TideStation]
+    ) -> TideStation? {
+        let coordinate = location.coordinate
+        guard coordinate.latitude.isFinite, coordinate.longitude.isFinite else {
+            return nil
         }
+        let latitudeRadians = coordinate.latitude * .pi / 180
+        let longitudeScale = max(0.01, cos(latitudeRadians))
+
+        func approximateSquareMiles(_ station: TideStation) -> Double {
+            let dLat = (station.latitude - coordinate.latitude) * 69.0
+            let dLon = (station.longitude - coordinate.longitude) * 69.0 * longitudeScale
+            return dLat * dLat + dLon * dLon
+        }
+
+        var best: (station: TideStation, squareMiles: Double)?
+        for station in stations {
+            guard station.latitude.isFinite, station.longitude.isFinite else { continue }
+            let squareMiles = approximateSquareMiles(station)
+            if best == nil || squareMiles < best!.squareMiles {
+                best = (station, squareMiles)
+            }
+        }
+        return best?.station
     }
 
     // MARK: - Networking

@@ -242,8 +242,12 @@ struct DailyWeatherPoint: Identifiable, Codable, Equatable, Sendable {
     var id: Date { date }
 
     let date: Date
-    let lowCelsius: Double
-    let highCelsius: Double
+    /// Optional because a provider can legitimately cover only part of a day —
+    /// NWS drops the daytime period once it has passed, so an evening fetch
+    /// knows tonight's low and can no longer report today's high. A partial day
+    /// is still worth showing; fabricating the missing half is not.
+    let lowCelsius: Double?
+    let highCelsius: Double?
     let precipitationChance: Double?
     let conditionText: String
     let symbolName: String
@@ -275,6 +279,14 @@ struct WeatherCoordinate: Codable, Equatable, Sendable {
     let longitude: Double
 }
 
+/// One observed barometric reading, carried alongside the forecast so a
+/// provider whose hourly series has no pressure can still supply the baseline
+/// `PressureReading.analyze` needs for a real tendency.
+struct PressureSample: Codable, Equatable, Sendable {
+    let date: Date
+    let pressureHPa: Double
+}
+
 struct WeatherAlertSnapshot: Identifiable, Codable, Equatable, Sendable {
     let id: String
     let summary: String
@@ -293,7 +305,46 @@ struct WeatherSnapshot: Codable, Equatable, Sendable {
     let daily: [DailyWeatherPoint]
     let alerts: [WeatherAlertSnapshot]
     let astronomy: AstronomySnapshot
+    /// Observed pressure readings preceding `provenance.fetchedAt`. Populated
+    /// by providers whose hourly forecast carries no pressure (NWS); empty when
+    /// the hourly series already spans enough history on its own (WeatherKit).
+    let pressureHistory: [PressureSample]
     let provenance: WeatherProvenance
+
+    /// Explicit memberwise init so `pressureHistory` can default to empty and
+    /// existing construction sites stay source-compatible.
+    init(
+        coordinate: WeatherCoordinate,
+        timeZoneIdentifier: String,
+        current: CurrentConditionsSnapshot,
+        hourly: [HourlyWeatherPoint],
+        daily: [DailyWeatherPoint],
+        alerts: [WeatherAlertSnapshot],
+        astronomy: AstronomySnapshot,
+        pressureHistory: [PressureSample] = [],
+        provenance: WeatherProvenance
+    ) {
+        self.coordinate = coordinate
+        self.timeZoneIdentifier = timeZoneIdentifier
+        self.current = current
+        self.hourly = hourly
+        self.daily = daily
+        self.alerts = alerts
+        self.astronomy = astronomy
+        self.pressureHistory = pressureHistory
+        self.provenance = provenance
+    }
+
+    /// Every observed and forecast pressure reading this snapshot can offer, in
+    /// chronological order. The single source both the timeline scorer and the
+    /// details card read, so they cannot disagree about what pressure is known.
+    var pressureSamples: [(date: Date, hPa: Double)] {
+        let observed = pressureHistory.map { (date: $0.date, hPa: $0.pressureHPa) }
+        let forecast = hourly.compactMap { point in
+            point.pressureHPa.map { (date: point.date, hPa: $0) }
+        }
+        return (observed + forecast).sorted { $0.date < $1.date }
+    }
 
     func markingFallback(_ isFallback: Bool) -> Self {
         guard isFallback, !provenance.isFallback else { return self }
@@ -306,6 +357,7 @@ struct WeatherSnapshot: Codable, Equatable, Sendable {
             daily: daily,
             alerts: alerts,
             astronomy: astronomy,
+            pressureHistory: pressureHistory,
             provenance: WeatherProvenance(
                 source: provenance.source,
                 fetchedAt: provenance.fetchedAt,

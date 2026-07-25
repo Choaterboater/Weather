@@ -41,9 +41,19 @@ enum BiteScoreBand: String, CaseIterable, Identifiable, Sendable {
 struct FishingScore: Equatable, Sendable {
     let factors: [ScoreFactor]
 
-    /// Sum of each factor's contribution, clamped to 0–100.
+    /// Rounded weighted sum, clamped to 0–100.
+    ///
+    /// Deliberately computed from the unrounded factor values rather than by
+    /// summing `ScoreFactor.contribution`: rounding each factor first can drift
+    /// the total by a couple of points, which is enough to cross a
+    /// `BiteScoreBand` boundary and contradict the breakdown shown beneath it.
     var overall: Int {
-        max(0, min(100, factors.map(\.contribution).reduce(0, +)))
+        let total = factors
+            .map(\.weightedValue)
+            .filter(\.isFinite)
+            .reduce(0, +)
+        guard total.isFinite else { return 0 }
+        return max(0, min(100, Int((total * 100).rounded())))
     }
 
     var band: BiteScoreBand {
@@ -110,9 +120,17 @@ struct ScoreFactor: Identifiable, Equatable, Sendable {
     /// Plain-language reason: what we observed and why it pulled the score up or down.
     let detail: String
 
-    /// Integer points contributed to the overall score.
+    /// Unrounded 0–1 share this factor contributes. The basis for `overall`.
+    var weightedValue: Double {
+        weight * raw
+    }
+
+    /// Integer points contributed, for display only. `FishingScore.overall`
+    /// intentionally does not sum these — see its documentation.
     var contribution: Int {
-        Int((weight * raw * 100).rounded())
+        let value = weightedValue * 100
+        guard value.isFinite else { return 0 }
+        return Int(value.rounded())
     }
 
     var symbolName: String { kind.symbolName }

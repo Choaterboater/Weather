@@ -34,6 +34,36 @@ struct PersonalScoreModelTests {
         #expect(PersonalScoreModel.informingCatchCount(catches, species: .bass) == 0)
     }
 
+    @Test("At exactly the threshold, the badge and the weights agree")
+    func thresholdCatchCountActuallyPersonalizes() {
+        let catches = (0..<PersonalScoreModel.minCatches).map { _ in
+            makeCatch(.bass, pressure: "Falling")
+        }
+        let weights = PersonalScoreModel.weights(from: catches, species: .bass)
+
+        // The UI shows "tuned to your N catches" as soon as informingCatchCount
+        // is non-zero. Previously confidence was exactly 0 here, so the badge
+        // claimed personalization while the score was the standard one.
+        #expect(PersonalScoreModel.informingCatchCount(catches, species: .bass)
+            == PersonalScoreModel.minCatches)
+        #expect(weights != .standard)
+        #expect(weights.pressure > FactorWeights.standard.pressure)
+        #expect(abs(sum(weights) - 1) < 0.0001)
+    }
+
+    @Test("Personalization strengthens as the sample grows")
+    func confidenceRampsWithSampleSize() {
+        func pressureWeight(_ count: Int) -> Double {
+            PersonalScoreModel.weights(
+                from: (0..<count).map { _ in makeCatch(.bass, pressure: "Falling") },
+                species: .bass
+            ).pressure
+        }
+
+        #expect(pressureWeight(PersonalScoreModel.minCatches)
+            < pressureWeight(PersonalScoreModel.fullCatches))
+    }
+
     @Test("Consistently catching on falling pressure boosts the pressure weight")
     func fallingPressureBoostsPressureWeight() {
         let catches = (0..<15).map { _ in makeCatch(.bass, pressure: "Falling") }

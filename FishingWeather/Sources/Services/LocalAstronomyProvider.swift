@@ -252,8 +252,16 @@ fileprivate enum AltitudeMaximum {
         let bestIndex = times.indices.max { lhs, rhs in
             altitude(times[lhs]) < altitude(times[rhs])
         }!
-        var lower = times[bestIndex > times.startIndex ? bestIndex - 1 : bestIndex]
-        var upper = times[bestIndex < times.index(before: times.endIndex) ? bestIndex + 1 : bestIndex]
+        // A maximum pinned to either end means the real culmination lies
+        // outside the sampled day. Report no transit rather than returning a
+        // day boundary as if it were one — the same contract `HorizonCrossings`
+        // already honors for a rise or set that does not occur.
+        guard bestIndex > times.startIndex,
+              bestIndex < times.index(before: times.endIndex) else {
+            return nil
+        }
+        var lower = times[bestIndex - 1]
+        var upper = times[bestIndex + 1]
 
         // Refine the best hourly bracket to one-minute resolution. Lunar
         // declination changes during culmination, so the altitude maximum is

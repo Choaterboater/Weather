@@ -14,19 +14,33 @@ struct FishingConditions {
 
     static func make(
         snapshot: WeatherSnapshot,
-        now: Date = .now
+        now: Date = .now,
+        calendar: Calendar? = nil
     ) -> FishingConditions {
         let astronomy = snapshot.astronomy
+        // Default to the forecast's own zone, not the device's, so a window
+        // near midnight is grouped by the day it happens at the water.
+        let forecastCalendar = calendar ?? {
+            var value = Calendar(identifier: .gregorian)
+            value.timeZone = TimeZone(identifier: snapshot.timeZoneIdentifier) ?? .gmt
+            return value
+        }()
         return FishingConditions(
             pressure: PressureReading.analyze(
-                currentHPa: snapshot.current.pressureHPa,
-                hourly: snapshot.hourly,
-                now: now
+                nowHPa: PressureReading.pressure(
+                    at: now,
+                    forecastHPa: snapshot.current.pressureHPa,
+                    samples: snapshot.pressureSamples
+                ),
+                history: snapshot.pressureSamples,
+                now: now,
+                fallback: .steady
             ),
             windows: SolunarCalculator.windows(
                 moonrise: astronomy.moonrise,
                 moonset: astronomy.moonset,
-                on: now
+                on: now,
+                calendar: forecastCalendar
             ),
             moonPhase: LunarPhase(
                 cycleFraction: astronomy.moonPhaseFraction
@@ -59,10 +73,12 @@ struct FishingConditions {
             ) ? snapshot.astronomy : .empty)
         return FishingConditions(
             pressure: PressureReading.analyze(
-                nowHPa: forecastPoint.weather.pressureHPa,
-                history: snapshot.hourly.compactMap { point in
-                    point.pressureHPa.map { (date: point.date, hPa: $0) }
-                },
+                nowHPa: PressureReading.pressure(
+                    at: forecastPoint.date,
+                    forecastHPa: forecastPoint.weather.pressureHPa,
+                    samples: snapshot.pressureSamples
+                ),
+                history: snapshot.pressureSamples,
                 now: forecastPoint.date,
                 fallback: .steady
             ),

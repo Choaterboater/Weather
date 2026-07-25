@@ -20,6 +20,9 @@ final class CatchRepository {
         let journalURL: URL
         let legacyMetadataURL: URL
         let legacyPhotosDirectory: URL
+        /// Written once the recursive protection sweep has completed, so the
+        /// O(photos) walk stops running on every save.
+        let protectionMarkerURL: URL
 
         init(baseDirectory: URL) {
             self.baseDirectory = baseDirectory
@@ -30,6 +33,7 @@ final class CatchRepository {
             journalURL = rootDirectory.appendingPathComponent("transaction.json")
             legacyMetadataURL = baseDirectory.appendingPathComponent("catches.json")
             legacyPhotosDirectory = baseDirectory.appendingPathComponent("CatchPhotos", isDirectory: true)
+            protectionMarkerURL = rootDirectory.appendingPathComponent("protection-complete.marker")
         }
 
         func photoURL(for filename: String) -> URL {
@@ -314,8 +318,25 @@ final class CatchRepository {
         try createProtectedDirectory(paths.transactionsDirectory)
         try migrateLegacyStorage()
         try failureInjector(.migrateProtection)
-        try applyCompleteProtectionRecursively(to: paths.rootDirectory)
+        try applyCompleteProtectionSweepIfNeeded()
         try protectLegacyRecoveryFiles()
+    }
+
+    /// The recursive sweep is a migration, not a hot path. Once it has
+    /// completed, every subsequent file is created protected by
+    /// `writeProtected`/`copyProtected`/`moveProtected`, so re-walking the whole
+    /// photo library on every load *and every save* buys nothing and costs
+    /// O(photos) main-actor syscalls each time a catch is logged.
+    ///
+    /// The marker is written only after a successful sweep, so an interrupted
+    /// migration is retried on the next launch rather than being skipped.
+    private func applyCompleteProtectionSweepIfNeeded() throws {
+        guard !fileManager.fileExists(atPath: paths.protectionMarkerURL.path) else {
+            try applyCompleteProtection(to: paths.rootDirectory)
+            return
+        }
+        try applyCompleteProtectionRecursively(to: paths.rootDirectory)
+        try writeProtected(Data(), to: paths.protectionMarkerURL)
     }
 
     private func prepareForMutation() throws {

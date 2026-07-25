@@ -28,7 +28,7 @@ struct WeatherSnapshotsTests {
             EnvelopeHeader.self,
             from: Data(contentsOf: file)
         )
-        #expect(header.version == 2)
+        #expect(header.version == 3)
     }
 
     @Test func nearbyCoordinatesLoadTheMatchingGeoTile() async throws {
@@ -405,7 +405,58 @@ struct WeatherSnapshotsTests {
 
         #expect(cached.provenance.source == .cache)
         #expect(cached.provenance.providerAttribution == .appleFixture)
-        #expect(cached.provenance.expiresAt == expiresAt)
+        // The delivery carries its own presentation window; `fetchedAt` stays
+        // original so every surface remains honest about the data's age.
+        #expect(cached.provenance.fetchedAt == fetchedAt)
+        #expect(cached.provenance.expiresAt == expiresAt.addingTimeInterval(-1)
+            .addingTimeInterval(CachedWeatherProvider.deliveryLifetime))
+    }
+
+    @Test("An expired snapshot is still served as an offline fallback")
+    func expiredSnapshotIsStillServedWithinMaxAge() async throws {
+        let fetchedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        // A real NWS snapshot expires 30 minutes after it is fetched, so gating
+        // the cache on the origin expiry made the documented 24-hour maxAge
+        // unreachable: 31 minutes offline and the fallback was gone.
+        let expiresAt = fetchedAt.addingTimeInterval(30 * 60)
+        let directory = tempDirectory()
+        try await WeatherSnapshots(directory: directory, now: { fetchedAt })
+            .save(makeSnapshot(
+                source: .nws,
+                fetchedAt: fetchedAt,
+                expiresAt: expiresAt
+            ))
+
+        let servedAt = fetchedAt.addingTimeInterval(8 * 3_600)
+        let cached = try await CachedWeatherProvider(
+            cache: WeatherSnapshots(directory: directory, now: { servedAt }),
+            now: { servedAt }
+        ).forecast(for: CLLocation(latitude: 30.2938, longitude: -86.0049))
+
+        #expect(cached.provenance.source == .cache)
+        #expect(cached.provenance.isFallback)
+        #expect(cached.provenance.fetchedAt == fetchedAt)
+        #expect(cached.provenance.isValid(at: servedAt))
+    }
+
+    @Test("Beyond maxAge the cache stops serving and stops retaining")
+    func snapshotOlderThanMaxAgeIsNotServed() async throws {
+        let fetchedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let directory = tempDirectory()
+        try await WeatherSnapshots(directory: directory, now: { fetchedAt })
+            .save(makeSnapshot(
+                source: .nws,
+                fetchedAt: fetchedAt,
+                expiresAt: fetchedAt.addingTimeInterval(30 * 60)
+            ))
+
+        let servedAt = fetchedAt.addingTimeInterval(25 * 3_600)
+        await #expect(throws: WeatherProviderError.serviceUnavailable) {
+            _ = try await CachedWeatherProvider(
+                cache: WeatherSnapshots(directory: directory, now: { servedAt }),
+                now: { servedAt }
+            ).forecast(for: CLLocation(latitude: 30.2938, longitude: -86.0049))
+        }
     }
 
     @Test("Cached Apple data without usable combined marks fails closed")
@@ -564,7 +615,7 @@ struct WeatherSnapshotsTests {
             withIntermediateDirectories: true
         )
         let file = directory.appendingPathComponent("303,-860.json")
-        let envelope = SnapshotEnvelope(version: 2, snapshot: snapshot)
+        let envelope = SnapshotEnvelope(version: 3, snapshot: snapshot)
         try JSONEncoder().encode(envelope).write(to: file, options: .atomic)
     }
 

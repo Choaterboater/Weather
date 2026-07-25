@@ -220,8 +220,8 @@ struct NWSWeatherProviderTests {
         let value = try await provider.forecast(for: location)
 
         let day = try #require(value.daily.first)
-        #expect(abs(day.highCelsius - 30) < 0.001)
-        #expect(abs(day.lowCelsius - 20) < 0.001)
+        #expect(abs(try #require(day.highCelsius) - 30) < 0.001)
+        #expect(abs(try #require(day.lowCelsius) - 20) < 0.001)
         #expect(abs((day.precipitationChance ?? 0) - 0.40) < 0.001)
         #expect(day.conditionText == "Mostly Sunny")
         #expect(day.symbolName == "cloud.sun")
@@ -229,24 +229,80 @@ struct NWSWeatherProviderTests {
         #expect(abs((day.windPeakMetersPerSecond ?? 0) - (20 * 0.44704)) < 0.001)
     }
 
-    @Test func dropsNightOnlyDailyGroupRatherThanInventingHigh() async throws {
+    @Test("A night-only group keeps the day with a low and no invented high")
+    func nightOnlyDailyGroupKeepsItsLow() async throws {
         let provider = makeProvider(
             recorder: NWSRequestRecorder(responses: NWSFixtures.nightOnlyDaily)
         )
 
         let value = try await provider.forecast(for: location)
 
-        #expect(value.daily.isEmpty)
+        // NWS returns a rolling list, so an evening fetch's first period is
+        // "Tonight". Dropping the group entirely lost today from the 10-day
+        // list; the low it does report is real and worth keeping.
+        let day = try #require(value.daily.first)
+        #expect(abs(try #require(day.lowCelsius) - 20) < 0.001)
+        #expect(day.highCelsius == nil)
     }
 
-    @Test func dropsDayOnlyDailyGroupRatherThanInventingLow() async throws {
+    @Test("A day-only group keeps the high and no invented low")
+    func dayOnlyDailyGroupKeepsItsHigh() async throws {
         let provider = makeProvider(
             recorder: NWSRequestRecorder(responses: NWSFixtures.dayOnlyDaily)
         )
 
         let value = try await provider.forecast(for: location)
 
-        #expect(value.daily.isEmpty)
+        let day = try #require(value.daily.first)
+        #expect(abs(try #require(day.highCelsius) - 30) < 0.001)
+        #expect(day.lowCelsius == nil)
+    }
+
+    @Test("Station observations supply the pressure baseline NWS hourly lacks")
+    func observationsSupplyPressureHistory() async throws {
+        let provider = makeProvider(
+            recorder: NWSRequestRecorder(
+                responses: NWSFixtures.fallingPressureObservations
+            )
+        )
+
+        let value = try await provider.forecast(for: location)
+
+        // NWS publishes no pressure in its hourly forecast, so without the
+        // observation series every hour scored a flat "Pressure data
+        // unavailable" — the app's headline signal, permanently neutral.
+        #expect(value.hourly.allSatisfy { $0.pressureHPa == nil })
+        #expect(value.pressureHistory.count == 3)
+        #expect(value.pressureHistory == value.pressureHistory.sorted { $0.date < $1.date })
+
+        let reading = PressureReading.analyze(
+            nowHPa: PressureReading.pressure(
+                at: fixtureNow,
+                forecastHPa: nil,
+                samples: value.pressureSamples
+            ),
+            history: value.pressureSamples,
+            now: fixtureNow,
+            fallback: .steady
+        )
+        #expect(reading.tendency == .falling)
+        #expect(reading.changePerHour != nil)
+    }
+
+    @Test("An alert expiring moments after the fetch cannot shorten validity")
+    func imminentAlertEndDoesNotShortenSnapshotExpiry() async throws {
+        let provider = makeProvider(
+            recorder: NWSRequestRecorder(
+                // Ends one minute after the 11:00 fixture fetch. Honoring it
+                // would mint a snapshot WeatherStore rejects at commit time,
+                // surfacing a successful fetch as "temporarily unavailable".
+                responses: NWSFixtures.alertEnd("2026-07-12T11:01:00-05:00")
+            )
+        )
+
+        let value = try await provider.forecast(for: location)
+
+        #expect(value.provenance.expiresAt == fixtureNow.addingTimeInterval(30 * 60))
     }
 
     @Test func mapsAlertIdentityDatesAndDetails() async throws {
@@ -378,16 +434,34 @@ struct NWSWeatherProviderTests {
         #expect(value.current.symbolName == "moon.stars")
     }
 
-    @Test func unsupportedForecastTemperatureUnitIsDecodingError() async {
-        await expectDecoding(NWSFixtures.unsupportedHourlyTemperatureUnit)
+    @Test("An unreadable wind unit drops only that hour")
+    func unsupportedForecastWindUnitDropsOnlyThatPeriod() async throws {
+        let provider = makeProvider(
+            recorder: NWSRequestRecorder(
+                responses: NWSFixtures.unsupportedHourlyWindUnit
+            )
+        )
+
+        let value = try await provider.forecast(for: location)
+
+        // Only the first fixture period carries "5 to 10 mph"; the second is
+        // well-formed and must survive rather than the whole forecast failing.
+        #expect(value.hourly.count == 1)
+        #expect(value.hourly.first?.date == NWSFixtures.date("2026-07-12T13:00:00-05:00"))
     }
 
-    @Test func unsupportedForecastWindUnitIsDecodingError() async {
-        await expectDecoding(NWSFixtures.unsupportedHourlyWindUnit)
-    }
+    @Test("An unreadable wind direction drops only that hour")
+    func unsupportedForecastDirectionDropsOnlyThatPeriod() async throws {
+        let provider = makeProvider(
+            recorder: NWSRequestRecorder(
+                responses: NWSFixtures.unsupportedHourlyDirection
+            )
+        )
 
-    @Test func unsupportedForecastDirectionIsDecodingError() async {
-        await expectDecoding(NWSFixtures.unsupportedHourlyDirection)
+        let value = try await provider.forecast(for: location)
+
+        #expect(value.hourly.count == 1)
+        #expect(value.hourly.first?.date == NWSFixtures.date("2026-07-12T13:00:00-05:00"))
     }
 
     @Test func trimmedExactCalmWindIsAccepted() async throws {
@@ -399,12 +473,37 @@ struct NWSWeatherProviderTests {
         #expect(value.hourly.first?.wind.speedMetersPerSecond == 0)
     }
 
-    @Test func malformedCalmWindIsDecodingError() async {
-        await expectDecoding(NWSFixtures.hourlyWind("calm furlongs"))
+    @Test("A malformed calm wind drops only that hour")
+    func malformedCalmWindDropsOnlyThatPeriod() async throws {
+        let provider = makeProvider(
+            recorder: NWSRequestRecorder(
+                responses: NWSFixtures.hourlyWind("calm furlongs")
+            )
+        )
+
+        let value = try await provider.forecast(for: location)
+
+        #expect(value.hourly.count == 1)
     }
 
-    @Test func embeddedMPHGarbageIsDecodingError() async {
-        await expectDecoding(NWSFixtures.hourlyWind("gusts 5 to 10 mph later"))
+    @Test("Embedded mph garbage drops only that hour")
+    func embeddedMPHGarbageDropsOnlyThatPeriod() async throws {
+        let provider = makeProvider(
+            recorder: NWSRequestRecorder(
+                responses: NWSFixtures.hourlyWind("gusts 5 to 10 mph later")
+            )
+        )
+
+        let value = try await provider.forecast(for: location)
+
+        #expect(value.hourly.count == 1)
+    }
+
+    @Test("An entirely unreadable hourly forecast is still a decoding error")
+    func allUnreadableHourlyPeriodsIsDecodingError() async {
+        // Both fixture periods carry `"temperatureUnit": "F"`, so this corrupts
+        // every one of them and nothing survives to present.
+        await expectDecoding(NWSFixtures.unsupportedHourlyTemperatureUnit)
     }
 
     @Test func unsupportedPointMaps404() async {
@@ -741,7 +840,7 @@ private enum NWSFixtures {
             "/gridpoints/TAE/50,50/forecast/hourly": .json(hourly),
             "/gridpoints/TAE/50,50/forecast": .json(daily),
             "/gridpoints/TAE/50,50/stations": .json(stations),
-            "/stations/KPAM/observations/latest": .json(observation),
+            "/stations/KPAM/observations": .json(observations(observation)),
             "/alerts/active?point=30.294,-86.005": .json(alerts),
         ]
     }
@@ -831,7 +930,7 @@ private enum NWSFixtures {
     static var withoutObservation: [String: Response] {
         var responses = minimumResponses
         responses["/gridpoints/TAE/50,50/stations"] = .json(emptyStations)
-        responses.removeValue(forKey: "/stations/KPAM/observations/latest")
+        responses.removeValue(forKey: "/stations/KPAM/observations")
         return responses
     }
 
@@ -865,8 +964,8 @@ private enum NWSFixtures {
 
     static var withoutPressure: [String: Response] {
         var responses = minimumResponses
-        responses["/stations/KPAM/observations/latest"] = .json(
-            observation.replacingOccurrences(
+        responses["/stations/KPAM/observations"] = .json(
+            observations(observation).replacingOccurrences(
                 of: #""barometricPressure":{"unitCode":"wmoUnit:Pa","value":101900},"#,
                 with: ""
             )
@@ -876,8 +975,8 @@ private enum NWSFixtures {
 
     static var withoutPressureUnit: [String: Response] {
         var responses = minimumResponses
-        responses["/stations/KPAM/observations/latest"] = .json(
-            observation.replacingOccurrences(
+        responses["/stations/KPAM/observations"] = .json(
+            observations(observation).replacingOccurrences(
                 of: #""barometricPressure":{"unitCode":"wmoUnit:Pa","value":101900}"#,
                 with: #""barometricPressure":{"value":101900}"#
             )
@@ -887,8 +986,8 @@ private enum NWSFixtures {
 
     static var withoutObservationDescription: [String: Response] {
         var responses = minimumResponses
-        responses["/stations/KPAM/observations/latest"] = .json(
-            observation.replacingOccurrences(
+        responses["/stations/KPAM/observations"] = .json(
+            observations(observation).replacingOccurrences(
                 of: #""textDescription": "Mostly Cloudy","#,
                 with: ""
             )
@@ -898,8 +997,8 @@ private enum NWSFixtures {
 
     static var unsupportedObservationUnits: [String: Response] {
         var responses = minimumResponses
-        responses["/stations/KPAM/observations/latest"] = .json(
-            observation
+        responses["/stations/KPAM/observations"] = .json(
+            observations(observation)
                 .replacingOccurrences(
                     of: #""windSpeed": {"unitCode": "wmoUnit:km_h-1", "value": 18}"#,
                     with: #""windSpeed": {"unitCode": "wmoUnit:unknown", "value": 18}"#
@@ -914,7 +1013,7 @@ private enum NWSFixtures {
 
     static var latestObservationNotFound: [String: Response] {
         var responses = minimumResponses
-        responses["/stations/KPAM/observations/latest"] = .status(404)
+        responses["/stations/KPAM/observations"] = .status(404)
         return responses
     }
 
@@ -931,8 +1030,8 @@ private enum NWSFixtures {
                     with: #""shortForecast": "Clear""#
                 )
         )
-        responses["/stations/KPAM/observations/latest"] = .json(
-            observation
+        responses["/stations/KPAM/observations"] = .json(
+            observations(observation)
                 .replacingOccurrences(
                     of: #""textDescription": "Mostly Cloudy""#,
                     with: #""textDescription": "Clear""#
@@ -1071,6 +1170,38 @@ private enum NWSFixtures {
     private static let emptyStations = #"""
     {"features": []}
     """#
+
+    /// Wraps observation `{"properties": …}` objects in the GeoJSON collection
+    /// the `/observations` endpoint returns. NWS orders newest-first.
+    static func observations(_ features: String...) -> String {
+        #"{"features": ["# + features.joined(separator: ",") + "]}"
+    }
+
+    /// The station's barometer falling ~1.5 hPa/hr over the preceding hours —
+    /// enough baseline for `PressureReading` to report a real tendency.
+    static var fallingPressureObservations: [String: Response] {
+        var responses = minimumResponses
+        responses["/stations/KPAM/observations"] = .json(
+            observations(
+                observation,
+                observationAt("2026-07-12T08:53:00-05:00", pascals: 102_350),
+                observationAt("2026-07-12T07:53:00-05:00", pascals: 102_500)
+            )
+        )
+        return responses
+    }
+
+    static func observationAt(_ timestamp: String, pascals: Int) -> String {
+        observation
+            .replacingOccurrences(
+                of: #""timestamp": "2026-07-12T11:53:00-05:00""#,
+                with: #""timestamp": "\#(timestamp)""#
+            )
+            .replacingOccurrences(
+                of: #""barometricPressure":{"unitCode":"wmoUnit:Pa","value":101900}"#,
+                with: #""barometricPressure":{"unitCode":"wmoUnit:Pa","value":\#(pascals)}"#
+            )
+    }
 
     private static let observation = #"""
     {

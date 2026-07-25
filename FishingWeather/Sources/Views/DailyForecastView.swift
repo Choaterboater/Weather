@@ -114,12 +114,15 @@ private struct DayRow: View {
     }
 
     private var accessibilitySummary: String {
-        var values = [
-            weekday,
-            day.conditionText,
-            "low \(WeatherUnits.wholeTemperature(celsius: day.lowCelsius, locale: locale))",
-            "high \(WeatherUnits.wholeTemperature(celsius: day.highCelsius, locale: locale))",
-        ]
+        // A partially covered day announces only the half the provider knows,
+        // rather than reading the placeholder dash aloud.
+        var values = [weekday, day.conditionText]
+        if let low = day.lowCelsius, low.isFinite {
+            values.append("low \(WeatherUnits.wholeTemperature(celsius: low, locale: locale))")
+        }
+        if let high = day.highCelsius, high.isFinite {
+            values.append("high \(WeatherUnits.wholeTemperature(celsius: high, locale: locale))")
+        }
         if let chance = day.precipitationChance, chance.isFinite {
             values.append(
                 "\(chance.formatted(.percent.precision(.fractionLength(0)))) chance of precipitation"

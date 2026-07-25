@@ -172,9 +172,11 @@ extension Species {
         }
     }
 
-    func isInSeason(on date: Date) -> Bool {
+    /// Callers with a forecast-zone calendar should pass it: a date near
+    /// midnight resolves to a different month depending on the zone.
+    func isInSeason(on date: Date, calendar: Calendar = .current) -> Bool {
         if peakMonths.isEmpty { return true }
-        let month = Calendar.current.component(.month, from: date)
+        let month = calendar.component(.month, from: date)
         return peakMonths.contains(month)
     }
 }
